@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/submission-bundle-v2.schema.json",
+  "title": "AgentPerf Local submission bundle manifest v2",
+  "description": "Exact-byte bindings for the three bundle files: the public aggregate, the sanitized evidence, and the AA-private audit. Written last; sending the bundle is a separate step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "status",
+    "run_id",
+    "aggregate_payload_digest",
+    "sanitized_rows_digest",
+    "artifacts"
+  ],
+  "properties": {
+    "version": { "const": 2 },
+    "kind": { "const": "agentperf_local_submission_bundle" },
+    "status": { "const": "prepared-not-uploaded" },
+    "run_id": { "$ref": "#/$defs/runId" },
+    "aggregate_payload_digest": { "$ref": "#/$defs/digest" },
+    "sanitized_rows_digest": { "$ref": "#/$defs/digest" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/artifact" },
+            {
+              "properties": {
+                "role": { "const": "aggregate" },
+                "filename": { "const": "aggregate.json" },
+                "schema_id": {
+                  "const": "https://artificialanalysis.ai/schemas/agentperf-local/public-submission-v2.schema.json"
+                },
+                "privacy_profile": { "const": "public-minimal-v1" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/artifact" },
+            {
+              "properties": {
+                "role": { "const": "sanitized_turn_evidence" },
+                "filename": { "const": "sanitized-turn-evidence.json" },
+                "schema_id": {
+                  "const": "https://artificialanalysis.ai/schemas/agentperf-local/sanitized-turn-evidence-v1.schema.json"
+                },
+                "privacy_profile": { "const": "sanitized-turn-evidence-v1-experimental" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/artifact" },
+            {
+              "properties": {
+                "role": { "const": "private_audit" },
+                "filename": { "const": "private-audit.json" },
+                "schema_id": {
+                  "const": "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v1.schema.json"
+                },
+                "privacy_profile": { "const": "aa-private-audit-v1" }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "filename",
+        "media_type",
+        "schema_id",
+        "privacy_profile",
+        "byte_size",
+        "file_digest"
+      ],
+      "properties": {
+        "role": { "type": "string" },
+        "filename": { "type": "string" },
+        "media_type": { "const": "application/json" },
+        "schema_id": { "type": "string" },
+        "privacy_profile": { "type": "string" },
+        "byte_size": { "type": "integer", "minimum": 1 },
+        "file_digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

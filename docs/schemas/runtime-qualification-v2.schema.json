@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/runtime-qualification-v2.schema.json",
+  "title": "AA runtime qualification v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "run_id",
+    "profile_id",
+    "endpoint_model_digest",
+    "client_backend",
+    "synthetic_pack_id",
+    "pack_digest",
+    "passed",
+    "outcomes",
+    "privacy"
+  ],
+  "properties": {
+    "version": {"const": 2},
+    "kind": {"const": "runtime_qualification"},
+    "run_id": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+        {"type": "null"}
+      ]
+    },
+    "profile_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+    "endpoint_model_digest": {"$ref": "#/$defs/digest"},
+    "client_backend": {"enum": ["python", "rust"]},
+    "synthetic_pack_id": {"const": "aa-runtime-synthetic-v1"},
+    "pack_digest": {"$ref": "#/$defs/digest"},
+    "passed": {"type": "boolean"},
+    "outcomes": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/outcome"}
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_text_included", "tool_arguments_included", "endpoint_url_included"],
+      "properties": {
+        "generated_text_included": {"const": false},
+        "tool_arguments_included": {"const": false},
+        "endpoint_url_included": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableNonNegativeInteger": {
+      "oneOf": [
+        {"type": "integer", "minimum": 0},
+        {"type": "null"}
+      ]
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe_id",
+        "passed",
+        "failure_codes",
+        "tool_names",
+        "tool_call_count",
+        "arguments_valid",
+        "call_identifiers_present",
+        "content_present",
+        "reasoning_present",
+        "finish_reason",
+        "usage_present",
+        "prompt_tokens",
+        "completion_tokens",
+        "raw_read_count",
+        "decoded_chunk_count",
+        "status_code"
+      ],
+      "properties": {
+        "probe_id": {
+          "enum": ["single_tool", "no_tool", "parallel_tools", "tool_history", "capped_finish"]
+        },
+        "passed": {"type": "boolean"},
+        "failure_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "empty_stream",
+              "aborted",
+              "decode_error",
+              "tool_transport_invalid",
+              "tool_sequence_mismatch",
+              "tool_arguments_mismatch",
+              "tool_call_identifier_missing",
+              "content_missing",
+              "finish_reason_missing",
+              "capped_finish_not_reported",
+              "unexpected_generation_cap",
+              "usage_missing",
+              "request_error"
+            ]
+          }
+        },
+        "tool_names": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "tool_call_count": {"type": "integer", "minimum": 0, "maximum": 8},
+        "arguments_valid": {"type": "boolean"},
+        "call_identifiers_present": {"type": "boolean"},
+        "content_present": {"type": "boolean"},
+        "reasoning_present": {"type": "boolean"},
+        "finish_reason": {
+          "oneOf": [
+            {"type": "string", "minLength": 1, "maxLength": 64},
+            {"type": "null"}
+          ]
+        },
+        "usage_present": {"type": "boolean"},
+        "prompt_tokens": {"$ref": "#/$defs/nullableNonNegativeInteger"},
+        "completion_tokens": {"$ref": "#/$defs/nullableNonNegativeInteger"},
+        "raw_read_count": {"type": "integer", "minimum": 0},
+        "decoded_chunk_count": {"type": "integer", "minimum": 0},
+        "status_code": {
+          "oneOf": [
+            {"type": "integer", "minimum": 100, "maximum": 599},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

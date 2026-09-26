@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.14,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "agentperf-local-rustcore"
+version = "0.1.0"
+description = "Optional Rust streaming client for agentperf-local."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Artificial Analysis" }]
+
+[project.urls]
+Homepage = "https://artificialanalysis.ai"
+Source = "https://github.com/ArtificialAnalysis/aa-agentperf-local"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "agentperf_local_rustcore"
+
+# uv keys a path dependency's build on pyproject.toml alone; list the Rust inputs so an edit rebuilds.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*.rs" }, { file = "../Cargo.lock" }]

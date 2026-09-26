@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$1" in
+  build)
+    if [[ "$2" != "--platform" || "$3" != "$TEST_DOCKER_PLATFORM" ]]; then
+      echo "Unexpected build platform: $*" >&2
+      exit 1
+    fi
+    ;;
+  image)
+    [[ "$2" == "inspect" ]]
+    echo "$TEST_DOCKER_ARCH"
+    ;;
+  *)
+    echo "Unexpected Docker call: $*" >&2
+    exit 1
+    ;;
+esac

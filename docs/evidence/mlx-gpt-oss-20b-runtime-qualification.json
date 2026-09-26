@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "kind": "runtime_qualification",
+  "profile_id": "mlx-lm-0.31.3-gpt-oss-20b-local",
+  "endpoint_model_digest": "sha256:dcd8f3de448de98ac841b99f5bd50fbf4d2ecd7999ef48fb7438fdb890eb9994",
+  "client_backend": "rust",
+  "synthetic_pack_id": "aa-runtime-synthetic-v1",
+  "pack_digest": "sha256:95690cb1f6037c919eaf7780381436e8c0957922333972a67e239b5d0458033e",
+  "passed": false,
+  "outcomes": [
+    {
+      "probe_id": "single_tool",
+      "passed": false,
+      "failure_codes": [
+        "tool_sequence_mismatch",
+        "tool_arguments_mismatch"
+      ],
+      "tool_names": [],
+      "tool_call_count": 0,
+      "arguments_valid": false,
+      "call_identifiers_present": true,
+      "content_present": true,
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "usage_present": true,
+      "prompt_tokens": 145,
+      "completion_tokens": 43,
+      "raw_read_count": 45,
+      "decoded_chunk_count": 43,
+      "status_code": null
+    },
+    {
+      "probe_id": "no_tool",
+      "passed": true,
+      "failure_codes": [],
+      "tool_names": [],
+      "tool_call_count": 0,
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "content_present": true,
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "usage_present": true,
+      "prompt_tokens": 138,
+      "completion_tokens": 36,
+      "raw_read_count": 39,
+      "decoded_chunk_count": 37,
+      "status_code": null
+    },
+    {
+      "probe_id": "parallel_tools",
+      "passed": false,
+      "failure_codes": [
+        "tool_sequence_mismatch",
+        "tool_arguments_mismatch",
+        "unexpected_generation_cap"
+      ],
+      "tool_names": [],
+      "tool_call_count": 0,
+      "arguments_valid": false,
+      "call_identifiers_present": true,
+      "content_present": true,
+      "reasoning_present": false,
+      "finish_reason": "length",
+      "usage_present": true,
+      "prompt_tokens": 181,
+      "completion_tokens": 128,
+      "raw_read_count": 131,
+      "decoded_chunk_count": 130,
+      "status_code": null
+    },
+    {
+      "probe_id": "tool_history",
+      "passed": false,
+      "failure_codes": [
+        "tool_sequence_mismatch",
+        "tool_arguments_mismatch"
+      ],
+      "tool_names": [],
+      "tool_call_count": 0,
+      "arguments_valid": false,
+      "call_identifiers_present": true,
+      "content_present": true,
+      "reasoning_present": false,
+      "finish_reason": "stop",
+      "usage_present": true,
+      "prompt_tokens": 215,
+      "completion_tokens": 34,
+      "raw_read_count": 37,
+      "decoded_chunk_count": 35,
+      "status_code": null
+    },
+    {
+      "probe_id": "capped_finish",
+      "passed": true,
+      "failure_codes": [],
+      "tool_names": [],
+      "tool_call_count": 0,
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "content_present": true,
+      "reasoning_present": false,
+      "finish_reason": "length",
+      "usage_present": true,
+      "prompt_tokens": 80,
+      "completion_tokens": 1,
+      "raw_read_count": 4,
+      "decoded_chunk_count": 3,
+      "status_code": null
+    }
+  ],
+  "privacy": {
+    "generated_text_included": false,
+    "tool_arguments_included": false,
+    "endpoint_url_included": false
+  }
+}

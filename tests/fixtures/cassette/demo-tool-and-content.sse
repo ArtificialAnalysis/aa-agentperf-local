@@ -1,0 +1,9 @@
+data: {"id":"cassette-tool","object":"chat.completion.chunk","created":0,"model":"cassette-model","choices":[{"index":0,"delta":{"role":"assistant","content":"working"},"finish_reason":null}]}
+
+data: {"id":"cassette-tool","object":"chat.completion.chunk","created":0,"model":"cassette-model","choices":[{"index":0,"delta":{},"finish_reason":null}]}
+
+data: {"id":"cassette-tool","object":"chat.completion.chunk","created":0,"model":"cassette-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"cassette-tool","object":"chat.completion.chunk","created":0,"model":"cassette-model","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: [DONE]

@@ -1,0 +1,189 @@
+{
+  "name": "AgentPerf default replay v1",
+  "source": "recordings/default/manifest.json",
+  "mode": "single_user_agentic_replay",
+  "version": 1,
+  "tasks": [
+    {
+      "task_id": "task_meeting_council_budget",
+      "trace": "traces/task_meeting_council_budget.jsonl",
+      "source_recording": "recordings/default/recordings/pinchbench-openclaw-task_meeting_council_budget-recording.json",
+      "model_calls": 20,
+      "tool_calls": 20,
+      "total_recorded_tool_delay_ms": 2151.082417,
+      "tool_environment": {
+        "type": "docker",
+        "image": "agentperf-pinchbench:latest",
+        "cwd": "/workspace",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": true,
+        "workspace_path": "workspaces/task_meeting_council_budget"
+      },
+      "family": "pinchbench-openclaw",
+      "adapter": "pinchbench",
+      "required_context_tokens": 65536
+    },
+    {
+      "task_id": "task_meeting_council_votes",
+      "trace": "traces/task_meeting_council_votes.jsonl",
+      "source_recording": "recordings/default/recordings/pinchbench-openclaw-task_meeting_council_votes-recording.json",
+      "model_calls": 21,
+      "tool_calls": 21,
+      "total_recorded_tool_delay_ms": 2219.71825,
+      "tool_environment": {
+        "type": "docker",
+        "image": "agentperf-pinchbench:latest",
+        "cwd": "/workspace",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": true,
+        "workspace_path": "workspaces/task_meeting_council_votes"
+      },
+      "family": "pinchbench-openclaw",
+      "adapter": "pinchbench",
+      "required_context_tokens": 65536
+    },
+    {
+      "task_id": "task_k8s_debugging",
+      "trace": "traces/task_k8s_debugging.jsonl",
+      "source_recording": "recordings/default/recordings/pinchbench-openclaw-task_k8s_debugging-recording.json",
+      "model_calls": 5,
+      "tool_calls": 5,
+      "total_recorded_tool_delay_ms": 351.825774,
+      "tool_environment": {
+        "type": "docker",
+        "image": "agentperf-pinchbench:latest",
+        "cwd": "/workspace",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": true,
+        "workspace_path": "workspaces/task_k8s_debugging"
+      },
+      "family": "pinchbench-openclaw",
+      "adapter": "pinchbench",
+      "required_context_tokens": 16384
+    },
+    {
+      "task_id": "task_meeting_searchable_index",
+      "trace": "traces/task_meeting_searchable_index.jsonl",
+      "source_recording": "recordings/default/recordings/pinchbench-openclaw-task_meeting_searchable_index-recording.json",
+      "model_calls": 9,
+      "tool_calls": 11,
+      "total_recorded_tool_delay_ms": 1074.54746,
+      "tool_environment": {
+        "type": "docker",
+        "image": "agentperf-pinchbench:latest",
+        "cwd": "/workspace",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": true,
+        "workspace_path": "workspaces/task_meeting_searchable_index"
+      },
+      "family": "pinchbench-openclaw",
+      "adapter": "pinchbench",
+      "required_context_tokens": 32768
+    },
+    {
+      "task_id": "task_skill_search",
+      "trace": "traces/task_skill_search.jsonl",
+      "source_recording": "recordings/default/recordings/pinchbench-openclaw-task_skill_search-recording.json",
+      "model_calls": 5,
+      "tool_calls": 7,
+      "total_recorded_tool_delay_ms": 638.3825,
+      "tool_environment": {
+        "type": "docker",
+        "image": "agentperf-pinchbench:latest",
+        "cwd": "/workspace",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": true,
+        "workspace_path": "workspaces/task_skill_search"
+      },
+      "family": "pinchbench-openclaw",
+      "adapter": "pinchbench",
+      "required_context_tokens": 8192
+    },
+    {
+      "task_id": "django__django-15851",
+      "trace": "traces/django__django-15851.jsonl",
+      "source_recording": "recordings/default/recordings/swe-sample-django__django-15851.json",
+      "model_calls": 28,
+      "tool_calls": 28,
+      "total_recorded_tool_delay_ms": 11707.080205,
+      "tool_environment": {
+        "type": "docker",
+        "image": "docker.io/swebench/sweb.eval.x86_64.django_1776_django-15851:latest",
+        "cwd": "/testbed",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": false
+      },
+      "family": "swe-sample",
+      "adapter": "swebench",
+      "required_context_tokens": 16384
+    },
+    {
+      "task_id": "django__django-14500",
+      "trace": "traces/django__django-14500.jsonl",
+      "source_recording": "recordings/default/recordings/swe-corpus-django__django-14500.json.gz",
+      "model_calls": 40,
+      "tool_calls": 40,
+      "total_recorded_tool_delay_ms": 10256.66322,
+      "tool_environment": {
+        "type": "docker",
+        "image": "docker.io/swebench/sweb.eval.x86_64.django_1776_django-14500:latest",
+        "cwd": "/testbed",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": false
+      },
+      "family": "swe-corpus",
+      "adapter": "swebench",
+      "required_context_tokens": 32768
+    },
+    {
+      "task_id": "sphinx-doc__sphinx-10614",
+      "trace": "traces/sphinx-doc__sphinx-10614.jsonl",
+      "source_recording": "recordings/default/recordings/swe-corpus-sphinx-doc__sphinx-10614.json.gz",
+      "model_calls": 40,
+      "tool_calls": 40,
+      "total_recorded_tool_delay_ms": 7524.296064,
+      "tool_environment": {
+        "type": "docker",
+        "image": "docker.io/swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10614:latest",
+        "cwd": "/testbed",
+        "network": "none",
+        "interpreter": [
+          "bash",
+          "-c"
+        ],
+        "workspace_mount": false
+      },
+      "family": "swe-corpus",
+      "adapter": "swebench",
+      "required_context_tokens": 32768
+    }
+  ]
+}

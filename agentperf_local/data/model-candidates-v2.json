@@ -1,0 +1,3913 @@
+{
+  "version": 2,
+  "kind": "consumer_gpu_model_candidates",
+  "status": "pilot-candidates-not-release",
+  "as_of": "2026-09-21",
+  "models": [
+    {
+      "profile_id": "gemma4-12b-it-q4-0",
+      "display_name": "Google Gemma 4 12B IT QAT Q4_0 GGUF",
+      "hf_repository": "google/gemma-4-12B-it-qat-q4_0-gguf",
+      "hf_revision": "29d097773436b69ff9feafd636ab4cf873786537",
+      "source_url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "disabled",
+      "speculation_policy": "disabled-target-only-baseline",
+      "stored_checkpoint_kind": "gguf-q4-0",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "gemma-4-12b-it-qat-q4_0.gguf",
+            "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+            "size_bytes": 6975879296,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 8,
+          "full_kv_heads": 1,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 40,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 1536,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 1468006400,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 10020944000,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-12b-it-q4-0",
+        "quantization": "Q4_0",
+        "model_filename": "gemma-4-12b-it-qat-q4_0.gguf",
+        "llama_cpp": null,
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://github.com/ggml-org/llama.cpp",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "apple-silicon",
+          "architecture": "metal",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://github.com/ggml-org/llama.cpp",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-26b-a4b-q4-0",
+      "display_name": "Google Gemma 4 26B A4B IT QAT Q4_0 GGUF",
+      "hf_repository": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+      "hf_revision": "d1c082be9cf3c8a514acf63b8761f4b41935842e",
+      "source_url": "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "disabled",
+      "speculation_policy": "disabled-target-only-baseline",
+      "stored_checkpoint_kind": "gguf-q4-0",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "gemma-4-26B_q4_0-it.gguf",
+            "sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+            "size_bytes": 14439363584,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 5,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 25,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 1536,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 1509949440,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 17606063104,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-26b-a4b-q4-0",
+        "quantization": "Q4_0",
+        "model_filename": "gemma-4-26B_q4_0-it.gguf",
+        "llama_cpp": null,
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "apple-silicon",
+          "architecture": "metal",
+          "evidence_level": "official-gguf-backend",
+          "source_url": "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m",
+      "display_name": "Qwen3.8 27B Q4_K_M GGUF",
+      "hf_repository": "unsloth/Qwen3.8-27B-GGUF",
+      "hf_revision": "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "disabled-target-only-baseline",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256": "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169",
+            "size_bytes": 17106775008,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 157286400,
+          "runtime_overhead_bytes": 1633681408,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 23192710112,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-27b-q4-k-m",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.8-27B-Q4_K_M.gguf",
+        "llama_cpp": null,
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "upstream-gguf-conversion",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/main/models/qwen/qwen3.8-27b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "upstream-gguf-conversion",
+          "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        },
+        {
+          "device_id": "apple-silicon",
+          "architecture": "metal",
+          "evidence_level": "upstream-gguf-conversion",
+          "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m-mtp",
+      "display_name": "Qwen3.8 27B Q4_K_M, GeForce MTP speculative",
+      "hf_repository": "unsloth/Qwen3.8-27B-GGUF",
+      "hf_revision": "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256": "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169",
+            "size_bytes": 17106775008,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 470679552,
+          "runtime_overhead_bytes": 2423084064,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 24295505920,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-27b-q4-k-m-mtp",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.8-27B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 4096,
+          "ubatch_size": 2048,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": true,
+          "draft_backend_sampling": true,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.8-27b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-27b-nvfp4-dgx-spark",
+      "display_name": "Qwen3.8 27B NVFP4, DGX Spark vLLM",
+      "hf_repository": "RadixArk/Qwen3.8-27B-NVFP4",
+      "hf_revision": "319f741cce68d7914884900c138a1fbb70a42f30",
+      "source_url": "https://huggingface.co/RadixArk/Qwen3.8-27B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-dflash-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+            "size_bytes": 8952,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "7ff41ec6f96ad50efea3c92751cd261b63839d39936eb6e6ffc9066db8672740",
+            "size_bytes": 73003,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "a4cef85934ea1fdcb207944dbc6eee70dbbf16806874428556ae33023336c0a4",
+            "size_bytes": 214,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "0f39e8cd23abdfb79adc89ac1b19acad990aa6ac32973f9ab0a67d1e3449535c",
+            "size_bytes": 53749,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "merges.txt",
+            "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+            "size_bytes": 3353259,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00003.safetensors",
+            "sha256": "fbcdb5ba1cdda462b5f38592d071e772c4d398afea61a0aa9188b32d1a239a79",
+            "size_bytes": 9965652544,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00003.safetensors",
+            "sha256": "db6146a5464fb0a891181b93c81593f0ca65c602eb14120a1c2b1b09bca11f85",
+            "size_bytes": 9985757064,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00003.safetensors",
+            "sha256": "d3cfb92742e30c8b46564665791dbe0a86ed64cfc02b1275081530793c0c9581",
+            "size_bytes": 1970287672,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "7aa103a2582b7d26631988de33dea19e8a308ee9c239e8e14feb374af30905e2",
+            "size_bytes": 214866,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "preprocessor_config.json",
+            "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+            "size_bytes": 390,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+            "size_bytes": 12809320,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "e5d078b00e6c1223b32444db8c1001dc71d86ceef8ee706b5bf084c3a43a1f9c",
+            "size_bytes": 1121,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "video_preprocessor_config.json",
+            "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+            "size_bytes": 385,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "vocab.json",
+            "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+            "size_bytes": 6722759,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 10,
+          "constant_state_bytes": 1782411428,
+          "runtime_overhead_bytes": 9064728579,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 34939558953,
+        "runtime_versions": {
+          "vllm": "0.28.0"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-27b-nvfp4-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--trust-remote-code",
+            "--kv-cache-dtype",
+            "fp8",
+            "--gpu-memory-utilization",
+            "0.8",
+            "--max-num-batched-tokens",
+            "16384",
+            "--enable-chunked-prefill",
+            "--async-scheduling",
+            "--enable-prefix-caching",
+            "--speculative-config",
+            "{\"method\":\"dflash\",\"model\":\"z-lab/Qwen3.8-27B-DFlash2\",\"num_speculative_tokens\":8}",
+            "--load-format",
+            "safetensors"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "upstream-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.8-27b/dgx-spark/linux/vllm/nvfp4/recipe.yaml",
+          "tested_input_tokens": 8192,
+          "tested_output_tokens": 1024,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-26b-a4b-nvfp4-dgx-spark",
+      "display_name": "Google Gemma 4 26B A4B NVFP4, DGX Spark vLLM",
+      "hf_repository": "nvidia/Gemma-4-26B-A4B-NVFP4",
+      "hf_revision": "a19cfe00be84568a6867111c9a68c9c44fdcffe6",
+      "source_url": "https://huggingface.co/nvidia/Gemma-4-26B-A4B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "disabled",
+      "speculation_policy": "enabled-vllm-external-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "94899c0f917d93f6fe81c95744d1e8ddab2d21d39228d2e4aec1fb2a25bff413",
+            "size_bytes": 16934,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "4e379cc809c617a49179a49140f553a2d6a5ec538ed480832b0c54f6ace43d98",
+            "size_bytes": 10289,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "d4226bbe3117d2d253ba4609720ba82c6c4ce4627a9a6ae05387c78983ac03de",
+            "size_bytes": 208,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "fca2ea21cded31e6cff2c56ee83a162dcd5d3ff292cbf2f6083702e9fc324454",
+            "size_bytes": 5188,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00002.safetensors",
+            "sha256": "b5df31122600666617b05f9be2015552cd2edff401e86b1d99b9127efdc6d819",
+            "size_bytes": 10001865236,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00002.safetensors",
+            "sha256": "ff11061ebf57327af4f1993ff758b0859d7746b0c03ca1b17ded7dec30410962",
+            "size_bytes": 8786620352,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "ac5e677ed9f8d9b689170bbae0c88ce163e284d02b09100e14afddaa9ec4a15c",
+            "size_bytes": 4977046,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "processor_config.json",
+            "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+            "size_bytes": 1689,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "size_bytes": 32169626,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "90c3a3ba5bf53818383a58e1a776cbcacd2a038d4812eaa373e1522f2d06f3df",
+            "size_bytes": 2095,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 5,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 25,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 1024,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 86996621257,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.23.1"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-26b-a4b-nvfp4-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--gpu-memory-utilization",
+            "0.8",
+            "--load-format",
+            "instanttensor",
+            "--enable-prefix-caching",
+            "--max-num-batched-tokens",
+            "8192",
+            "--speculative-config",
+            "{\"method\":\"mtp\",\"model\":\"google/gemma-4-26B-A4B-it-assistant\",\"num_speculative_tokens\":4,\"moe_backend\":\"triton\"}"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/google/gemma-4-26b-a4b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-31b-it-nvfp4-dgx-spark",
+      "display_name": "Google Gemma 4 31B IT NVFP4, DGX Spark vLLM",
+      "hf_repository": "nvidia/Gemma-4-31B-IT-NVFP4",
+      "hf_revision": "4135a98a9b728a548947683219633b25682223ac",
+      "source_url": "https://huggingface.co/nvidia/Gemma-4-31B-IT-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "disabled",
+      "speculation_policy": "enabled-vllm-external-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "94899c0f917d93f6fe81c95744d1e8ddab2d21d39228d2e4aec1fb2a25bff413",
+            "size_bytes": 16934,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "aa03a6a490fb743b8186f09c60ec39a30fdbaf7c3a18dfef8e52a62c2beb9ae4",
+            "size_bytes": 9464,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "d4226bbe3117d2d253ba4609720ba82c6c4ce4627a9a6ae05387c78983ac03de",
+            "size_bytes": 208,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "7295b239347a50abc3888c4a8208b8644eb0bd3d92810117bdea1768e5f21129",
+            "size_bytes": 3748,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00004.safetensors",
+            "sha256": "4d955de1f740f16dcf3e9206a42082102cbf2d1b0c42adf1fc39190e186e3ae8",
+            "size_bytes": 9954637578,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00004.safetensors",
+            "sha256": "f8418783fa27ab2a3a92baaebe6c65c762bfe236fe0f7ec1e3c05b5617a1e6e4",
+            "size_bytes": 9977124474,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00004.safetensors",
+            "sha256": "5cfe8ee0f73c48536a21680d87257e5d7d93fc6706a236dc6a909f86e0ec578a",
+            "size_bytes": 9999145338,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00004-of-00004.safetensors",
+            "sha256": "4dbb1ed31e5954cd9722a4789087f797417de40fc66a90ed5b46bfecfb7d3091",
+            "size_bytes": 2702570418,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "aff5569bed013db014afe23db3986434729bb33d9f817017cc0617cd479212b9",
+            "size_bytes": 174516,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "processor_config.json",
+            "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+            "size_bytes": 1689,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "size_bytes": 32169626,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "e467669cfe172dfb0c4e7de7bfbe7553c42bfa5de95acd71f423f58a434d80de",
+            "size_bytes": 2094,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 10,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 50,
+          "sliding_kv_heads": 16,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 1024,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 68500756393,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.23.1"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-31b-it-nvfp4-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--gpu-memory-utilization",
+            "0.8",
+            "--enable-prefix-caching",
+            "--max-num-batched-tokens",
+            "8192",
+            "--load-format",
+            "fastsafetensors",
+            "--speculative-config",
+            "{\"model\":\"google/gemma-4-31B-it-assistant\",\"num_speculative_tokens\":4}"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/google/gemma-4-31b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark",
+      "display_name": "NVIDIA Nemotron 3 Super 120B A12B NVFP4 MTP, DGX Spark vLLM",
+      "hf_repository": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
+      "hf_revision": "ff433f5493e25d631c9f12b5d55c674229923d02",
+      "source_url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
+      "license_id": "NVIDIA-Nemotron-Open-Model-License",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "nemotron_v3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size_bytes": 0,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "575fb74f54ed264df9047d0ecce3c98938aae953fb4f50356675706264cbb68a",
+            "size_bytes": 10771,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "14a1ad3ab6ec49e09e9c30f8686c8e3ca5b5338ee0eb0c79dff4f285fc29778d",
+            "size_bytes": 7411248,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "configuration_nemotron_h.py",
+            "sha256": "0fc818c10506c91bd02df5a605f49cb0704b5498954f46dbde2d63999ae36c3d",
+            "size_bytes": 19822,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "27d520b2df55efe6b978d06fbfe8213ae93288d063d462f40b4ed94637c019bf",
+            "size_bytes": 210,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "dbabb3970ad65a6cca51488db15d66d976c2486ff5448c4aee906389a02df316",
+            "size_bytes": 6146797,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00017.safetensors",
+            "sha256": "3d31c241fb777f44342ac3c298147bb82ddcaa64214c555494d8fab397218d0e",
+            "size_bytes": 5000122600,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00017.safetensors",
+            "sha256": "78d4a5ad26841e04ea92ae3d6b6b29ab9069b4ea27155b93213a5bfbeef85081",
+            "size_bytes": 4977660672,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00017.safetensors",
+            "sha256": "ecb72debb5d274b4beb74fb993a44e4f8ac27d640ecadaf656ed7de178942429",
+            "size_bytes": 5001219144,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00004-of-00017.safetensors",
+            "sha256": "a7d1c68e827296ee4bfc0ca4fe2c6a545c48b7a7f5148d9ebf4872c6fb123106",
+            "size_bytes": 5000841128,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00005-of-00017.safetensors",
+            "sha256": "1d432c9c783453c6efa69d01228023b407be77e7bfea2909b2023c03df07df6a",
+            "size_bytes": 5000389560,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00006-of-00017.safetensors",
+            "sha256": "037ea60b87cb2b8ce12beb7164c5382f4d97723c24cdbacc9fc188ae5a28f47b",
+            "size_bytes": 4995800552,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00007-of-00017.safetensors",
+            "sha256": "3c0527dac96fd91874427f04e92c1df43585503608a487a4c8ffcf9d5f925bd4",
+            "size_bytes": 5000688960,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00008-of-00017.safetensors",
+            "sha256": "ef6e73f64c3d7242a50230a288811eaa56aa2d9c6da9040b90361e6b9245bc26",
+            "size_bytes": 5000478392,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00009-of-00017.safetensors",
+            "sha256": "b4f598068350b93d42c486e537239dabc4661545ea2d39c8f0bb7ca23223c4f5",
+            "size_bytes": 5000199288,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00010-of-00017.safetensors",
+            "sha256": "bf8bf1f4e2e01591c3d91f4b51f4f00252e14715132278177cab6ecc76511884",
+            "size_bytes": 4997005048,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00011-of-00017.safetensors",
+            "sha256": "ac436f2e1af8185dc3b093e1527f3297b93fd639ab84ad208376bd82d5e94e94",
+            "size_bytes": 5000780360,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00012-of-00017.safetensors",
+            "sha256": "7814c9ae0dc394beb4709ebf0c7e976214e2770b322fa2422bc467446dd97023",
+            "size_bytes": 5000527232,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00013-of-00017.safetensors",
+            "sha256": "b13aa79c0879539c4a514489497bccd21e23ec597d8112ba91808767fcbd4d92",
+            "size_bytes": 5001126000,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00014-of-00017.safetensors",
+            "sha256": "1d8781b2643ca6566e7bdae77c275b62785de3502c5337b8cb53558df2477eed",
+            "size_bytes": 5000330504,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00015-of-00017.safetensors",
+            "sha256": "5f6c3c0f842055418b0420dbeeba6b737d892d9d849725d956603a714f44745e",
+            "size_bytes": 4996320352,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00016-of-00017.safetensors",
+            "sha256": "a5f795056a1ac69546ce8f5bccdcab3b6cb7142426024a81f23c15d3d45aa51e",
+            "size_bytes": 4998674800,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00017-of-00017.safetensors",
+            "sha256": "218355cf69f1f9d3efa1b5c8b5f531e28e1aa50a3d869ee768ba9835d936e182",
+            "size_bytes": 345784264,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "e0ca77ceed3a9511db61dc0ae6dbed2f71e6f6ee9f345fe3352f5cfe50cd094f",
+            "size_bytes": 16634043,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "modeling_nemotron_h.py",
+            "sha256": "e1cb5fc02e887983f0a445bf4c1a2604453b2cb2db4624c7004dcf663bbb1b6e",
+            "size_bytes": 82338,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "special_tokens_map.json",
+            "sha256": "e9435fefd6d838fd9fcbbc44b97a8e3ff322be7f6dfb7e4fd2468586574bb52b",
+            "size_bytes": 563,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "super_v3_reasoning_parser.py",
+            "sha256": "f7fc71d1697ed79931787cf7485ee297365a41c3442cc1e05e6ebab43e0a39c1",
+            "size_bytes": 1909,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+            "size_bytes": 17077484,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "10f93eabcb9b1602fbb991d6308e787ce1df28ee9cd7a1c6d1e8c3f338b957bc",
+            "size_bytes": 177209,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 8,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 1073741824,
+          "runtime_overhead_bytes": 25666493870,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.24.0"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--gpu-memory-utilization",
+            "0.8",
+            "--load-format",
+            "fastsafetensors",
+            "--attention-backend",
+            "flashinfer",
+            "--max-num-batched-tokens",
+            "16384",
+            "--kv-cache-dtype",
+            "fp8",
+            "--mamba-cache-mode",
+            "align",
+            "--mamba_ssm_cache_dtype",
+            "float32",
+            "--speculative-config",
+            "{\"method\":\"mtp\",\"num_speculative_tokens\":3}",
+            "--enable-prefix-caching"
+          ],
+          "environment": {
+            "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
+            "VLLM_FLOAT32_MATMUL_PRECISION": "high"
+          }
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/nvidia/nemotron-3-super-120b-a12b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark",
+      "display_name": "NVIDIA Nemotron 3.5 Lightning 30B A3B NVFP4 DSpark, DGX Spark vLLM",
+      "hf_repository": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4",
+      "hf_revision": "bee7596271d1495f6992ae224aefde4410e816b8",
+      "source_url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4",
+      "license_id": "OpenMDW-1.1",
+      "native_context_tokens": 1048576,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "nemotron_v3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-dspark-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "58933db77d3099b4f78c55a38347a72e1ea05b97d6bd8f38775303dc0194e0a9",
+            "size_bytes": 9867,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "f1d98b530846087dc08b574a219713a94f945bf6583dc7230a19ebf1e8c50933",
+            "size_bytes": 1337760,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "c67c90fcadf0e7ef78b663eb159664b36a35ffb9dd2523096e226e5c3d1b0e5f",
+            "size_bytes": 209,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "529a5a524399ff5b68aabf8564db60b2fc62ad0a84b9c5038efc220c375e0938",
+            "size_bytes": 928085,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00052.safetensors",
+            "sha256": "672c8bda10fdec0256e0819e112d2aa3a936cc3e5d311a05fd3ff773ca9a44b9",
+            "size_bytes": 743427168,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00052.safetensors",
+            "sha256": "b365ac815ea78b159c4c6b27be77f2ab24be3ce67f7f4017eb3ada2e81a27f4f",
+            "size_bytes": 731109880,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00052.safetensors",
+            "sha256": "8fbad8247cd4d256a6d376259b83b06972e8d0d00eae1718c7852856343f204b",
+            "size_bytes": 38783920,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00004-of-00052.safetensors",
+            "sha256": "243a94b1f2b3a3790ff53c151effe116a141539045804df20c005a8c5d0de96f",
+            "size_bytes": 731109880,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00005-of-00052.safetensors",
+            "sha256": "e675767a474777e76e7a3b61d30fa70812db34415f76385c17aaf25aab82d398",
+            "size_bytes": 38783920,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00006-of-00052.safetensors",
+            "sha256": "8f8e9623934bc82a4a2af18af83888ce79bbdee4f506cda08375d4ab3435cbd1",
+            "size_bytes": 46798848,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00007-of-00052.safetensors",
+            "sha256": "306aee6514a7daf559a771ce0c29fafc6de70036c30cf6208c3844283694eff3",
+            "size_bytes": 731109880,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00008-of-00052.safetensors",
+            "sha256": "31235989ff64cae4d75b73a713d1acbc5205bd050bb1aeb5e573b553d07a0b45",
+            "size_bytes": 38783920,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00009-of-00052.safetensors",
+            "sha256": "bcd6b2645a6b23588e721432745a1a159870087037a1f937db20f2a85e14dc7f",
+            "size_bytes": 731109880,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00010-of-00052.safetensors",
+            "sha256": "5fae7d86c34396c2da17f6ebd3b912c29c81370f61266d42bc88c91875a4d783",
+            "size_bytes": 38783920,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00011-of-00052.safetensors",
+            "sha256": "10237b58cd289cc6dd7609e48a7606bd5a120050dc3f189621d99d23c52566ab",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00012-of-00052.safetensors",
+            "sha256": "dfa4a2312fc9943eee6ba8558b8f4d748ed20e5032d3a04a821f29844cb4f2e4",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00013-of-00052.safetensors",
+            "sha256": "41feb27e33765c985a28f8aca69440a9aaa39db0bdf632c065cc49ee0f5a8fa7",
+            "size_bytes": 46798856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00014-of-00052.safetensors",
+            "sha256": "16653126b2716c7b8d402024e5fb3ce6eb052422d45d83a5f3e486f066fd30cc",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00015-of-00052.safetensors",
+            "sha256": "1016d76b1b0dad48f5b38e97c2def67aac446a582aed849f14533d988047fe34",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00016-of-00052.safetensors",
+            "sha256": "70aaec01374fea7dddc0e006f4ae91e1a4cd09b9f77a36b8ba48e5189288419f",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00017-of-00052.safetensors",
+            "sha256": "67763384429d40a0142b4b1d02c6a171a493a4d0c57086d38e2436ac05d33a86",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00018-of-00052.safetensors",
+            "sha256": "252e3fb2e6c37d1b41f49463607d928e39c96fe0eb499768cc2fe42d9bfffe8e",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00019-of-00052.safetensors",
+            "sha256": "3fd080a21df9cda2793957c3b7a3699b7356753cb6a6e519e3299303c4e004ab",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00020-of-00052.safetensors",
+            "sha256": "31dada97bfd50ecd0fee51aea0272fb75d6a6dc6303022cb6defb7e55dfbaf8d",
+            "size_bytes": 46798856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00021-of-00052.safetensors",
+            "sha256": "601a05eb0b228da1cbc5883f955cbb5a38f1379401501926a7576aebdfd757da",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00022-of-00052.safetensors",
+            "sha256": "4b3eb401a3152e9a392840e56ceaf29d5fba4b952cc7a38ef5ec72849ffd45ab",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00023-of-00052.safetensors",
+            "sha256": "1f92f9b4bc06f33f18db2cee651ffa868374b54dc3d3ad8ea88d8f222507d8d7",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00024-of-00052.safetensors",
+            "sha256": "64d36b45162fd22d57934962e00fa6b6c19a8ef9f36dc1fce1940d876ce28283",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00025-of-00052.safetensors",
+            "sha256": "1d8f5436a1e7c34e8644e4db0331d58ba75c8c9997f1dfed0b1797ce5d87e9fd",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00026-of-00052.safetensors",
+            "sha256": "97e410e491888aa263a4a1ec42b8dd5c25b4869a209ff1da6ec2c20592db5a97",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00027-of-00052.safetensors",
+            "sha256": "e67fb58638bf00b010323ad702be58addf95ac2c89ba4006b7d00cbf8bab2b7f",
+            "size_bytes": 46798856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00028-of-00052.safetensors",
+            "sha256": "1800ab07214a1746f26a01e575e0c979d129a9bce1f3ce030e11b38d40bda72b",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00029-of-00052.safetensors",
+            "sha256": "045dc61dc334cad87fdd227515739ba22ea04f9e6e0f9624b40a6ff1e146553a",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00030-of-00052.safetensors",
+            "sha256": "794679784bde068d4d812b824595efcd87ea4fa64168af18e1295d60ad6cfa89",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00031-of-00052.safetensors",
+            "sha256": "727bb1bf4829360596a2845ee2730536408c4f52b322fffd8afc6bd972de5e3f",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00032-of-00052.safetensors",
+            "sha256": "cc68cfd7f1e805422e6ab224638b115754adc3a84bdedebc71a4ee7b52159e0a",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00033-of-00052.safetensors",
+            "sha256": "ee8d3fc76401172bdcb6fe4ad3b08ed8a9f0bc6e28a86bc6757a0998b27569a0",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00034-of-00052.safetensors",
+            "sha256": "90c579b134e5b929903e7c8e897970109bb11574bcf50fceb72c65884388bae1",
+            "size_bytes": 46798856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00035-of-00052.safetensors",
+            "sha256": "d6b9441c3fb72f5d13dfb8dfc410c0c176d94217d2a7626d3fd96c4db31ac134",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00036-of-00052.safetensors",
+            "sha256": "130ee06f0ba0c8e760b7c57ae671458446ad8fd71548198d0005e8e553ba10a9",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00037-of-00052.safetensors",
+            "sha256": "7464b7b51237bd66e5469fc4cb67f10d7b490af34d16670d57b102a3cfec6754",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00038-of-00052.safetensors",
+            "sha256": "1a0ab61ef65a02dbf8455da1feb5eb059ff064bf04ce9d9db5216d0c849383f5",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00039-of-00052.safetensors",
+            "sha256": "9f31f2fa95027f718a91c731b4537172576c05db6f8ac05ff3d17de7b4c27219",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00040-of-00052.safetensors",
+            "sha256": "407f0e74455eb7050e6125f346c8434d4341ff07730cc670bc482b47f59521dc",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00041-of-00052.safetensors",
+            "sha256": "4e8442377f265c009f6f82cf07447cc735385db6a673507ec61e1228c6e1b324",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00042-of-00052.safetensors",
+            "sha256": "85ca012bff38fbbcb1171ea1d134d60db2bdeaf12e53f1b4e8cf6e36eaf319a3",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00043-of-00052.safetensors",
+            "sha256": "01c56b23b7ea692675bc6f5f77b2a4959a51091435befd41428527f7128ea18f",
+            "size_bytes": 46798856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00044-of-00052.safetensors",
+            "sha256": "a3ebcaf00a08bc25f838d255e1ca78f7a518dd5dd529d7d6199e3be27663b8dd",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00045-of-00052.safetensors",
+            "sha256": "e9d559259cb0ff6043d25e94c11607f8a8057c7646763b0cb69c38b457840028",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00046-of-00052.safetensors",
+            "sha256": "5e5cfe7a6e504ec49e1672a0c28dc14c1fd270b01740d6152e85932e9f2a2439",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00047-of-00052.safetensors",
+            "sha256": "96ffe8358c3e8303b16dbe43f5016ff4e2dd84d633d53e20a4f93a1e8356f7e7",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00048-of-00052.safetensors",
+            "sha256": "1dcdf08d0f47ac4378dc288e7f5426d8d1ab4d214a299613a967d50e7ab5d587",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00049-of-00052.safetensors",
+            "sha256": "25da4593995db643b74d5ab71bd0618a0d7158ddad12bec8956866afb1b8fea5",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00050-of-00052.safetensors",
+            "sha256": "ef5b1baa53abc6b6dfa24618ecbb3eac8a783dbfde456d8943d82f912f3c4d44",
+            "size_bytes": 731110656,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00051-of-00052.safetensors",
+            "sha256": "2da1f6cbbcfb36bf96bda840fc1442fb661262ed77c33be9e6d001301a684a1e",
+            "size_bytes": 38783936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00052-of-00052.safetensors",
+            "sha256": "85db447be6acf54d029665874440e19e4a3fad3f75c1db7e703c3442e3c13d2c",
+            "size_bytes": 3599984132,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "3c3bc7efa8d658c2e909a0b9020eb0f72064e6647de348856af4dee9895bead9",
+            "size_bytes": 1905918,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "special_tokens_map.json",
+            "sha256": "e9435fefd6d838fd9fcbbc44b97a8e3ff322be7f6dfb7e4fd2468586574bb52b",
+            "size_bytes": 563,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+            "size_bytes": 17077484,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "10f93eabcb9b1602fbb991d6308e787ce1df28ee9cd7a1c6d1e8c3f338b957bc",
+            "size_bytes": 177209,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 6,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 1073741824,
+          "runtime_overhead_bytes": 84515794605,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.28.1"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--moe-backend",
+            "marlin",
+            "--kv-cache-dtype",
+            "fp8",
+            "--max-num-batched-tokens",
+            "16384",
+            "--gpu-memory-utilization",
+            "0.8",
+            "--enable-prefix-caching",
+            "--mamba-backend",
+            "flashinfer",
+            "--mamba-cache-mode",
+            "align",
+            "--mamba-ssm-cache-dtype",
+            "float16",
+            "--enable-mamba-cache-stochastic-rounding",
+            "--mamba-cache-philox-rounds",
+            "5",
+            "--load-format",
+            "safetensors",
+            "--speculative_config.method",
+            "dspark",
+            "--speculative_config.model",
+            "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark",
+            "--speculative_config.num_speculative_tokens",
+            "7"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/nvidia/nemotron-3.5-lightning-30b-a3b/dgx-spark/linux/vllm/nvfp4/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen35-122b-a10b-nvfp4-mtp-dgx-spark",
+      "display_name": "Qwen3.5 122B A10B NVFP4 MTP, DGX Spark vLLM",
+      "hf_repository": "nvidia/Qwen3.5-122B-A10B-NVFP4",
+      "hf_revision": "98915d837c4e7c87ac8296d02e89de19b3207e6d",
+      "source_url": "https://huggingface.co/nvidia/Qwen3.5-122B-A10B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+            "size_bytes": 7756,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "4bbd5a6e8662d412cb6e57efeee5dfd4f8e13dc07e2b43398994f85a58f9993d",
+            "size_bytes": 14274,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "303aba891d66ab63908a7b3cc9163bcb835fdf8b9f6301c73216f3f1eb3992dd",
+            "size_bytes": 244,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "0ee08c97b6123d808734e28951385ce0722c61737ac8c14a9f9a9e3889646c83",
+            "size_bytes": 9583,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00009.safetensors",
+            "sha256": "1250c8e43ec02e981fe3945317923d03e294543710e50018b9de6dc3e5ca5a98",
+            "size_bytes": 10000615592,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00009.safetensors",
+            "sha256": "e82c2c017adeb6f7fd7ccb8514c9d502e994f2a1a3276a33cbbd5fa7550195de",
+            "size_bytes": 10002004216,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00009.safetensors",
+            "sha256": "9739b910c9cd1995bbb25ac8ee75d14cda47bb5c9caca72290e4625df451cb85",
+            "size_bytes": 10001267992,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00004-of-00009.safetensors",
+            "sha256": "1c971546e7b89b0ecaef7397eda0efcd42814ceb749efec0d6617e0bee48819c",
+            "size_bytes": 10002020448,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00005-of-00009.safetensors",
+            "sha256": "abbf91a68fc49cc7011801cadc590d0748f3ad4f3eb1a1fe7e0517e683d96a6d",
+            "size_bytes": 10001267592,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00006-of-00009.safetensors",
+            "sha256": "f3b73a17118bf693b700904cf4f71f3feb889084731fb71bd62f75cd8871d089",
+            "size_bytes": 9974109760,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00007-of-00009.safetensors",
+            "sha256": "1080813452cbde25f1f44cda024fed273f2c98706917598624d611041da71fea",
+            "size_bytes": 10002339192,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00008-of-00009.safetensors",
+            "sha256": "b1b5056e7c0fd993a114a471037a0fb0e59a7d7c3d0115f076270e5b53d3b88b",
+            "size_bytes": 9999073984,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00009-of-00009.safetensors",
+            "sha256": "ea8a02e3dbb998dd9010bf9a2871925363da998d05b8197b2a5d949832d6c9b0",
+            "size_bytes": 3512306232,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "b0f1f40086d4c60f765c4c0f19a05bed95b39e072be8f18a68c55dd69dccadb7",
+            "size_bytes": 16456165,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "preprocessor_config.json",
+            "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+            "size_bytes": 390,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+            "size_bytes": 12807982,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+            "size_bytes": 16710,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "video_preprocessor_config.json",
+            "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+            "size_bytes": 385,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "vocab.json",
+            "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+            "size_bytes": 6722759,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 12,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 1073741824,
+          "runtime_overhead_bytes": 21964092952,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.28.0"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "qwen35-122b-a10b-nvfp4-mtp-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--gpu-memory-utilization",
+            "0.8",
+            "--load-format",
+            "safetensors",
+            "--enable-prefix-caching",
+            "--max-num-batched-tokens",
+            "8192",
+            "--attention-backend",
+            "flashinfer",
+            "--kv-cache-dtype",
+            "fp8",
+            "--moe-backend",
+            "marlin",
+            "--speculative-config",
+            "{\"method\":\"mtp\",\"num_speculative_tokens\":3,\"moe_backend\":\"triton\"}"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.5-122b-a10b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-27b-nvfp4-mtp-dgx-spark",
+      "display_name": "Qwen3.6 27B NVFP4 MTP, DGX Spark vLLM",
+      "hf_repository": "nvidia/Qwen3.6-27B-NVFP4",
+      "hf_revision": "0893e1606ff3d5f97a441f405d5fc541a6bdf404",
+      "source_url": "https://huggingface.co/nvidia/Qwen3.6-27B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+            "size_bytes": 7764,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "c04a19ba293737ad7be4f6e96d6666cb7e479cbe19ecc0c289fad267135b0338",
+            "size_bytes": 88567,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "configuration.json",
+            "sha256": "2d4464e2ead06bc9bc718c781309ad1e7baded626d66e8dcdc8b469ba185faf0",
+            "size_bytes": 51,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+            "size_bytes": 202,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "fd7200cd8bca2a8a5d777061521abf83e2deb97ab6bc2f04e7a0a3d3f8ecd5c1",
+            "size_bytes": 54902,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00003.safetensors",
+            "sha256": "b4a0d9a57ff1859dac1144b53ca285011db072737d8813fc16d8d1e07ecae17d",
+            "size_bytes": 9965652512,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00003.safetensors",
+            "sha256": "06da4242b0f491118d19d4d4c7564307a7bd6059c6bed284e08c93f6fc5a556d",
+            "size_bytes": 9985757032,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00003.safetensors",
+            "sha256": "e90f5b2bb16814a0565de284ea179edec201edfb120d13f1debaab66f9e60845",
+            "size_bytes": 1970287640,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "7aa103a2582b7d26631988de33dea19e8a308ee9c239e8e14feb374af30905e2",
+            "size_bytes": 214866,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "preprocessor_config.json",
+            "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+            "size_bytes": 390,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "processor_config.json",
+            "sha256": "d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1",
+            "size_bytes": 1191,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+            "size_bytes": 12807982,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b",
+            "size_bytes": 16718,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "video_preprocessor_config.json",
+            "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+            "size_bytes": 385,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "vocab.json",
+            "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+            "size_bytes": 6722759,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 1073741824,
+          "runtime_overhead_bytes": 82211343967,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.28.0"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-27b-nvfp4-mtp-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--trust-remote-code",
+            "--kv-cache-dtype",
+            "fp8",
+            "--attention-backend",
+            "flashinfer",
+            "--gpu-memory-utilization",
+            "0.5",
+            "--max-num-batched-tokens",
+            "8192",
+            "--enable-chunked-prefill",
+            "--async-scheduling",
+            "--enable-prefix-caching",
+            "--speculative-config",
+            "{\"method\":\"mtp\",\"num_speculative_tokens\":5}",
+            "--load-format",
+            "fastsafetensors"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.6-27b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-35b-a3b-nvfp4-mtp-dgx-spark",
+      "display_name": "Qwen3.6 35B A3B NVFP4 MTP, DGX Spark vLLM",
+      "hf_repository": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "hf_revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5",
+      "source_url": "https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "vllm",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+            "size_bytes": 7764,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "58aefa1c9eff7989f431d748f2ddec39446cb1fd2a69acc46e285c6a37b0cecc",
+            "size_bytes": 58110,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "configuration.json",
+            "sha256": "c1b09db419119513247e9b8b912c4b9897106c9b20c6cada7e107d993c5435eb",
+            "size_bytes": 58,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+            "size_bytes": 202,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "75fe7cc8d5836b58734e05ee67423a4ce91d602aaad45c8173a1b7597cd57663",
+            "size_bytes": 35085,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00003.safetensors",
+            "sha256": "07141c2db92e47bc08777132cd1a0323faf300eab3a7d7c111bc2bf075fda050",
+            "size_bytes": 10006877608,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00003.safetensors",
+            "sha256": "6dea9c759a0f941cf9e1cc1501216b0e107966a66c90425050e212efbd053f02",
+            "size_bytes": 10003595752,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00003.safetensors",
+            "sha256": "9758875fc55e49561165f4a44342b654c123c3e25c6811b34abb83553fb1a164",
+            "size_bytes": 3413864960,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "d67403a4e9793c0ba8a136baf14b3b76ec7b32c822267978084895e07ebd8a3e",
+            "size_bytes": 13726227,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "preprocessor_config.json",
+            "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+            "size_bytes": 390,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+            "size_bytes": 12807982,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b",
+            "size_bytes": 16718,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "video_preprocessor_config.json",
+            "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+            "size_bytes": 385,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "vocab.json",
+            "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+            "size_bytes": 6722759,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "vllm"
+        ],
+        "memory": {
+          "full_attention_layers": 10,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 1073741824,
+          "runtime_overhead_bytes": 82171637936,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 107374182400,
+        "runtime_versions": {
+          "vllm": "0.28.0"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-35b-a3b-nvfp4-mtp-dgx-spark",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": {
+          "arguments": [
+            "--trust-remote-code",
+            "--kv-cache-dtype",
+            "fp8",
+            "--attention-backend",
+            "flashinfer",
+            "--moe-backend",
+            "marlin",
+            "--gpu-memory-utilization",
+            "0.8",
+            "--max-num-batched-tokens",
+            "8192",
+            "--enable-chunked-prefill",
+            "--async-scheduling",
+            "--enable-prefix-caching",
+            "--speculative-config",
+            "{\"method\":\"mtp\",\"num_speculative_tokens\":3,\"moe_backend\":\"triton\"}",
+            "--load-format",
+            "safetensors"
+          ],
+          "environment": {}
+        }
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-hardware-listed-recipe-confirm",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.6-35b-a3b/dgx-spark/linux/vllm/recipe.yaml",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-26b-a4b-nvfp4",
+      "display_name": "Google Gemma 4 26B A4B NVFP4, NVIDIA export",
+      "hf_repository": "nvidia/Gemma-4-26B-A4B-NVFP4",
+      "hf_revision": "a19cfe00be84568a6867111c9a68c9c44fdcffe6",
+      "source_url": "https://huggingface.co/nvidia/Gemma-4-26B-A4B-NVFP4",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "sglang",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "disabled",
+      "speculation_policy": "disabled-target-only-baseline",
+      "stored_checkpoint_kind": "modelopt-nvfp4-mixed",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "94899c0f917d93f6fe81c95744d1e8ddab2d21d39228d2e4aec1fb2a25bff413",
+            "size_bytes": 16934,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "4e379cc809c617a49179a49140f553a2d6a5ec538ed480832b0c54f6ace43d98",
+            "size_bytes": 10289,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "d4226bbe3117d2d253ba4609720ba82c6c4ce4627a9a6ae05387c78983ac03de",
+            "size_bytes": 208,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "hf_quant_config.json",
+            "sha256": "fca2ea21cded31e6cff2c56ee83a162dcd5d3ff292cbf2f6083702e9fc324454",
+            "size_bytes": 5188,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00002.safetensors",
+            "sha256": "b5df31122600666617b05f9be2015552cd2edff401e86b1d99b9127efdc6d819",
+            "size_bytes": 10001865236,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00002.safetensors",
+            "sha256": "ff11061ebf57327af4f1993ff758b0859d7746b0c03ca1b17ded7dec30410962",
+            "size_bytes": 8786620352,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "ac5e677ed9f8d9b689170bbae0c88ce163e284d02b09100e14afddaa9ec4a15c",
+            "size_bytes": 4977046,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "processor_config.json",
+            "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+            "size_bytes": 1689,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "size_bytes": 32169626,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "90c3a3ba5bf53818383a58e1a776cbcacd2a038d4812eaa373e1522f2d06f3df",
+            "size_bytes": 2095,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "sglang"
+        ],
+        "memory": {
+          "full_attention_layers": 5,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 25,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 104832,
+          "kv_bytes_per_scalar": 1,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 5271719308,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 31479363011,
+        "runtime_versions": {
+          "sglang": "0.5.18"
+        },
+        "moe_runner_backend": "flashinfer_cutlass",
+        "model_alias": "gemma4-26b-a4b-nvfp4",
+        "quantization": "NVFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-sglang-recipe",
+          "source_url": "https://huggingface.co/nvidia/Gemma-4-26B-A4B-NVFP4",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gpt-oss-120b-mxfp4",
+      "display_name": "OpenAI gpt-oss-120b MXFP4",
+      "hf_repository": "openai/gpt-oss-120b",
+      "hf_revision": "b5c939de8f754692c1647ca79fbf85e8c1e70f8a",
+      "source_url": "https://huggingface.co/openai/gpt-oss-120b",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 131072,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "sglang",
+      "tool_call_parser": "gpt-oss",
+      "reasoning_parser": "gpt-oss",
+      "thinking_policy": "enabled",
+      "speculation_policy": "disabled-target-only-baseline",
+      "stored_checkpoint_kind": "mxfp4-native",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "safetensors-repository",
+        "artifacts": [
+          {
+            "filename": "chat_template.jinja",
+            "sha256": "a4c9919cbbd4acdd51ccffe22da049264b1b73e59055fa58811a99efbd7c8146",
+            "size_bytes": 16738,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "config.json",
+            "sha256": "933aeb666a3fd851133ddd7686414f369bc564c4185fb5704416550879f10566",
+            "size_bytes": 2089,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "generation_config.json",
+            "sha256": "f9970ada892d2d1f72e3ed0a6535ccebadd11897318794ca671d8c7014c957da",
+            "size_bytes": 177,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00000-of-00014.safetensors",
+            "sha256": "695218884684c611fe08a74751ee443f971e9bd9bc062edba822da3fe45969b7",
+            "size_bytes": 4625017896,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00001-of-00014.safetensors",
+            "sha256": "a881aa5f561b26a22b14a8262aa61849ace349ffd73d74769e030ac90a1fcf8a",
+            "size_bytes": 4115586736,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00002-of-00014.safetensors",
+            "sha256": "022478dd04398c5bdb545a5be0a6437ecc2eb53d1dbd29edafcfff4b3ddf0a41",
+            "size_bytes": 4625017888,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00003-of-00014.safetensors",
+            "sha256": "47aee9e7b9d5bedb215042c01ccededd9bd9c30b0dddea862dc2506b9d6c74de",
+            "size_bytes": 4115586752,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00004-of-00014.safetensors",
+            "sha256": "f6c2752acda607b1d5ca52df9e75c1b9b2761e6875ff10c9bd6ddac473c0262e",
+            "size_bytes": 4625017896,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00005-of-00014.safetensors",
+            "sha256": "0c8dd401544c31cb93b8459eee7da20ea2a07626a59455d7d92b85257df9b46c",
+            "size_bytes": 4115586696,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00006-of-00014.safetensors",
+            "sha256": "28d839f2e027985a8b14e45f2323798862eddb7770ee9800ea6b7c803abee489",
+            "size_bytes": 4625017856,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00007-of-00014.safetensors",
+            "sha256": "c8958c5f183c04f6ea959cfd90562b5128124154b2bbf979b8a22b9405b30ed8",
+            "size_bytes": 4060267176,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00008-of-00014.safetensors",
+            "sha256": "bf1f2a88868ffc37d520dcf77d26f0e823710b5e682d473ff10f6974fa3b7517",
+            "size_bytes": 4625017896,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00009-of-00014.safetensors",
+            "sha256": "f72d34a4004241b45c332b61f8ffa124e9a913bc1ab442b66e717d3e94e741ce",
+            "size_bytes": 4170906304,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00010-of-00014.safetensors",
+            "sha256": "f48c867c2cb0a44bfc2f8768cb98e4aec9a350946fceacfebdcad5d32ad4a471",
+            "size_bytes": 4625017896,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00011-of-00014.safetensors",
+            "sha256": "a06851b2cfd35f48722f823bc1ab8f7bcb4a878a5b8e975f4d3544f230454eeb",
+            "size_bytes": 4115586752,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00012-of-00014.safetensors",
+            "sha256": "3af33667c307e20ae2a7648ea52653de46dd0171601ec5c696e47a2f5d5bf1e4",
+            "size_bytes": 4064660808,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00013-of-00014.safetensors",
+            "sha256": "bcbcb74b043e071d1e05471d500d74dcf661175e00878ed302ccdf1801a75aef",
+            "size_bytes": 4625017896,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model-00014-of-00014.safetensors",
+            "sha256": "54b1be1609696c307cc5ca117b1fa54feaddebffa04e9c2db117652a01964230",
+            "size_bytes": 4115586736,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "model.safetensors.index.json",
+            "sha256": "ede2655fdc05008561983b6e0829c600727c28d591e071077377059f03a6c00e",
+            "size_bytes": 54511,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "special_tokens_map.json",
+            "sha256": "dd5e191d20c12d2fee1da5bae14ca1db0f5f4215300af691f23cdee97120a293",
+            "size_bytes": 98,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer.json",
+            "sha256": "0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+            "size_bytes": 27868174,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "tokenizer_config.json",
+            "sha256": "9279e942392b742d633c7adbb89ebe002c98399db8926a7af5125c726f404070",
+            "size_bytes": 4200,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "sglang"
+        ],
+        "memory": {
+          "full_attention_layers": 18,
+          "full_kv_heads": 8,
+          "full_kv_head_dimension": 64,
+          "sliding_attention_layers": 18,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 64,
+          "sliding_cached_tokens": 104832,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 11732868165,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 81841545544,
+        "runtime_versions": {
+          "sglang": "0.5.18"
+        },
+        "moe_runner_backend": null,
+        "model_alias": "gpt-oss-120b-mxfp4",
+        "quantization": "MXFP4",
+        "model_filename": null,
+        "llama_cpp": null,
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "vendor-sglang-recipe",
+          "source_url": "https://huggingface.co/openai/gpt-oss-120b",
+          "tested_input_tokens": null,
+          "tested_output_tokens": null,
+          "tested_concurrency": null,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-26b-a4b-q4-k-m-mtp-rtx5090",
+      "display_name": "Gemma-4-26B-A4B Q4_K_M MTP (RTX 5090)",
+      "hf_repository": "unsloth/gemma-4-26B-A4B-it-GGUF",
+      "hf_revision": "c099eb48e663fd284577b04978a94ffccb261841",
+      "source_url": "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+            "sha256": "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+            "size_bytes": 16947541728,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "mtp-gemma-4-26B-A4B-it.gguf",
+            "sha256": "6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b",
+            "size_bytes": 461766816,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 5,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 25,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 3072,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 2612201600,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 21992833024,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-26b-a4b-q4-k-m-mtp-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 3,
+          "draft_model_filename": "mtp-gemma-4-26B-A4B-it.gguf",
+          "target_backend_sampling": true,
+          "draft_backend_sampling": false,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/google/gemma-4-26b-a4b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "muse-glimmer-30b-q4-k-m-dflash-rtx5090",
+      "display_name": "Muse Glimmer 30B Q4_K_M DFlash (RTX 5090)",
+      "hf_repository": "meta-models/Muse-Glimmer-30B-GGUF",
+      "hf_revision": "70bf1b61ac09f91b24d39038091b41c582bc5d7a",
+      "source_url": "https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 131072,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-dflash-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf",
+            "sha256": "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
+            "size_bytes": 16756683904,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "dflash-Muse-Glimmer-30B-Q4_K_M.gguf",
+            "sha256": "b2e808bf656086fe86bd0d0bd990f01d33e377537a07c02d45371517c8b264ef",
+            "size_bytes": 1631208128,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 13,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 39,
+          "sliding_kv_heads": 2,
+          "sliding_kv_head_dimension": 128,
+          "sliding_cached_tokens": 3072,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 2366572736,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 21749563392,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "muse-glimmer-30b-q4-k-m-dflash-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 4096,
+          "ubatch_size": 1024,
+          "speculative_tokens": 15,
+          "draft_model_filename": "dflash-Muse-Glimmer-30B-Q4_K_M.gguf",
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/meta/muse-glimmer-30b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090",
+      "display_name": "Nemotron 3.5 Lightning 30B A3B Q4_K_M DFlash (RTX 5090)",
+      "hf_repository": "unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF",
+      "hf_revision": "f2d3fe3694501008786e81e5f20360cbf715496a",
+      "source_url": "https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-dflash-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-UD-Q4_K_M.gguf",
+            "sha256": "edcb5d4650796ed2fb412498de6f83b585862312c747ddb74f0ea04b22206181",
+            "size_bytes": 25266255936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "dflash-NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4.gguf",
+            "sha256": "60071ad805c56e6cc663c5d2391d0000d50df5415b1199f963bec55ecc6164f2",
+            "size_bytes": 1185032768,
+            "source_repository": "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF",
+            "source_revision": "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 6,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 399441920,
+          "runtime_overhead_bytes": 2689752448,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 29943136256,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 7,
+          "draft_model_filename": "dflash-NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4.gguf",
+          "target_backend_sampling": true,
+          "draft_backend_sampling": true,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/nvidia/nemotron-3.5-lightning-30b-a3b/geforce-rtx/linux/llama-cpp/q4-k-m/dflash/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen35-9b-q4-k-m-mtp-rtx5090",
+      "display_name": "Qwen3.5-9B Q4_K_M MTP (RTX 5090)",
+      "hf_repository": "unsloth/Qwen3.5-9B-MTP-GGUF",
+      "hf_revision": "9716a636ee4bddc3fed678220b7a33dd2a4160ae",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+            "sha256": "e8dd94817e95d6c0939102049d068418269978377b13616c4726235e232841fe",
+            "size_bytes": 5868826976,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 8,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 158072832,
+          "runtime_overhead_bytes": 3993292448,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 12167675904,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen35-9b-q4-k-m-mtp-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.5-9B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 4096,
+          "ubatch_size": 4096,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": false,
+          "draft_backend_sampling": false,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.5-9b/geforce-rtx/windows/llama-cpp/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-27b-q4-k-m-mtp-rtx5090",
+      "display_name": "Qwen3.6-27B Q4_K_M MTP (RTX 5090)",
+      "hf_repository": "unsloth/Qwen3.6-27B-MTP-GGUF",
+      "hf_revision": "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.6-27B-Q4_K_M.gguf",
+            "sha256": "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+            "size_bytes": 17106773120,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 627572736,
+          "runtime_overhead_bytes": 2423479168,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 24452792320,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-27b-q4-k-m-mtp-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.6-27B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 3,
+          "draft_model_filename": null,
+          "target_backend_sampling": false,
+          "draft_backend_sampling": false,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.6-27b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-35b-a3b-q4-k-m-mtp-rtx5090",
+      "display_name": "Qwen3.6-35B-A3B Q4_K_M MTP (RTX 5090)",
+      "hf_repository": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "hf_revision": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+            "sha256": "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "size_bytes": 22663387424,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 10,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 197591040,
+          "runtime_overhead_bytes": 2145461984,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 26348617728,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-35b-a3b-q4-k-m-mtp-rtx5090",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": true,
+          "draft_backend_sampling": false,
+          "backend": null,
+          "load_mode": null,
+          "lazy_mode": null,
+          "threads": null,
+          "flash_attention": false,
+          "disable_fit": false,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "nvidia-cuda",
+          "architecture": "cuda",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/NVIDIA/local-ai-inference-recipes/blob/12b25c664d8bea9a819f6e6e33d59267dd7528df/models/qwen/qwen3.6-35b-a3b/geforce-rtx/linux/llama-cpp/q4-k-m/recipe.yaml",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "gemma4-26b-a4b-q4-k-m-mtp-strix-halo",
+      "display_name": "Gemma-4-26B-A4B Q4_K_M MTP (RTX 5090), Strix Halo ROCm",
+      "hf_repository": "unsloth/gemma-4-26B-A4B-it-GGUF",
+      "hf_revision": "c099eb48e663fd284577b04978a94ffccb261841",
+      "source_url": "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "gemma4",
+      "reasoning_parser": "gemma4",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+            "sha256": "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+            "size_bytes": 16947541728,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "mtp-gemma-4-26B-A4B-it.gguf",
+            "sha256": "6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b",
+            "size_bytes": 461766816,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 5,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 512,
+          "sliding_attention_layers": 25,
+          "sliding_kv_heads": 8,
+          "sliding_kv_head_dimension": 256,
+          "sliding_cached_tokens": 3072,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 2612201600,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 21992833024,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "gemma4-26b-a4b-q4-k-m-mtp-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 512,
+          "speculative_tokens": 3,
+          "draft_model_filename": "mtp-gemma-4-26B-A4B-it.gguf",
+          "target_backend_sampling": true,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 2246,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "muse-glimmer-30b-q4-k-m-dflash-strix-halo",
+      "display_name": "Muse Glimmer 30B Q4_K_M DFlash (RTX 5090), Strix Halo ROCm",
+      "hf_repository": "meta-models/Muse-Glimmer-30B-GGUF",
+      "hf_revision": "70bf1b61ac09f91b24d39038091b41c582bc5d7a",
+      "source_url": "https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 131072,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_xml",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-dflash-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf",
+            "sha256": "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
+            "size_bytes": 16756683904,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "dflash-Muse-Glimmer-30B-Q4_K_M.gguf",
+            "sha256": "b2e808bf656086fe86bd0d0bd990f01d33e377537a07c02d45371517c8b264ef",
+            "size_bytes": 1631208128,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 13,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 39,
+          "sliding_kv_heads": 2,
+          "sliding_kv_head_dimension": 128,
+          "sliding_cached_tokens": 3072,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 0,
+          "constant_state_bytes": 0,
+          "runtime_overhead_bytes": 2366572736,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 21749563392,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "muse-glimmer-30b-q4-k-m-dflash-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 15,
+          "draft_model_filename": "dflash-Muse-Glimmer-30B-Q4_K_M.gguf",
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 1835,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo",
+      "display_name": "Nemotron 3.5 Lightning 30B A3B Q4_K_M DFlash (RTX 5090), Strix Halo ROCm",
+      "hf_repository": "unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF",
+      "hf_revision": "f2d3fe3694501008786e81e5f20360cbf715496a",
+      "source_url": "https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-dflash-external-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-UD-Q4_K_M.gguf",
+            "sha256": "edcb5d4650796ed2fb412498de6f83b585862312c747ddb74f0ea04b22206181",
+            "size_bytes": 25266255936,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "dflash-NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4.gguf",
+            "sha256": "60071ad805c56e6cc663c5d2391d0000d50df5415b1199f963bec55ecc6164f2",
+            "size_bytes": 1185032768,
+            "source_repository": "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF",
+            "source_revision": "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 6,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 128,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 399441920,
+          "runtime_overhead_bytes": 2689752448,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 29943136256,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 7,
+          "draft_model_filename": "dflash-NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4.gguf",
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 1987,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen35-9b-q4-k-m-mtp-strix-halo",
+      "display_name": "Qwen3.5-9B Q4_K_M MTP (RTX 5090), Strix Halo ROCm",
+      "hf_repository": "unsloth/Qwen3.5-9B-MTP-GGUF",
+      "hf_revision": "9716a636ee4bddc3fed678220b7a33dd2a4160ae",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+            "sha256": "e8dd94817e95d6c0939102049d068418269978377b13616c4726235e232841fe",
+            "size_bytes": 5868826976,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 8,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 158072832,
+          "runtime_overhead_bytes": 3993292448,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 12167675904,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen35-9b-q4-k-m-mtp-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.5-9B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 2048,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 120000,
+          "tested_output_tokens": 1,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-27b-q4-k-m-mtp-strix-halo",
+      "display_name": "Qwen3.6-27B Q4_K_M MTP (RTX 5090), Strix Halo ROCm",
+      "hf_repository": "unsloth/Qwen3.6-27B-MTP-GGUF",
+      "hf_revision": "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.6-27B-Q4_K_M.gguf",
+            "sha256": "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+            "size_bytes": 17106773120,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 627572736,
+          "runtime_overhead_bytes": 2423479168,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 24452792320,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-27b-q4-k-m-mtp-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.6-27B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 512,
+          "speculative_tokens": 3,
+          "draft_model_filename": null,
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 1931,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen36-35b-a3b-q4-k-m-mtp-strix-halo",
+      "display_name": "Qwen3.6-35B-A3B Q4_K_M MTP (RTX 5090), Strix Halo Vulkan",
+      "hf_repository": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "hf_revision": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+            "sha256": "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+            "size_bytes": 22663387424,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 10,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 197591040,
+          "runtime_overhead_bytes": 2145461984,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 26348617728,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen36-35b-a3b-q4-k-m-mtp-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 512,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": true,
+          "draft_backend_sampling": true,
+          "backend": "vulkan",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 1931,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m-mtp-strix-halo",
+      "display_name": "Qwen3.8 27B Q4_K_M, Strix Halo ROCm",
+      "hf_repository": "unsloth/Qwen3.8-27B-GGUF",
+      "hf_revision": "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256": "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169",
+            "size_bytes": 17106775008,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 470679552,
+          "runtime_overhead_bytes": 2423084064,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 24295505920,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-27b-q4-k-m-mtp-strix-halo",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.8-27B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 512,
+          "speculative_tokens": 2,
+          "draft_model_filename": null,
+          "target_backend_sampling": true,
+          "draft_backend_sampling": true,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": null,
+          "threads": 16,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 1973,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-flash-next-iq4-nl-mtp-strix-halo",
+      "display_name": "Qwen3.8 Flash-Next IQ4_NL MTP, Strix Halo ROCm (pwilkin llama.cpp fork)",
+      "hf_repository": "ilintar/qwen3.8-flash-next-gguf-strix-halo",
+      "hf_revision": "ba5b0d696d6997d82fcc55ba3f8e6128db6e0311",
+      "source_url": "https://huggingface.co/ilintar/qwen3.8-flash-next-gguf-strix-halo",
+      "license_id": "Qwen-Community-1.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-external-draft",
+      "stored_checkpoint_kind": "gguf-iq4-nl",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-file-set",
+        "artifacts": [
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00001-of-00009.gguf",
+            "sha256": "5b6032b1f3428a148a3b63d661a992dbe0e5f8e278ab684b3d2b474bc5372d30",
+            "size_bytes": 2973690144,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00002-of-00009.gguf",
+            "sha256": "81ea612c230e5c3ee1e1036873b316bd6f3d0ba00aa9e12da9238b3ec75ef643",
+            "size_bytes": 28800138432,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00003-of-00009.gguf",
+            "sha256": "d4c2432777ad3f2073989d9b584aaa69ea53201c22bfa69b0efc58fb3d4ffb9c",
+            "size_bytes": 11241902944,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00004-of-00009.gguf",
+            "sha256": "72e276e9ffd33891b0640136b7f8c3ac765d34b3fae57d91cdbd4d25ce61477c",
+            "size_bytes": 11246708576,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00005-of-00009.gguf",
+            "sha256": "c61c34d8c6e27051fb903f7117c6577cbd87b945e7fcdd3b7642a794dec78bac",
+            "size_bytes": 11213964768,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00006-of-00009.gguf",
+            "sha256": "c9b36bca38ad5994c24a9d840460c7c3763cd64dfe2816effe1eabef5d7fc77a",
+            "size_bytes": 11231189024,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00007-of-00009.gguf",
+            "sha256": "b18c40e93081df6b1001ed344af7de796f07a754f23001376cc9ed2d400effba",
+            "size_bytes": 11246708576,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00008-of-00009.gguf",
+            "sha256": "3389e8907ce093d3ad45f5b46f14098d34352241cbc676361edbed7186ab023e",
+            "size_bytes": 11084166688,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00009-of-00009.gguf",
+            "sha256": "8229be447e559c6f1186d8c878621afcf3466de71aca1b1c97e895288723b36e",
+            "size_bytes": 1005100352,
+            "source_repository": null,
+            "source_revision": null
+          },
+          {
+            "filename": "mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+            "sha256": "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6",
+            "size_bytes": 2786568256,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 12,
+          "full_kv_heads": 2,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 117669888,
+          "runtime_overhead_bytes": 16000000000,
+          "lazy_read_bytes": 28800138240
+        },
+        "minimum_memory_bytes": 91758282144,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-flash-next-iq4-nl-mtp-strix-halo",
+        "quantization": "IQ4_NL",
+        "model_filename": "Qwen3.8-Flash-Next-IQ4_NL-PROJFIX-00001-of-00009.gguf",
+        "llama_cpp": {
+          "batch_size": 16384,
+          "ubatch_size": 16384,
+          "speculative_tokens": 3,
+          "draft_model_filename": "mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+          "target_backend_sampling": false,
+          "draft_backend_sampling": false,
+          "backend": "rocm",
+          "load_mode": "none",
+          "lazy_mode": "on-direct",
+          "threads": null,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": null
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "amd-rocm",
+          "architecture": "rocm",
+          "evidence_level": "local-end-to-end",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/strix-halo.md",
+          "tested_input_tokens": 56114,
+          "tested_output_tokens": 6408,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m-mtp-m5-pro",
+      "display_name": "Qwen3.8 27B Q4_K_M, M5 Pro Metal MTP",
+      "hf_repository": "unsloth/Qwen3.8-27B-GGUF",
+      "hf_revision": "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe",
+      "source_url": "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF",
+      "license_id": "Apache-2.0",
+      "native_context_tokens": 262144,
+      "pilot_context_tokens": 65536,
+      "runtime_family": "llama-cpp",
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3",
+      "thinking_policy": "enabled-medium-candidate",
+      "speculation_policy": "enabled-mtp-self-draft",
+      "stored_checkpoint_kind": "gguf-q4-k-m",
+      "compute_path_policy": "record-resolved-path",
+      "artifact_manifest_status": "complete-file-sha256-pinned",
+      "deployment": {
+        "artifact_kind": "gguf-single-file",
+        "artifacts": [
+          {
+            "filename": "Qwen3.8-27B-Q4_K_M.gguf",
+            "sha256": "7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169",
+            "size_bytes": 17106775008,
+            "source_repository": null,
+            "source_revision": null
+          }
+        ],
+        "context_tokens": 65536,
+        "frameworks": [
+          "llama-cpp"
+        ],
+        "memory": {
+          "full_attention_layers": 16,
+          "full_kv_heads": 4,
+          "full_kv_head_dimension": 256,
+          "sliding_attention_layers": 0,
+          "sliding_kv_heads": 0,
+          "sliding_kv_head_dimension": 0,
+          "sliding_cached_tokens": 0,
+          "kv_bytes_per_scalar": 2,
+          "recurrent_state_slots": 1,
+          "constant_state_bytes": 785383424,
+          "runtime_overhead_bytes": 2423084064,
+          "lazy_read_bytes": 0
+        },
+        "minimum_memory_bytes": 24610209792,
+        "runtime_versions": {},
+        "moe_runner_backend": null,
+        "model_alias": "qwen38-27b-q4-k-m-mtp-m5-pro",
+        "quantization": "Q4_K_M",
+        "model_filename": "Qwen3.8-27B-Q4_K_M.gguf",
+        "llama_cpp": {
+          "batch_size": 2048,
+          "ubatch_size": 512,
+          "speculative_tokens": 4,
+          "draft_model_filename": null,
+          "target_backend_sampling": false,
+          "draft_backend_sampling": true,
+          "backend": "metal",
+          "load_mode": "mmap",
+          "lazy_mode": null,
+          "threads": 6,
+          "flash_attention": true,
+          "disable_fit": true,
+          "cache_ram_mib": 0
+        },
+        "vllm": null
+      },
+      "device_evidence": [
+        {
+          "device_id": "apple-silicon",
+          "architecture": "metal",
+          "evidence_level": "local-inference-screen",
+          "source_url": "https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/m5-pro.md",
+          "tested_input_tokens": 1973,
+          "tested_output_tokens": 256,
+          "tested_concurrency": 1,
+          "aa_admission_state": "unqualified"
+        }
+      ]
+    }
+  ]
+}

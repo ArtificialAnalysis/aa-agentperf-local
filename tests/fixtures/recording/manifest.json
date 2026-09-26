@@ -1,0 +1,11 @@
+{
+  "name": "sanitized-demo",
+  "tasks": [
+    {
+      "task_id": "manifest_task",
+      "family": "pinchbench-sanitized",
+      "adapter": "pinchbench",
+      "recording": "recordings/demo.json"
+    }
+  ]
+}

@@ -1,0 +1,644 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/model-candidates-v2.schema.json",
+  "title": "AA consumer GPU model candidates v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "status",
+    "as_of",
+    "models"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "consumer_gpu_model_candidates"
+    },
+    "status": {
+      "const": "pilot-candidates-not-release"
+    },
+    "as_of": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "models": {
+      "type": "array",
+      "minItems": 29,
+      "maxItems": 29,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/model"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._+\\-]*[A-Za-z0-9])?$"
+    },
+    "artifact_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9._+\\-]*[A-Za-z0-9_])?(?:/[A-Za-z0-9_](?:[A-Za-z0-9._+\\-]*[A-Za-z0-9_])?)*$"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "device_id": {
+      "enum": [
+        "rtx-5090",
+        "rtx-pro-6000",
+        "dgx-spark",
+        "nvidia-cuda",
+        "amd-rocm",
+        "apple-silicon"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "size_bytes",
+        "source_repository",
+        "source_revision"
+      ],
+      "properties": {
+        "filename": {
+          "$ref": "#/$defs/artifact_path"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_repository": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/repository"
+            }
+          ]
+        },
+        "source_revision": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/revision"
+            }
+          ]
+        }
+      }
+    },
+    "llama_cpp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_size",
+        "ubatch_size",
+        "speculative_tokens",
+        "draft_model_filename",
+        "target_backend_sampling",
+        "draft_backend_sampling",
+        "backend",
+        "load_mode",
+        "lazy_mode",
+        "threads",
+        "flash_attention",
+        "disable_fit",
+        "cache_ram_mib"
+      ],
+      "properties": {
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ubatch_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "speculative_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "draft_model_filename": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/artifact_path"
+            }
+          ]
+        },
+        "target_backend_sampling": {
+          "type": "boolean"
+        },
+        "draft_backend_sampling": {
+          "type": "boolean"
+        },
+        "backend": {
+          "enum": [
+            null,
+            "rocm",
+            "vulkan",
+            "metal"
+          ]
+        },
+        "load_mode": {
+          "enum": [
+            null,
+            "none",
+            "mmap"
+          ]
+        },
+        "lazy_mode": {
+          "enum": [
+            null,
+            "on-direct"
+          ]
+        },
+        "threads": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "flash_attention": {
+          "type": "boolean"
+        },
+        "disable_fit": {
+          "type": "boolean"
+        },
+        "cache_ram_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "vllm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arguments",
+        "environment"
+      ],
+      "properties": {
+        "arguments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "memory": {
+      "description": "Attention shape and fixed reserves, so the memory floor can be recomputed for any served context. Every reserve is read from the runtime's own startup accounting at the benchmark context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "full_attention_layers",
+        "full_kv_heads",
+        "full_kv_head_dimension",
+        "sliding_attention_layers",
+        "sliding_kv_heads",
+        "sliding_kv_head_dimension",
+        "sliding_cached_tokens",
+        "kv_bytes_per_scalar",
+        "recurrent_state_slots",
+        "constant_state_bytes",
+        "runtime_overhead_bytes",
+        "lazy_read_bytes"
+      ],
+      "properties": {
+        "full_attention_layers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sliding_attention_layers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sliding_cached_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens each sliding-attention layer keeps. This is what the runtime caches, not only the model's window: llama.cpp keeps the window, SGLang keeps a share of the token pool."
+        },
+        "kv_bytes_per_scalar": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recurrent_state_slots": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Recurrent-state slots the runtime may hold, zero for a model without recurrent layers. SGLang is launched with exactly this many so one card's free memory cannot size the pool."
+        },
+        "constant_state_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bytes those recurrent-state slots occupy together, measured at startup."
+        },
+        "runtime_overhead_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Everything else the device holds at readiness: loaded weights over the artifact bytes, compute and graph buffers, and the runtime's own context."
+        },
+        "full_kv_heads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "KV heads a full-attention layer keeps; Gemma 4 holds a different shape here than in its sliding layers."
+        },
+        "full_kv_head_dimension": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sliding_kv_heads": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sliding_kv_head_dimension": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lazy_read_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Artifact bytes the runtime reads from disk on demand and never holds resident; the memory floor leaves them out. Non-zero only for a llama.cpp recipe with a lazy_mode."
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_kind",
+        "artifacts",
+        "context_tokens",
+        "frameworks",
+        "memory",
+        "minimum_memory_bytes",
+        "model_alias",
+        "model_filename",
+        "llama_cpp",
+        "vllm",
+        "moe_runner_backend",
+        "quantization",
+        "runtime_versions"
+      ],
+      "properties": {
+        "artifact_kind": {
+          "enum": [
+            "gguf-single-file",
+            "gguf-file-set",
+            "safetensors-repository"
+          ]
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "llama-cpp",
+              "sglang",
+              "vllm"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 2
+        },
+        "memory": {
+          "$ref": "#/$defs/memory"
+        },
+        "minimum_memory_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model_alias": {
+          "$ref": "#/$defs/identifier"
+        },
+        "model_filename": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/artifact_path"
+            }
+          ]
+        },
+        "llama_cpp": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/llama_cpp"
+            }
+          ]
+        },
+        "vllm": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/vllm"
+            }
+          ]
+        },
+        "quantization": {
+          "enum": [
+            "Q4_0",
+            "Q4_K_M",
+            "IQ4_NL",
+            "NVFP4",
+            "MXFP4"
+          ]
+        },
+        "runtime_versions": {
+          "description": "The release each framework is verified against for this profile, keyed by framework. A framework with no comparable release version (llama.cpp) is omitted. The launcher refuses every other version.",
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "sglang",
+              "vllm"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(?:[0-9]+\\.[0-9]+\\.[0-9]+|[0-9]+\\.[0-9]+\\.dev[0-9]+\\+g[0-9a-f]{7,40})$"
+          }
+        },
+        "moe_runner_backend": {
+          "description": "The fused-expert kernel this recipe is served with, or null when it has no mixture-of-experts layers or the runtime's own choice is known to serve it. Only an SGLang recipe may name one.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "flashinfer_cutlass"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "device_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device_id",
+        "architecture",
+        "evidence_level",
+        "source_url",
+        "tested_input_tokens",
+        "tested_output_tokens",
+        "tested_concurrency",
+        "aa_admission_state"
+      ],
+      "properties": {
+        "device_id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "architecture": {
+          "enum": [
+            "sm120",
+            "sm121",
+            "cuda",
+            "rocm",
+            "metal"
+          ]
+        },
+        "evidence_level": {
+          "enum": [
+            "official-gguf-backend",
+            "upstream-gguf-conversion",
+            "vendor-hardware-listed-recipe-confirm",
+            "vendor-local-surface-aa-recipe-needed",
+            "vendor-sglang-recipe",
+            "upstream-end-to-end",
+            "upstream-boot-and-serve",
+            "local-end-to-end",
+            "local-inference-screen"
+          ]
+        },
+        "source_url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "tested_input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "tested_output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "tested_concurrency": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "aa_admission_state": {
+          "const": "unqualified"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "display_name",
+        "hf_repository",
+        "hf_revision",
+        "source_url",
+        "license_id",
+        "native_context_tokens",
+        "pilot_context_tokens",
+        "runtime_family",
+        "tool_call_parser",
+        "reasoning_parser",
+        "thinking_policy",
+        "speculation_policy",
+        "stored_checkpoint_kind",
+        "compute_path_policy",
+        "artifact_manifest_status",
+        "deployment",
+        "device_evidence"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "hf_repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "hf_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "source_url": {
+          "type": "string",
+          "pattern": "^https://huggingface\\.co/"
+        },
+        "license_id": {
+          "enum": [
+            "Apache-2.0",
+            "OpenMDW-1.1",
+            "NVIDIA-Nemotron-Open-Model-License",
+            "Qwen-Community-1.0"
+          ]
+        },
+        "native_context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pilot_context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtime_family": {
+          "enum": [
+            "llama-cpp",
+            "sglang",
+            "vllm"
+          ]
+        },
+        "tool_call_parser": {
+          "enum": [
+            "gemma4",
+            "gpt-oss",
+            "qwen3_coder",
+            "qwen3_xml"
+          ]
+        },
+        "reasoning_parser": {
+          "enum": [
+            "gemma4",
+            "gpt-oss",
+            "nemotron_v3",
+            "qwen3"
+          ]
+        },
+        "thinking_policy": {
+          "enum": [
+            "disabled",
+            "enabled",
+            "enabled-medium-candidate"
+          ]
+        },
+        "speculation_policy": {
+          "enum": [
+            "disabled-target-only-baseline",
+            "enabled-mtp-self-draft",
+            "enabled-mtp-external-draft",
+            "enabled-dflash-external-draft",
+            "enabled-dflash-draft",
+            "enabled-dspark-draft",
+            "enabled-vllm-external-draft"
+          ]
+        },
+        "stored_checkpoint_kind": {
+          "enum": [
+            "gguf-q4-0",
+            "gguf-q4-k-m",
+            "gguf-iq4-nl",
+            "modelopt-nvfp4-mixed",
+            "mxfp4-native"
+          ]
+        },
+        "compute_path_policy": {
+          "const": "record-resolved-path"
+        },
+        "artifact_manifest_status": {
+          "enum": [
+            "pending-complete-file-manifest",
+            "complete-file-sha256-pinned"
+          ]
+        },
+        "deployment": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/deployment"
+            }
+          ]
+        },
+        "device_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/device_evidence"
+          }
+        }
+      }
+    }
+  }
+}

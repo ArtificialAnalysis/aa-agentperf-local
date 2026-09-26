@@ -1,0 +1,259 @@
+{
+  "as_of": "2026-09-21",
+  "runtime": {
+    "llama_cpp_build": "b11026",
+    "commit": "b49650adb31f2e49a0d76113aeb1792134fd8413"
+  },
+  "method": {
+    "requests_per_configuration": 3,
+    "output_tokens_per_request": 256,
+    "prompt_cache": false,
+    "temperature": 0,
+    "seed": 42,
+    "request_e2e_includes": "HTTP, prefill, generation, response",
+    "request_e2e_excludes": "startup, warm-up, qualification, shutdown, downloads",
+    "scope": "single-pass synthetic inference screen; not full eight-trace replay",
+    "amd_memory_caveat": "Some earlier screens overlapped retained ROCmFPX allocations; do not infer isolated peak memory or repeatable performance.",
+    "mac_power": "High Power on battery, not AC; nonzero system swap"
+  },
+  "recipes": [
+    {
+      "profile_id": "gemma4-26b-a4b-q4-k-m-mtp-strix-halo",
+      "source_profile_id": "gemma4-26b-a4b-q4-k-m-mtp-rtx5090",
+      "run_tag": "rocm-u512-d3-bs1-v2",
+      "short_request_wall_seconds": [
+        4.847157770003832,
+        3.1135556110020843,
+        3.1997153659976902
+      ],
+      "short_prompt_tokens": [
+        2246,
+        56,
+        63
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        74.81801617829574,
+        86.30347007638703,
+        83.6630367845047
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "muse-glimmer-30b-q4-k-m-dflash-strix-halo",
+      "source_profile_id": "muse-glimmer-30b-q4-k-m-dflash-rtx5090",
+      "run_tag": "rocm-u2048-d15-bs0-v2",
+      "short_request_wall_seconds": [
+        15.86184119900281,
+        9.209495362003508,
+        9.287050129001727
+      ],
+      "short_prompt_tokens": [
+        1835,
+        94,
+        104
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        23.312578434255926,
+        28.97264698079454,
+        28.830362373912386
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo",
+      "source_profile_id": "nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090",
+      "run_tag": "rocm-u2048-d7-bs0-v2",
+      "short_request_wall_seconds": [
+        5.475103930999467,
+        4.425918639994052,
+        4.3051114799964125
+      ],
+      "short_prompt_tokens": [
+        1987,
+        59,
+        65
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        59.931593374245075,
+        59.57143608043312,
+        61.39835105699067
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "qwen35-9b-q4-k-m-mtp-strix-halo",
+      "source_profile_id": "qwen35-9b-q4-k-m-mtp-rtx5090",
+      "run_tag": "rocm-u2048-d2-bs0-v2",
+      "short_request_wall_seconds": [
+        6.017785144002119,
+        3.940945242997259,
+        4.2129529369995
+      ],
+      "short_prompt_tokens": [
+        1931,
+        51,
+        57
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        65.98289412876446,
+        66.67006553275266,
+        62.360498952465896
+      ],
+      "endpoint_qualification": "passed-five-probes-separate-run",
+      "capacity_input_tokens": [
+        32000,
+        64000,
+        96000,
+        120000
+      ],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "qwen36-27b-q4-k-m-mtp-strix-halo",
+      "source_profile_id": "qwen36-27b-q4-k-m-mtp-rtx5090",
+      "run_tag": "rocm-u512-d3-bs0-v2",
+      "short_request_wall_seconds": [
+        14.7203001040034,
+        9.746810802993423,
+        9.682410317996982
+      ],
+      "short_prompt_tokens": [
+        1931,
+        51,
+        57
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        28.85327903938269,
+        27.0938844534016,
+        27.364725430930037
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "qwen36-35b-a3b-q4-k-m-mtp-strix-halo",
+      "source_profile_id": "qwen36-35b-a3b-q4-k-m-mtp-rtx5090",
+      "run_tag": "vulkan-u512-d2-bs1-v2",
+      "short_request_wall_seconds": [
+        4.75373000199761,
+        2.9980893299944,
+        3.133201945005567
+      ],
+      "short_prompt_tokens": [
+        1931,
+        51,
+        57
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        88.23227162806533,
+        91.38127637066539,
+        87.26024392489049
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m-mtp-strix-halo",
+      "source_profile_id": "qwen38-27b-q4-k-m-mtp",
+      "run_tag": "rocm-u512-d2-bs1-v2",
+      "short_request_wall_seconds": [
+        18.12362583999493,
+        10.948599392002507,
+        11.988977111999702
+      ],
+      "short_prompt_tokens": [
+        1973,
+        93,
+        99
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        21.173403448574494,
+        24.451966700448736,
+        22.2452584231671
+      ],
+      "endpoint_qualification": "not-run",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    },
+    {
+      "profile_id": "qwen38-27b-q4-k-m-mtp-m5-pro",
+      "source_profile_id": "qwen38-27b-q4-k-m-mtp",
+      "run_tag": "metal-unsloth-q4km-u512-d4-highpower-v4",
+      "short_request_wall_seconds": [
+        20.607408374897204,
+        12.600124416989274,
+        12.875781624927185
+      ],
+      "short_prompt_tokens": [
+        1973,
+        93,
+        99
+      ],
+      "short_output_tokens": [
+        256,
+        256,
+        256
+      ],
+      "short_decode_tokens_per_second": [
+        17.33011559526908,
+        20.998060026289572,
+        20.55415782804295
+      ],
+      "whole_functional_test_wall_seconds": 63.477794750011526,
+      "endpoint_qualification": "passed-five-probes",
+      "capacity_input_tokens": [],
+      "eight_trace_replay": "not-run",
+      "server_exit_code": 0
+    }
+  ]
+}

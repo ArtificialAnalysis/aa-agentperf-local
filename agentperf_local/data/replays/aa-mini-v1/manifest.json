@@ -1,0 +1,19 @@
+{
+  "name": "AA bundled mini replay v1",
+  "source": "aa-authored-synthetic-mini",
+  "mode": "single_user_agentic_replay",
+  "version": 1,
+  "tasks": [
+    {
+      "task_id": "aa-mini-library-01",
+      "trace": "traces/aa-mini-library-01.jsonl",
+      "source_recording": "aa-bundled-mini-v1",
+      "model_calls": 6,
+      "tool_calls": 5,
+      "total_recorded_tool_delay_ms": 250,
+      "family": "aa-synthetic-library",
+      "adapter": "openai-tools",
+      "required_context_tokens": 8192
+    }
+  ]
+}

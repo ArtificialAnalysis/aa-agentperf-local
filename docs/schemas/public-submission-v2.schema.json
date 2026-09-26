@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/public-submission-v2.schema.json",
+  "title": "AgentPerf Local public submission v2",
+  "description": "The public-minimal, self-reported result envelope produced by AgentPerf Local. Version 2 adds the run identifier minted before inference and omits unattested server hardware for attached endpoints.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "privacy_profile",
+    "payload_digest",
+    "payload",
+    "excluded_private_categories"
+  ],
+  "properties": {
+    "version": { "const": 2 },
+    "kind": { "const": "agentperf_local_public_submission" },
+    "privacy_profile": { "const": "public-minimal-v1" },
+    "payload_digest": { "$ref": "#/$defs/digest" },
+    "payload": { "$ref": "#/$defs/payload" },
+    "excluded_private_categories": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        { "const": "prompts and model responses" },
+        { "const": "tool arguments, outputs, commands, and exception text" },
+        { "const": "endpoint URLs and credentials" },
+        { "const": "local paths, hostnames, serial numbers, and stable device identifiers" },
+        { "const": "raw cache namespaces, nonces, and challenge secrets" },
+        { "const": "raw environment variables, process lists, and command output" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._+\\-]*[A-Za-z0-9])?$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "publicLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^(?!.*[/\\\\@<>])[\\x20-\\x7e]+$"
+    },
+    "nullablePublicLabel": {
+      "anyOf": [
+        { "$ref": "#/$defs/publicLabel" },
+        { "type": "null" }
+      ]
+    },
+    "nullableNonnegativeNumber": {
+      "anyOf": [
+        { "type": "number", "minimum": 0 },
+        { "type": "null" }
+      ]
+    },
+    "nullablePositiveInteger": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "null" }
+      ]
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite_id",
+        "suite_epoch",
+        "suite_digest",
+        "model_semantics_id",
+        "model_artifact_digest",
+        "runtime_id",
+        "context_tokens"
+      ],
+      "properties": {
+        "suite_id": { "$ref": "#/$defs/identifier" },
+        "suite_epoch": { "$ref": "#/$defs/identifier" },
+        "suite_digest": { "$ref": "#/$defs/digest" },
+        "model_semantics_id": { "$ref": "#/$defs/identifier" },
+        "model_artifact_digest": { "$ref": "#/$defs/digest" },
+        "runtime_id": { "$ref": "#/$defs/identifier" },
+        "context_tokens": { "const": 65536 }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_name", "client_version", "source_revision", "source_state"],
+      "properties": {
+        "client_name": { "const": "agentperf-local" },
+        "client_version": { "$ref": "#/$defs/identifier" },
+        "source_revision": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "source_state": { "enum": ["clean", "dirty", "not_git", "unavailable"] }
+      }
+    },
+    "accelerator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "product", "memory_gib", "core_count", "driver_branch", "api"],
+      "properties": {
+        "vendor": { "$ref": "#/$defs/publicLabel" },
+        "product": { "$ref": "#/$defs/publicLabel" },
+        "memory_gib": { "$ref": "#/$defs/nullablePositiveInteger" },
+        "core_count": { "$ref": "#/$defs/nullablePositiveInteger" },
+        "driver_branch": { "$ref": "#/$defs/nullablePublicLabel" },
+        "api": { "$ref": "#/$defs/nullablePublicLabel" }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "platform_family",
+        "platform_major",
+        "architecture",
+        "host_memory_gib",
+        "accelerator",
+        "privacy_notice"
+      ],
+      "properties": {
+        "version": { "const": 1 },
+        "kind": { "const": "public_hardware_profile" },
+        "platform_family": { "$ref": "#/$defs/publicLabel" },
+        "platform_major": { "$ref": "#/$defs/nullablePublicLabel" },
+        "architecture": { "$ref": "#/$defs/publicLabel" },
+        "host_memory_gib": { "$ref": "#/$defs/nullablePositiveInteger" },
+        "accelerator": { "$ref": "#/$defs/accelerator" },
+        "privacy_notice": { "const": "This combination can still fingerprint a device class." }
+      }
+    },
+    "evidenceDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "turns", "tasks", "tools", "failures", "measurement"],
+      "properties": {
+        "summary": { "$ref": "#/$defs/digest" },
+        "turns": { "$ref": "#/$defs/digest" },
+        "tasks": { "$ref": "#/$defs/digest" },
+        "tools": { "$ref": "#/$defs/digest" },
+        "failures": { "$ref": "#/$defs/digest" },
+        "measurement": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turns",
+        "successful_turns",
+        "failed_turns",
+        "short_output_warnings",
+        "tool_calls",
+        "total_inference_latency_ms",
+        "total_recorded_tool_delay_ms",
+        "total_replayed_tool_delay_ms",
+        "total_agentic_replay_ms",
+        "total_normalized_generation_ms",
+        "total_normalized_inference_latency_ms",
+        "total_normalized_agentic_replay_ms",
+        "total_server_prompt_tokens",
+        "total_server_output_tokens",
+        "total_local_output_tokens"
+      ],
+      "properties": {
+        "turns": { "type": "integer", "minimum": 1 },
+        "successful_turns": { "type": "integer", "minimum": 1 },
+        "failed_turns": { "const": 0 },
+        "short_output_warnings": { "type": "integer", "minimum": 0 },
+        "tool_calls": { "type": "integer", "minimum": 0 },
+        "total_inference_latency_ms": { "type": "number", "minimum": 0 },
+        "total_recorded_tool_delay_ms": { "type": "number", "minimum": 0 },
+        "total_replayed_tool_delay_ms": { "type": "number", "minimum": 0 },
+        "total_agentic_replay_ms": { "type": "number", "minimum": 0 },
+        "total_normalized_generation_ms": { "type": "number", "minimum": 0 },
+        "total_normalized_inference_latency_ms": { "type": "number", "minimum": 0 },
+        "total_normalized_agentic_replay_ms": { "type": "number", "minimum": 0 },
+        "total_server_prompt_tokens": { "type": "integer", "minimum": 0 },
+        "total_server_output_tokens": { "type": "integer", "minimum": 0 },
+        "total_local_output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "mean", "p50", "p95"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "mean": { "$ref": "#/$defs/nullableNonnegativeNumber" },
+        "p50": { "$ref": "#/$defs/nullableNonnegativeNumber" },
+        "p95": { "$ref": "#/$defs/nullableNonnegativeNumber" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "count": { "const": 0 } }, "required": ["count"] },
+          "then": {
+            "properties": {
+              "mean": { "type": "null" },
+              "p50": { "type": "null" },
+              "p95": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "count": { "type": "integer", "minimum": 1 },
+              "mean": { "type": "number", "minimum": 0 },
+              "p50": { "type": "number", "minimum": 0 },
+              "p95": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "latencyDistributions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["e2e", "time_to_first_token", "normalized_e2e"],
+      "properties": {
+        "e2e": { "$ref": "#/$defs/distribution" },
+        "time_to_first_token": { "$ref": "#/$defs/distribution" },
+        "normalized_e2e": { "$ref": "#/$defs/distribution" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client_backend",
+        "transport_policy_id",
+        "context",
+        "output_tokens",
+        "sampling",
+        "reasoning_effort",
+        "cache_isolation",
+        "tool_replay"
+      ],
+      "properties": {
+        "client_backend": { "enum": ["python", "rust"] },
+        "transport_policy_id": { "const": "direct-sse-no-retry-v1" },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested_tokens", "observed_tokens", "full_benchmark_tokens", "reduced"],
+          "properties": {
+            "requested_tokens": { "const": 65536 },
+            "observed_tokens": { "type": "integer", "minimum": 65536 },
+            "full_benchmark_tokens": { "const": 65536 },
+            "reduced": { "const": false }
+          }
+        },
+        "output_tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy", "fallback", "margin"],
+          "properties": {
+            "policy": { "enum": ["exact", "fixed", "recorded"] },
+            "fallback": { "type": "integer", "minimum": 1 },
+            "margin": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "sampling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["preset", "temperature", "top_p", "top_k", "min_p"],
+          "properties": {
+            "preset": { "enum": ["custom", "standard"] },
+            "temperature": { "$ref": "#/$defs/nullableNonnegativeNumber" },
+            "top_p": {
+              "anyOf": [
+                { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                { "type": "null" }
+              ]
+            },
+            "top_k": { "$ref": "#/$defs/nullablePositiveInteger" },
+            "min_p": {
+              "anyOf": [
+                { "type": "number", "minimum": 0, "maximum": 1 },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[A-Za-z0-9-]+$" },
+            { "type": "null" }
+          ]
+        },
+        "cache_isolation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "mode", "namespace_digits"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "mode": { "enum": ["none", "run_namespace_prefix"] },
+            "namespace_digits": { "type": "integer", "minimum": 0 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+              "then": { "properties": { "mode": { "const": "run_namespace_prefix" } } },
+              "else": { "properties": { "mode": { "const": "none" } } }
+            }
+          ]
+        },
+        "tool_replay": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "delay_scale", "profile_statistic"],
+          "properties": {
+            "mode": { "enum": ["none", "recorded"] },
+            "delay_scale": { "type": "number", "minimum": 0 },
+            "profile_statistic": { "type": "null" }
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "wall_duration_ms", "observer_duration_ms", "totals", "latency_distributions_ms", "policy"],
+      "properties": {
+        "success": { "const": true },
+        "wall_duration_ms": { "type": "number", "minimum": 0 },
+        "observer_duration_ms": { "type": "number", "minimum": 0 },
+        "totals": { "$ref": "#/$defs/totals" },
+        "latency_distributions_ms": { "$ref": "#/$defs/latencyDistributions" },
+        "policy": { "$ref": "#/$defs/policy" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "benchmark", "producer", "hardware", "private_evidence_digests", "run", "trust_tier"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/runId" },
+        "benchmark": { "$ref": "#/$defs/benchmark" },
+        "producer": { "$ref": "#/$defs/producer" },
+        "hardware": {
+          "anyOf": [
+            { "$ref": "#/$defs/hardware" },
+            { "type": "null" }
+          ]
+        },
+        "private_evidence_digests": { "$ref": "#/$defs/evidenceDigests" },
+        "run": { "$ref": "#/$defs/run" },
+        "trust_tier": { "const": "community-self-reported" }
+      }
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "client_backend": "python",
+  "endpoint_model_digest": "sha256:afb97ab2a86bf5772b7b29e6d5dc1cace01cff8de293aef11de8a04d9e7717bc",
+  "kind": "runtime_qualification",
+  "outcomes": [
+    {
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "completion_tokens": 77,
+      "content_present": false,
+      "decoded_chunk_count": 55,
+      "failure_codes": [],
+      "finish_reason": "tool_calls",
+      "passed": true,
+      "probe_id": "single_tool",
+      "prompt_tokens": 304,
+      "raw_read_count": 54,
+      "reasoning_present": true,
+      "status_code": null,
+      "tool_call_count": 1,
+      "tool_names": [
+        "lookup_issue"
+      ],
+      "usage_present": true
+    },
+    {
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "completion_tokens": 50,
+      "content_present": true,
+      "decoded_chunk_count": 50,
+      "failure_codes": [],
+      "finish_reason": "stop",
+      "passed": true,
+      "probe_id": "no_tool",
+      "prompt_tokens": 296,
+      "raw_read_count": 49,
+      "reasoning_present": true,
+      "status_code": null,
+      "tool_call_count": 0,
+      "tool_names": [],
+      "usage_present": true
+    },
+    {
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "completion_tokens": 115,
+      "content_present": false,
+      "decoded_chunk_count": 76,
+      "failure_codes": [],
+      "finish_reason": "tool_calls",
+      "passed": true,
+      "probe_id": "parallel_tools",
+      "prompt_tokens": 382,
+      "raw_read_count": 75,
+      "reasoning_present": true,
+      "status_code": null,
+      "tool_call_count": 2,
+      "tool_names": [
+        "read_file",
+        "search_text"
+      ],
+      "usage_present": true
+    },
+    {
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "completion_tokens": 65,
+      "content_present": false,
+      "decoded_chunk_count": 45,
+      "failure_codes": [],
+      "finish_reason": "tool_calls",
+      "passed": true,
+      "probe_id": "tool_history",
+      "prompt_tokens": 427,
+      "raw_read_count": 44,
+      "reasoning_present": true,
+      "status_code": null,
+      "tool_call_count": 1,
+      "tool_names": [
+        "record_result"
+      ],
+      "usage_present": true
+    },
+    {
+      "arguments_valid": true,
+      "call_identifiers_present": true,
+      "completion_tokens": 1,
+      "content_present": false,
+      "decoded_chunk_count": 4,
+      "failure_codes": [],
+      "finish_reason": "length",
+      "passed": true,
+      "probe_id": "capped_finish",
+      "prompt_tokens": 23,
+      "raw_read_count": 3,
+      "reasoning_present": true,
+      "status_code": null,
+      "tool_call_count": 0,
+      "tool_names": [],
+      "usage_present": true
+    }
+  ],
+  "pack_digest": "sha256:95690cb1f6037c919eaf7780381436e8c0957922333972a67e239b5d0458033e",
+  "passed": true,
+  "privacy": {
+    "endpoint_url_included": false,
+    "generated_text_included": false,
+    "tool_arguments_included": false
+  },
+  "profile_id": "qwen35-9b-q4-k-m-mtp-rtx5090",
+  "run_id": "40df5ae8-ea68-4866-8e48-d85cc872b721",
+  "synthetic_pack_id": "aa-runtime-synthetic-v1",
+  "version": 2
+}

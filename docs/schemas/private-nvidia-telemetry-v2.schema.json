@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/private-nvidia-telemetry-v2.schema.json",
+  "title": "AA private normalized NVIDIA telemetry record v2",
+  "oneOf": [
+    {"$ref": "#/$defs/header"},
+    {"$ref": "#/$defs/sample"},
+    {"$ref": "#/$defs/footer"}
+  ],
+  "$defs": {
+    "optionalNumber": {
+      "oneOf": [
+        {"type": "number", "minimum": 0},
+        {"type": "null"}
+      ]
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "version",
+        "collector_id",
+        "boundary",
+        "run_id",
+        "device_ordinal",
+        "requested_interval_ms",
+        "fields"
+      ],
+      "properties": {
+        "kind": {"const": "telemetry_header"},
+        "version": {"const": 2},
+        "collector_id": {"const": "aa-nvidia-smi-v1"},
+        "boundary": {"const": "nvidia-device"},
+        "run_id": {
+          "oneOf": [
+            {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+            {"type": "null"}
+          ]
+        },
+        "device_ordinal": {"type": "integer", "minimum": 0},
+        "requested_interval_ms": {"type": "integer", "minimum": 1},
+        "fields": {
+          "const": [
+            "gpu_utilization_percent",
+            "memory_used_mib",
+            "temperature_c",
+            "power_w",
+            "graphics_clock_mhz",
+            "memory_clock_mhz"
+          ]
+        }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "monotonic_ns",
+        "gpu_utilization_percent",
+        "memory_used_mib",
+        "temperature_c",
+        "power_w",
+        "graphics_clock_mhz",
+        "memory_clock_mhz"
+      ],
+      "properties": {
+        "kind": {"const": "telemetry_sample"},
+        "monotonic_ns": {"type": "integer", "minimum": 1},
+        "gpu_utilization_percent": {
+          "oneOf": [
+            {"type": "number", "minimum": 0, "maximum": 100},
+            {"type": "null"}
+          ]
+        },
+        "memory_used_mib": {"$ref": "#/$defs/optionalNumber"},
+        "temperature_c": {"$ref": "#/$defs/optionalNumber"},
+        "power_w": {"$ref": "#/$defs/optionalNumber"},
+        "graphics_clock_mhz": {"$ref": "#/$defs/optionalNumber"},
+        "memory_clock_mhz": {"$ref": "#/$defs/optionalNumber"}
+      }
+    },
+    "footer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sample_count", "missing_value_count", "unparseable_line_count", "graceful", "failure_code"],
+      "properties": {
+        "kind": {"const": "telemetry_footer"},
+        "sample_count": {"type": "integer", "minimum": 0},
+        "missing_value_count": {"type": "integer", "minimum": 0},
+        "unparseable_line_count": {"type": "integer", "minimum": 0},
+        "graceful": {"type": "boolean"},
+        "failure_code": {
+          "oneOf": [
+            {
+              "enum": [
+                "collector_start_failed",
+                "collector_pipe_failed",
+                "collector_process_failed",
+                "no_samples"
+              ]
+            },
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}
