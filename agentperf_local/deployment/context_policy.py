@@ -77,51 +77,23 @@ def _kv_cache_bytes(memory: DeploymentMemory, context_tokens: int) -> int:
 
 
 def derived_minimum_memory_bytes(deployment: ModelDeployment, context_tokens: int) -> int:
-    """Derive the accelerator-memory floor for one requested context length.
-
-    The same formula at the recipe's full context must land exactly on the catalog's
-    pinned minimum, so the formula and the catalog can never drift apart.
-    """
+    """Derive the accelerator-memory floor for one requested context length from the recipe's memory shape."""
     if context_tokens <= 0:
         raise ValueError("context token count must be positive to derive a memory floor")
     memory = deployment.memory
-
-    def minimum(tokens: int) -> int:
-        return (
-            deployment.resident_artifact_bytes
-            + _kv_cache_bytes(memory, tokens)
-            + memory.constant_state_bytes
-            + memory.runtime_overhead_bytes
-        )
-
-    if minimum(deployment.context_tokens) != deployment.minimum_memory_bytes:
-        raise ValueError(
-            "catalog minimum_memory_bytes does not equal the KV-cache formula at the full context; "
-            "update the formula constants and the catalog together"
-        )
-    return minimum(context_tokens)
-
-
-def context_memory_floor(deployment: ModelDeployment, context_tokens: int) -> int | None:
-    """Return the derived memory floor, or None when the catalog and formula disagree.
-
-    An external catalog can pin a minimum the KV formula does not reproduce. Display
-    paths degrade on None instead of crashing.
-    """
-    try:
-        return derived_minimum_memory_bytes(deployment, context_tokens)
-    except ValueError:
-        return None
+    return (
+        deployment.resident_artifact_bytes
+        + _kv_cache_bytes(memory, context_tokens)
+        + memory.constant_state_bytes
+        + memory.runtime_overhead_bytes
+    )
 
 
 def context_fit(deployment: ModelDeployment, context_tokens: int, available_memory_bytes: int | None) -> bool | None:
     """Report whether one context's memory floor fits the device, or None when either side is unknown."""
     if available_memory_bytes is None:
         return None
-    minimum_memory_bytes = context_memory_floor(deployment, context_tokens)
-    if minimum_memory_bytes is None:
-        return None
-    return memory_fits(available_memory_bytes, minimum_memory_bytes)
+    return memory_fits(available_memory_bytes, derived_minimum_memory_bytes(deployment, context_tokens))
 
 
 def reduced_context_rungs(deployment: ModelDeployment, replay_floor_tokens: int | None = None) -> tuple[int, ...]:
@@ -135,13 +107,7 @@ def reduced_context_rungs(deployment: ModelDeployment, replay_floor_tokens: int 
 
 
 def context_ladder(deployment: ModelDeployment, replay_floor_tokens: int | None) -> tuple[int, ...]:
-    """Return the full context first, then every reduced option this recipe and replay allow.
-
-    Without a trustworthy per-context memory estimate, reduced rungs would advertise
-    memory needs nobody can compute, so only the pinned full context is offered.
-    """
-    if context_memory_floor(deployment, deployment.context_tokens) is None:
-        return (deployment.context_tokens,)
+    """Return the full context first, then every reduced option this recipe and replay allow."""
     return (deployment.context_tokens, *reduced_context_rungs(deployment, replay_floor_tokens))
 
 

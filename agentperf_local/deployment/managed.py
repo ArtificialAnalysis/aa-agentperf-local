@@ -609,8 +609,6 @@ def create_deployment_plan(
     if port < MINIMUM_USER_PORT or port > MAXIMUM_PORT:
         raise ValueError(f"deployment port must be between {MINIMUM_USER_PORT} and {MAXIMUM_PORT}")
     deployment = candidate.deployment
-    if deployment is None:
-        raise ValueError("selected model does not support the requested managed framework")
     if framework not in deployment.frameworks:
         raise ValueError("selected model does not support the requested managed framework")
     resolved_context_tokens = resolve_context_tokens(deployment, context_tokens)
@@ -621,7 +619,7 @@ def create_deployment_plan(
         # ROCm's visible-device variables do not bind Vulkan enumeration. Keep this
         # single-iGPU recipe from silently benchmarking a different selected device.
         raise ValueError("the Vulkan recipe requires an unpinned single-accelerator host")
-    candidate_devices = frozenset(evidence.device_id for evidence in candidate.device_evidence)
+    candidate_devices = frozenset(candidate.devices)
     if platform_device_id(platform) not in candidate_devices or not framework_supported(framework, platform):
         raise ValueError(f"{framework} is not supported on {platform}")
     available_memory_bytes = available_accelerator_memory(snapshot, platform)
@@ -638,7 +636,7 @@ def create_deployment_plan(
     nonce = alias_nonce if alias_nonce is not None else secrets.token_hex(DEPLOYMENT_ALIAS_NONCE_BYTES)
     if not nonce or not nonce.isascii() or not nonce.isalnum():
         raise ValueError("managed deployment alias nonce must be non-empty ASCII letters and digits")
-    model_alias = f"{deployment.model_alias}-{nonce}"
+    model_alias = f"{candidate.profile_id}-{nonce}"
     recipe_environment = deployment.vllm.environment if framework == "vllm" and deployment.vllm is not None else ()
     combined_environment = (*recipe_environment, *device_environment)
     environment_names = tuple(name for name, _ in combined_environment)

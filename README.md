@@ -70,7 +70,8 @@ uv run agentperf-local managed-run \
 
 `managed-run` downloads the pinned model into the Hugging Face cache, checks
 every file's SHA-256, starts the server on localhost, runs the replay, and
-stops the server. [MODELS.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/MODELS.md) lists all 29 profiles.
+stops the server. Every recipe it can run is a YAML file in
+[`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model and then hardware.
 
 ## The default run
 
@@ -232,8 +233,7 @@ CI runs these checks and the Python and Rust client equivalence tests. See
 
 ## Documentation
 
-- [Models](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/MODELS.md): the catalog and per-device caveats.
-- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/recipes/): measured evidence for the device-specific profiles.
+- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes): every managed-run recipe, and how to add one.
 - [Textual TUI](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/TEXTUAL_TUI.md): options, keys, and screens.
 - [Architecture](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/ARCHITECTURE.md): measurement rules, evidence boundary,
   and package layout.

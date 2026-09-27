@@ -1,40 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/model-candidates-v2.schema.json",
-  "title": "AA consumer GPU model candidates v2",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "version",
-    "kind",
-    "status",
-    "as_of",
-    "models"
-  ],
-  "properties": {
-    "version": {
-      "const": 2
-    },
-    "kind": {
-      "const": "consumer_gpu_model_candidates"
-    },
-    "status": {
-      "const": "pilot-candidates-not-release"
-    },
-    "as_of": {
-      "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-    },
-    "models": {
-      "type": "array",
-      "minItems": 29,
-      "maxItems": 29,
-      "uniqueItems": true,
-      "items": {
-        "$ref": "#/$defs/model"
-      }
-    }
-  },
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/recipe-v1.schema.json",
+  "title": "agentperf-local managed-run recipe v1",
+  "$ref": "#/$defs/model",
   "$defs": {
     "identifier": {
       "type": "string",
@@ -58,9 +26,6 @@
     },
     "device_id": {
       "enum": [
-        "rtx-5090",
-        "rtx-pro-6000",
-        "dgx-spark",
         "nvidia-cuda",
         "amd-rocm",
         "apple-silicon"
@@ -72,9 +37,7 @@
       "required": [
         "filename",
         "sha256",
-        "size_bytes",
-        "source_repository",
-        "source_revision"
+        "size_bytes"
       ],
       "properties": {
         "filename": {
@@ -117,16 +80,10 @@
         "batch_size",
         "ubatch_size",
         "speculative_tokens",
-        "draft_model_filename",
         "target_backend_sampling",
         "draft_backend_sampling",
-        "backend",
-        "load_mode",
-        "lazy_mode",
-        "threads",
         "flash_attention",
-        "disable_fit",
-        "cache_ram_mib"
+        "disable_fit"
       ],
       "properties": {
         "batch_size": {
@@ -204,8 +161,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "arguments",
-        "environment"
+        "arguments"
       ],
       "properties": {
         "arguments": {
@@ -243,8 +199,7 @@
         "kv_bytes_per_scalar",
         "recurrent_state_slots",
         "constant_state_bytes",
-        "runtime_overhead_bytes",
-        "lazy_read_bytes"
+        "runtime_overhead_bytes"
       ],
       "properties": {
         "full_attention_layers": {
@@ -311,15 +266,7 @@
         "artifacts",
         "context_tokens",
         "frameworks",
-        "memory",
-        "minimum_memory_bytes",
-        "model_alias",
-        "model_filename",
-        "llama_cpp",
-        "vllm",
-        "moe_runner_backend",
-        "quantization",
-        "runtime_versions"
+        "memory"
       ],
       "properties": {
         "artifact_kind": {
@@ -339,8 +286,7 @@
           }
         },
         "context_tokens": {
-          "type": "integer",
-          "minimum": 1
+          "const": 65536
         },
         "frameworks": {
           "type": "array",
@@ -357,13 +303,6 @@
         },
         "memory": {
           "$ref": "#/$defs/memory"
-        },
-        "minimum_memory_bytes": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "model_alias": {
-          "$ref": "#/$defs/identifier"
         },
         "model_filename": {
           "anyOf": [
@@ -395,15 +334,6 @@
             }
           ]
         },
-        "quantization": {
-          "enum": [
-            "Q4_0",
-            "Q4_K_M",
-            "IQ4_NL",
-            "NVFP4",
-            "MXFP4"
-          ]
-        },
         "runtime_versions": {
           "description": "The release each framework is verified against for this profile, keyed by framework. A framework with no comparable release version (llama.cpp) is omitted. The launcher refuses every other version.",
           "type": "object",
@@ -433,101 +363,29 @@
         }
       }
     },
-    "device_evidence": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "device_id",
-        "architecture",
-        "evidence_level",
-        "source_url",
-        "tested_input_tokens",
-        "tested_output_tokens",
-        "tested_concurrency",
-        "aa_admission_state"
-      ],
-      "properties": {
-        "device_id": {
-          "$ref": "#/$defs/device_id"
-        },
-        "architecture": {
-          "enum": [
-            "sm120",
-            "sm121",
-            "cuda",
-            "rocm",
-            "metal"
-          ]
-        },
-        "evidence_level": {
-          "enum": [
-            "official-gguf-backend",
-            "upstream-gguf-conversion",
-            "vendor-hardware-listed-recipe-confirm",
-            "vendor-local-surface-aa-recipe-needed",
-            "vendor-sglang-recipe",
-            "upstream-end-to-end",
-            "upstream-boot-and-serve",
-            "local-end-to-end",
-            "local-inference-screen"
-          ]
-        },
-        "source_url": {
-          "type": "string",
-          "pattern": "^https://"
-        },
-        "tested_input_tokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 1
-        },
-        "tested_output_tokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 1
-        },
-        "tested_concurrency": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 1
-        },
-        "aa_admission_state": {
-          "const": "unqualified"
-        }
-      }
-    },
     "model": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "profile_id",
+        "as_of",
         "display_name",
         "hf_repository",
         "hf_revision",
-        "source_url",
-        "license_id",
-        "native_context_tokens",
-        "pilot_context_tokens",
-        "runtime_family",
+        "devices",
         "tool_call_parser",
         "reasoning_parser",
         "thinking_policy",
         "speculation_policy",
-        "stored_checkpoint_kind",
-        "compute_path_policy",
-        "artifact_manifest_status",
-        "deployment",
-        "device_evidence"
+        "deployment"
       ],
       "properties": {
         "profile_id": {
           "$ref": "#/$defs/identifier"
+        },
+        "as_of": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
         },
         "display_name": {
           "type": "string",
@@ -540,32 +398,13 @@
         "hf_revision": {
           "$ref": "#/$defs/revision"
         },
-        "source_url": {
-          "type": "string",
-          "pattern": "^https://huggingface\\.co/"
-        },
-        "license_id": {
-          "enum": [
-            "Apache-2.0",
-            "OpenMDW-1.1",
-            "NVIDIA-Nemotron-Open-Model-License",
-            "Qwen-Community-1.0"
-          ]
-        },
-        "native_context_tokens": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "pilot_context_tokens": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "runtime_family": {
-          "enum": [
-            "llama-cpp",
-            "sglang",
-            "vllm"
-          ]
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/device_id"
+          }
         },
         "tool_call_parser": {
           "enum": [
@@ -601,42 +440,8 @@
             "enabled-vllm-external-draft"
           ]
         },
-        "stored_checkpoint_kind": {
-          "enum": [
-            "gguf-q4-0",
-            "gguf-q4-k-m",
-            "gguf-iq4-nl",
-            "modelopt-nvfp4-mixed",
-            "mxfp4-native"
-          ]
-        },
-        "compute_path_policy": {
-          "const": "record-resolved-path"
-        },
-        "artifact_manifest_status": {
-          "enum": [
-            "pending-complete-file-manifest",
-            "complete-file-sha256-pinned"
-          ]
-        },
         "deployment": {
-          "anyOf": [
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/deployment"
-            }
-          ]
-        },
-        "device_evidence": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 3,
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/device_evidence"
-          }
+          "$ref": "#/$defs/deployment"
         }
       }
     }

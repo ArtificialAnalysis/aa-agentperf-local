@@ -673,8 +673,6 @@ def ensure_model_artifacts(
     the runtime opens by name sits beside the tensors under one path.
     """
     deployment = candidate.deployment
-    if deployment is None:
-        raise ValueError("selected model does not have a managed deployment artifact")
     total_bytes = deployment.artifact_size_bytes
     completed_bytes = 0
     verified: list[VerifiedArtifact] = []

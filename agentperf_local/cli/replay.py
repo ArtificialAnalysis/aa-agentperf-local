@@ -304,7 +304,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
         framework=framework,
         device=bound,
         catalog_as_of=catalog.as_of,
-        catalog_digest=catalog.file_digest,
+        catalog_digest=catalog.digest,
         cache_root=read_path(namespace, "cache_root"),
         port=read_integer(namespace, "port"),
         context_tokens=requested_context_tokens,
@@ -468,7 +468,7 @@ def _tui_status(outcome: TuiOutcome | None, return_code: int | None) -> int:
 
 
 def tui_command(namespace: argparse.Namespace) -> int:
-    catalog = load_model_catalog(read_path(namespace, "catalog"))
+    catalog = load_model_catalog(read_path(namespace, "recipes"))
     app = AgentPerfLocalApp(
         catalog,
         defaults=TuiDefaults(

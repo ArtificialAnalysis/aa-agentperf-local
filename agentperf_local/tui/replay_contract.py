@@ -227,10 +227,7 @@ class ManagedDeploymentChoice:
             raise ManagedLaunchSettingsProblem("the --startup-timeout-seconds value must be positive")
 
     def _deployment(self) -> ModelDeployment:
-        deployment = self.candidate.deployment
-        if deployment is None:
-            raise ValueError("managed framework is not available for the selected model")
-        return deployment
+        return self.candidate.deployment
 
     @property
     def resolved_context_tokens(self) -> int:
@@ -282,9 +279,6 @@ class ReplayRequest:
             )
         if self.managed_deployment is not None:
             candidate = self.managed_deployment.candidate
-            deployment = candidate.deployment
-            if deployment is None:
-                raise ValueError("managed deployment choice requires a model deployment recipe")
             if self.api_key_env is not None:
                 raise ValueError("managed localhost deployments do not accept an API key")
             if self.catalog_profile_id != candidate.profile_id or self.candidate_revision != candidate.hf_revision:
@@ -292,7 +286,7 @@ class ReplayRequest:
             expected_base_url = f"http://127.0.0.1:{self.managed_deployment.port}/v1"
             if self.normalized_base_url != expected_base_url:
                 raise ValueError("managed deployment URL must match its owned localhost port")
-            if self.endpoint_model != deployment.model_alias:
+            if self.endpoint_model != candidate.profile_id:
                 raise ValueError("managed deployment model must use its stable catalog alias before launch")
 
     @property

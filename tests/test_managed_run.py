@@ -15,8 +15,8 @@ from jsonschema import Draft202012Validator
 
 from agentperf_local.cli import main
 from agentperf_local.deployment.catalog import (
-    BUNDLED_MODEL_CATALOG_DIGEST,
-    BUNDLED_MODEL_CATALOG_PATH,
+    BUNDLED_RECIPES_DIGEST,
+    BUNDLED_RECIPES_ROOT,
     DeploymentFramework,
     ModelCandidate,
     ModelCatalog,
@@ -92,7 +92,7 @@ def _install_fake_runtime(
     fake_smi = write_looping_nvidia_smi(tmp_path / "bin" / "nvidia-smi")
     monkeypatch.setenv("PATH", f"{fake_smi.parent}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr("agentperf_local.cli.options.collect_hardware_snapshot", _two_gpu_hardware)
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = next(
         model for model in catalog.models if model.deployment is not None and framework in model.deployment.frameworks
     )
@@ -164,7 +164,7 @@ def _install_fake_runtime(
             artifact_manifest_sha256=verified.manifest_sha256,
             artifact_size_bytes=verified.size_bytes,
             context_tokens=recipe.context_tokens,
-            model_alias=recipe.model_alias,
+            model_alias=candidate.profile_id,
             host="127.0.0.1",
             port=port,
             command=(
@@ -174,7 +174,7 @@ def _install_fake_runtime(
                 "--port",
                 str(port),
                 "--alias",
-                recipe.model_alias,
+                candidate.profile_id,
                 "--platform",
                 "cuda",
                 "--backend",
@@ -222,7 +222,7 @@ def _tui_launch(
     choice = ManagedDeploymentChoice(
         candidate=runtime.candidate,
         catalog_as_of=runtime.catalog.as_of,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework=runtime.framework,
         device_index=CHOSEN_DEVICE_INDEX,
         port=runtime.port,
@@ -231,11 +231,11 @@ def _tui_launch(
         manifest_path=manifest_path,
         output_dir=output_dir,
         base_url=f"http://127.0.0.1:{runtime.port}/v1",
-        endpoint_model=recipe.model_alias,
+        endpoint_model=runtime.candidate.profile_id,
         client_backend="python",
         selection_kind=SelectionKind.BUNDLED_CATALOG_CANDIDATE,
         catalog_profile_id=runtime.candidate.profile_id,
-        catalog_digest=runtime.catalog.file_digest,
+        catalog_digest=runtime.catalog.digest,
         candidate_revision=runtime.candidate.hf_revision,
         managed_deployment=choice,
     )
@@ -324,7 +324,7 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     run_id = measurement["run_id"]
     assert summary["run_id"] == power["run_id"] == qualification["run_id"] == telemetry_header["run_id"] == run_id
     assert measurement["deployment_digest"] == f"sha256:{hashlib.sha256(deployment_bytes).hexdigest()}"
-    assert deployment["deployment"]["catalog_digest"] == BUNDLED_MODEL_CATALOG_DIGEST
+    assert deployment["deployment"]["catalog_digest"] == BUNDLED_RECIPES_DIGEST
     assert deployment["deployment"]["device_environment"] == {
         "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
         "CUDA_VISIBLE_DEVICES": str(CHOSEN_DEVICE_INDEX),

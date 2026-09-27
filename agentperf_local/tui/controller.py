@@ -390,12 +390,6 @@ class LocalManagedReplayController:
     ) -> ManagedModelAvailability:
         """Return the same compatibility facts for a device that is already bound."""
         safe_hardware = SafeHardwareSummary.from_snapshot(bound.snapshot)
-        if candidate.deployment is None:
-            return ManagedModelAvailability(
-                hardware=safe_hardware,
-                offers=(),
-                reason="This app cannot start this model. Run your own server and enter its URL instead.",
-            )
         if self._device_selection_required(device_index):
             # The offer collector rejects a many-accelerator snapshot with command-line advice,
             # so the device question is answered here before any compatibility question is asked.

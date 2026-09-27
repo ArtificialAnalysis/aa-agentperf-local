@@ -1,0 +1,44 @@
+profile_id: qwen36-35b-a3b-q4-k-m-mtp-strix-halo
+as_of: '2026-09-21'
+display_name: Qwen3.6-35B-A3B Q4_K_M MTP (RTX 5090), Strix Halo Vulkan
+hf_repository: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
+devices:
+- amd-rocm
+tool_call_parser: qwen3_coder
+reasoning_parser: qwen3
+thinking_policy: enabled
+speculation_policy: enabled-mtp-self-draft
+deployment:
+  artifact_kind: gguf-single-file
+  artifacts:
+  - filename: Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+    sha256: 0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b
+    size_bytes: 22663387424
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 10
+    full_kv_heads: 2
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 197591040
+    runtime_overhead_bytes: 2145461984
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 512
+    speculative_tokens: 2
+    target_backend_sampling: true
+    draft_backend_sampling: true
+    backend: vulkan
+    load_mode: none
+    threads: 16
+    flash_attention: true
+    disable_fit: true
+    cache_ram_mib: 0
