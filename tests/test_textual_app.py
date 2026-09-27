@@ -536,6 +536,7 @@ async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_pat
 
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.click("#welcome-existing")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await pilot.press("enter")
         await _settle_setup(app, pilot)
         await pilot.press("space")
@@ -1244,6 +1245,7 @@ async def _start_run_by_click(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) 
 async def _start_existing_server_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
     """Take the welcome shortcut for an existing server through setup to a started replay."""
     await pilot.click("#welcome-existing")
+    await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
     await pilot.press("enter")
     await _settle_setup(app, pilot)
     await _confirm_and_run(app, pilot)
@@ -1649,6 +1651,7 @@ async def test_cleartext_remote_endpoint_only_blocks_runs_that_send_a_key(tmp_pa
 
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.click("#welcome-start")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
         await pilot.press("end", "enter")
         app.query_one("#base-url-input", Input).value = "http://192.168.1.5:8000/v1"
         app.query_one("#endpoint-model-input", Input).value = "private-model"
@@ -2161,11 +2164,12 @@ async def test_privacy_and_methodology_shortcuts_restore_the_previous_step(tmp_p
         assert app.step is TuiStep.WELCOME
 
         await pilot.click("#welcome-start")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
         await pilot.press("?")
         assert app.step is TuiStep.METHODOLOGY
         await _settle_until(pilot, lambda: app.focused is app.query_one("#methodology-back", Button))
         await pilot.click("#methodology-back")
-        assert app.step is TuiStep.MODEL
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
 
 
 @pytest.mark.parametrize(
