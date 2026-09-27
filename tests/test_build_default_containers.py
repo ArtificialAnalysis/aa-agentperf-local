@@ -11,6 +11,8 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the container build script is a bash script")
+
 
 @pytest.mark.parametrize(
     ("initial_arch", "requested_arch", "docker_arch", "platform_override"),

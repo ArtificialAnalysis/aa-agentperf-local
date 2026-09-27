@@ -16,6 +16,7 @@ from agentperf_local.workload.recording import (
     read_recording_json,
 )
 from agentperf_local.workload.schema import FORMAT_VERSION, MessageSource, load_manifest, load_trace, parse_json_object
+from tests.file_modes import has_mode
 
 FIXTURES = Path(__file__).parent / "fixtures" / "recording"
 RECORDING = FIXTURES / "recordings" / "demo.json"
@@ -111,8 +112,8 @@ def test_convert_manifest_writes_versioned_typed_artifacts(tmp_path: Path) -> No
     assert [row.task_id for row in rows] == ["manifest_task", "manifest_task"]
     assert [row.turn_id for row in rows] == ["manifest_task:0000", "manifest_task:0001"]
     assert rows[0].recorded_tool_calls_after[0].output is None
-    assert (output_dir / "manifest.json").stat().st_mode & 0o777 == 0o600
-    assert (output_dir / task.trace).stat().st_mode & 0o777 == 0o600
+    assert has_mode(output_dir / "manifest.json", 0o600)
+    assert has_mode(output_dir / task.trace, 0o600)
 
 
 def test_convert_gzipped_recording_with_outputs(tmp_path: Path) -> None:

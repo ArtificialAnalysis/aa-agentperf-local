@@ -7,6 +7,7 @@ PowerSummary, PowerPhaseSummary, write_power_summary, load_power_summary.
 from __future__ import annotations
 
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -323,12 +324,14 @@ class NvidiaPowerCollector:
             f"--executable={self.executable}",
         )
         # No new session: a terminal interrupt must reach the child too, so it can
-        # write its footer instead of outliving the benchmark.
+        # write its footer instead of outliving the benchmark. Windows can signal a child
+        # gracefully only through its own process group; stop() covers the interrupt there.
         self._process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
 
     def wait_for_first_sample(self, timeout_seconds: float = FIRST_SAMPLE_WAIT_SECONDS) -> bool:
@@ -358,7 +361,11 @@ class NvidiaPowerCollector:
         if process is None:
             return
         if process.poll() is None:
-            process.terminate()
+            # Windows terminate() kills the child before it can write its footer.
+            if sys.platform == "win32":
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                process.terminate()
             try:
                 process.wait(timeout=COLLECTOR_STOP_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:

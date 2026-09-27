@@ -24,6 +24,7 @@ from huggingface_hub.file_download import repo_folder_name
 
 from agentperf_local.common.durable_files import (
     PRIVATE_FILE_PERMISSIONS,
+    PRIVATE_OPEN_FLAGS,
     nearest_existing_ancestor,
 )
 from agentperf_local.common.identity import sha256_bytes
@@ -397,7 +398,7 @@ def _download_model_artifact(
         write=MODEL_DOWNLOAD_WRITE_TIMEOUT_SECONDS,
         pool=MODEL_DOWNLOAD_POOL_TIMEOUT_SECONDS,
     )
-    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | PRIVATE_OPEN_FLAGS
     descriptor = os.open(partial_path, flags, PRIVATE_FILE_PERMISSIONS)
     with os.fdopen(descriptor, "ab") as destination:
         with httpx.Client(follow_redirects=True, timeout=timeout) as client:

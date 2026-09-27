@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -320,6 +321,7 @@ def test_replay_request_rejects_secret_values_and_stale_outputs(tmp_path: Path, 
     assert preflight.hardware is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows sets folder access with ACLs, not mode bits")
 def test_preflight_rejects_a_results_folder_no_run_could_write(tmp_path: Path) -> None:
     read_only_parent = tmp_path / "read-only"
     read_only_parent.mkdir()

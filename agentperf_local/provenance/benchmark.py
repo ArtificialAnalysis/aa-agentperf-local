@@ -213,10 +213,9 @@ def workload_digest(manifest_path: Path) -> str:
     root = resolved_manifest.parent
     member_paths = {resolved_manifest}
     member_paths.update((root / task.trace).resolve() for task in manifest.tasks)
-    members: list[JsonValue] = []
-    for path in sorted(member_paths):
-        relative_path = path.relative_to(root).as_posix()
-        members.append([relative_path, sha256_file(path)])
+    # Sort on the POSIX spelling: WindowsPath ignores case when it sorts, which would reorder members.
+    relative_paths = sorted((path.relative_to(root).as_posix(), path) for path in member_paths)
+    members: list[JsonValue] = [[relative_path, sha256_file(path)] for relative_path, path in relative_paths]
     canonical = orjson.dumps(members)
     return sha256_bytes(canonical)
 

@@ -47,7 +47,7 @@ def test_record_encodes_every_field_kind_in_declaration_order() -> None:
     record = Outer(
         name="one",
         colour=Colour.RED,
-        where=Path("/tmp/x"),
+        where=Path("results/x"),
         inner=Inner(depth=2),
         tags=("a", "b"),
         missing=None,
@@ -59,7 +59,7 @@ def test_record_encodes_every_field_kind_in_declaration_order() -> None:
     assert encoded == {
         "name": "one",
         "colour": "red",
-        "where": "/tmp/x",
+        "where": str(Path("results/x")),
         "inner": {"depth": 2},
         "tags": ["a", "b"],
         "missing": None,

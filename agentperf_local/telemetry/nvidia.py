@@ -6,13 +6,13 @@ import argparse
 import csv
 import math
 import os
-import select
+import queue
 import signal
 import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
@@ -27,6 +27,7 @@ from agentperf_local.common.argparse_fields import (
     read_path,
     read_string,
 )
+from agentperf_local.common.durable_files import NEW_FILE_OPEN_FLAGS
 from agentperf_local.common.identity import validate_run_id
 from agentperf_local.common.json_fields import (
     decode_json_object,
@@ -378,33 +379,62 @@ def _stopped(stop_event: threading.Event | None) -> bool:
     return stop_event is not None and stop_event.is_set()
 
 
-def _stream_lines(
+def _read_until_closed(stream: IO[bytes], deliver: Callable[[bytes], None]) -> None:
+    """Hand every chunk of one pipe to deliver, then an empty chunk once the pipe closes.
+
+    The reader closes its own pipe. A grandchild of a stopped collector can hold the pipe
+    open, and closing it from another thread while this read is blocked is not safe.
+    """
+    with stream:
+        try:
+            while chunk := stream.read(READ_CHUNK_BYTES):
+                deliver(chunk)
+        finally:
+            deliver(b"")
+
+
+def _start_pipe_readers(
     *,
     stdout: IO[bytes],
     stderr: IO[bytes],
+    stdout_chunks: queue.Queue[bytes],
     stderr_buffer: bytearray,
-    stop_event: threading.Event | None,
-) -> Iterator[str]:
+) -> tuple[threading.Thread, ...]:
+    """Drain both collector pipes on threads.
+
+    Windows cannot wait on a pipe with select, so blocking reads run on threads on every
+    platform. Stderr is drained too, so a chatty driver cannot fill its pipe and stall.
+    """
+
+    def keep_stderr(chunk: bytes) -> None:
+        stderr_buffer.extend(chunk[: MAX_STDERR_BYTES - len(stderr_buffer)])
+
+    readers = (
+        threading.Thread(target=_read_until_closed, args=(stdout, stdout_chunks.put), daemon=True),
+        threading.Thread(target=_read_until_closed, args=(stderr, keep_stderr), daemon=True),
+    )
+    for reader in readers:
+        reader.start()
+    return readers
+
+
+def _stream_lines(stdout_chunks: queue.Queue[bytes], stop_event: threading.Event | None) -> Iterator[str]:
     """Yield collector output lines, waking often enough to honor a stop request."""
     pending = bytearray()
-    open_streams: list[IO[bytes]] = [stdout, stderr]
-    while open_streams:
+    while True:
         if _stopped(stop_event):
             return
-        readable, _, _ = select.select(open_streams, (), (), STOP_CHECK_SECONDS)
-        for stream in readable:
-            chunk = stream.read(READ_CHUNK_BYTES)
-            if not chunk:
-                open_streams.remove(stream)
-                continue
-            if stream is stderr:
-                stderr_buffer.extend(chunk[: MAX_STDERR_BYTES - len(stderr_buffer)])
-                continue
-            pending.extend(chunk)
-            while (break_index := pending.find(b"\n")) >= 0:
-                line = bytes(pending[:break_index])
-                del pending[: break_index + 1]
-                yield line.decode("utf-8", errors="replace")
+        try:
+            chunk = stdout_chunks.get(timeout=STOP_CHECK_SECONDS)
+        except queue.Empty:
+            continue
+        if not chunk:
+            break
+        pending.extend(chunk)
+        while (break_index := pending.find(b"\n")) >= 0:
+            line = bytes(pending[:break_index])
+            del pending[: break_index + 1]
+            yield line.decode("utf-8", errors="replace")
     if pending:
         yield bytes(pending).decode("utf-8", errors="replace")
 
@@ -452,8 +482,15 @@ def _collect_once(
     last_monotonic_ns = 0
     reached_limit = False
     stderr_buffer = bytearray()
+    stdout_chunks: queue.Queue[bytes] = queue.Queue()
+    readers = _start_pipe_readers(
+        stdout=stdout,
+        stderr=stderr,
+        stdout_chunks=stdout_chunks,
+        stderr_buffer=stderr_buffer,
+    )
     try:
-        for line in _stream_lines(stdout=stdout, stderr=stderr, stderr_buffer=stderr_buffer, stop_event=stop_event):
+        for line in _stream_lines(stdout_chunks, stop_event):
             if not line or line.isspace():
                 # A quiet loop iteration is not a reading, so it must never become a sample.
                 continue
@@ -479,8 +516,10 @@ def _collect_once(
         _finish_process(process, intentional_stop=True)
         raise
     finally:
-        stdout.close()
-        stderr.close()
+        # The child has exited, so its pipes reach end of file at once unless a grandchild
+        # still holds them. A reader left waiting on such a grandchild must not hold up the run.
+        for reader in readers:
+            reader.join(timeout=STOP_CHECK_SECONDS)
     failure_code = None if intentional_stop or process_exit_code == 0 else "collector_process_failed"
     stderr_text = bytes(stderr_buffer).decode("utf-8", errors="replace")
     return _AttemptOutcome(
@@ -500,8 +539,7 @@ def collect_nvidia_telemetry(
 ) -> CollectionResult:
     """Collect normalized rows outside the model response process."""
     config.output_path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
-    descriptor = os.open(config.output_path, flags, TELEMETRY_FILE_PERMISSIONS)
+    descriptor = os.open(config.output_path, NEW_FILE_OPEN_FLAGS, TELEMETRY_FILE_PERMISSIONS)
     with os.fdopen(descriptor, "wb", buffering=0) as output:
         _write_line(output, _header(config))
         outcome = _collect_once(config=config, fields=NVIDIA_FIELDS, output=output, stop_event=stop_event)
@@ -558,6 +596,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
+    # Windows cannot deliver SIGTERM to a handler; the owner sends CTRL_BREAK_EVENT instead.
+    if sys.platform == "win32":
+        signal.signal(signal.SIGBREAK, request_stop)
     try:
         result = collect_nvidia_telemetry(
             CollectorConfig(

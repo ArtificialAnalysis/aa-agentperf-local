@@ -30,8 +30,9 @@ start the server, and benchmark it for you.
 ## Quick start
 
 You need [`uv`](https://docs.astral.sh/uv/). It fetches Python 3.12 if you do
-not have it. Docker and Rust are optional. macOS and Linux are supported;
-Windows is not supported yet.
+not have it. Docker and Rust are optional. macOS, Linux, and Windows are
+supported. On Windows, managed runs need an NVIDIA GPU and llama.cpp; vLLM and
+SGLang run only on Linux.
 
 ```console
 uv tool install agentperf-local
@@ -131,7 +132,8 @@ name with `--api-key-env`. No flag takes a literal key.
 By default the replay skips tool time between turns. `run --tool-mode live`
 runs the recorded shell commands in Docker containers, so tool time is real.
 This mode is opt-in and needs Docker and prebuilt images. The build scripts
-are in the source checkout:
+are in the source checkout. They are bash scripts, so on Windows run them from
+Git Bash or WSL:
 
 ```console
 scripts/install-swebench-validation.sh   # arm64 hosts only, once

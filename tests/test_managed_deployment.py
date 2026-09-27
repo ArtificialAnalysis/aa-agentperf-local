@@ -8,7 +8,6 @@ import hashlib
 import os
 import re
 import socket
-import stat
 import subprocess
 import sys
 import threading
@@ -61,12 +60,15 @@ from agentperf_local.deployment.managed import (
 from agentperf_local.deployment.model_cache import default_model_cache_root, ensure_model_artifacts
 from agentperf_local.provenance.hardware import HardwareSnapshot
 from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
+from tests.fake_executable import write_python_executable
+from tests.file_modes import has_mode
 
 MODEL_BYTES = b"small deterministic GGUF fixture"
 MODEL_DIGEST = hashlib.sha256(MODEL_BYTES).hexdigest()
 HF_REPOSITORY_DIRECTORY = "models--example--model-gguf"
 MANAGED_TEST_STARTUP_TIMEOUT_SECONDS = 5.0
 CANCELLATION_TEST_TIMEOUT_SECONDS = 2.0
+POSIX_PROCESS_GROUPS = pytest.mark.skipif(sys.platform == "win32", reason="patches os.killpg, which Windows lacks")
 RETRY_TEST_BACKOFF_SECONDS = 0.2
 IDLE_CHILD_SECONDS = 60.0
 SHORT_CHILD_SECONDS = 0.2
@@ -91,6 +93,7 @@ FIXTURE_MEMORY = DeploymentMemory(
     constant_state_bytes=0,
     runtime_overhead_bytes=FIXTURE_RUNTIME_OVERHEAD_BYTES,
 )
+
 CATALOG_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 6_744_440_832 + FIXTURE_RUNTIME_OVERHEAD_BYTES
 # A card can report a few dozen MiB under its listed capacity; 48 MiB short stays inside the 64 MiB slack.
 MEMORY_WITHIN_SLACK_BYTES = CATALOG_MINIMUM_MEMORY_BYTES - 48 * 1024 * 1024
@@ -352,11 +355,12 @@ def _child_deployment(plan: DeploymentPlan, log_path: Path, lifetime_seconds: fl
         stdout=log_stream,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
     )
     return ManagedDeployment(
         plan=plan,
         process=process,
-        process_group_id=os.getpgid(process.pid),
+        process_group_id=process.pid if sys.platform == "win32" else os.getpgid(process.pid),
         log_stream=log_stream,
         log_path=log_path,
     )
@@ -805,7 +809,7 @@ def test_owned_deployment_reaches_readiness_and_is_stopped(tmp_path: Path) -> No
         assert deployment.process.poll() is None
 
     assert deployment.process.poll() is not None
-    assert stat.S_IMODE(log_path.stat().st_mode) == PRIVATE_FILE_PERMISSIONS
+    assert has_mode(log_path, PRIVATE_FILE_PERMISSIONS)
 
 
 @pytest.mark.parametrize(
@@ -956,6 +960,7 @@ def test_readiness_requires_the_served_context_to_match_the_profile(
                 wait_for_deployment(deployment, timeout_seconds=MANAGED_TEST_STARTUP_TIMEOUT_SECONDS)
 
 
+@POSIX_PROCESS_GROUPS
 def test_teardown_treats_a_denied_signal_as_a_finished_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -973,6 +978,7 @@ def test_teardown_treats_a_denied_signal_as_a_finished_group(
     assert deployment.process.returncode is not None
 
 
+@POSIX_PROCESS_GROUPS
 def test_teardown_failure_keeps_the_error_that_is_already_propagating(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1566,17 +1572,13 @@ def test_download_asks_for_identity_encoding_so_the_bytes_are_the_pinned_bytes(
 
 def _sglang_reporting(tmp_path: Path, version: str) -> CommandFinder:
     """Return a finder for a stand-in SGLang that reports the given version."""
-    executable = tmp_path / "sglang"
-    executable.write_text(f'#!/bin/sh\necho "sglang version: {version}"\n')
-    executable.chmod(0o755)
+    executable = write_python_executable(tmp_path / "sglang", f"print('sglang version: {version}')\n")
     return lambda command: str(executable)
 
 
 def _vllm_reporting(tmp_path: Path, version: str) -> CommandFinder:
     """Return a finder for a stand-in vLLM that reports the given version on `--version`."""
-    executable = tmp_path / "vllm"
-    executable.write_text(f'#!/bin/sh\necho "{version}"\n')
-    executable.chmod(0o755)
+    executable = write_python_executable(tmp_path / "vllm", f"print({version!r})\n")
     return lambda command: str(executable)
 
 
@@ -1890,9 +1892,9 @@ def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch
     assert candidate.deployment is not None
     candidate = replace(candidate, deployment=replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),)))
     _cached_weights(tmp_path, candidate)
-    executable = tmp_path / "sglang"
-    executable.write_text('#!/bin/sh\nsleep 2\necho "sglang version: 0.5.18"\n')
-    executable.chmod(0o755)
+    executable = write_python_executable(
+        tmp_path / "sglang", "import time\ntime.sleep(2)\nprint('sglang version: 0.5.18')\n"
+    )
     monkeypatch.setattr("agentperf_local.deployment.frameworks.FRAMEWORK_VERSION_TIMEOUT_SECONDS", 0.2)
 
     with pytest.raises(ValueError, match=r"did not report a version .* \(unreported \(version check timed out\)\)"):

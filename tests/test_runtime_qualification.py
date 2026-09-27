@@ -26,6 +26,7 @@ from agentperf_local.deployment.qualification import (
     synthetic_probe_pack,
     write_runtime_qualification,
 )
+from tests.file_modes import has_mode
 
 MODEL = "synthetic-model"
 PROFILE = "synthetic-profile"
@@ -168,7 +169,7 @@ async def test_qualifies_structured_streams_without_storing_generated_values(tmp
     assert report.pack_digest == "sha256:95690cb1f6037c919eaf7780381436e8c0957922333972a67e239b5d0458033e"
     assert report.pack_digest == probe_pack_digest(synthetic_probe_pack("different-model"))
     assert written.byte_size == len(encoded)
-    assert output_path.stat().st_mode & 0o777 == 0o600
+    assert has_mode(output_path, 0o600)
     assert b"AA-17" not in encoded
     assert b"READY" not in encoded
     assert b"runtime qualification" not in encoded

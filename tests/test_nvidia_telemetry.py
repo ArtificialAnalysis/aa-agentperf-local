@@ -15,16 +15,16 @@ from agentperf_local.telemetry.nvidia import (
     collect_nvidia_telemetry,
     parse_nvidia_csv_line,
 )
+from tests.fake_executable import write_python_executable
+from tests.file_modes import has_mode
 
 SAMPLE_TIME_NS = 1_000_000_000
 SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "private-nvidia-telemetry-v2.schema.json"
 RUN_ID = "8f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
 
 
-def _write_executable(path: Path, lines: tuple[str, ...]) -> None:
-    body = "#!/bin/sh\n" + "\n".join(f"printf '%s\\n' '{line}'" for line in lines) + "\n"
-    path.write_text(body, encoding="utf-8")
-    path.chmod(0o700)
+def _write_executable(path: Path, lines: tuple[str, ...]) -> Path:
+    return write_python_executable(path, "".join(f"print({line!r})\n" for line in lines))
 
 
 def _records(path: Path) -> list[JsonObject]:
@@ -56,9 +56,8 @@ def test_parses_supported_and_missing_nvidia_fields() -> None:
 
 
 def test_collects_normalized_jsonl_without_raw_device_identifiers(tmp_path: Path) -> None:
-    executable = tmp_path / "fake-nvidia-smi"
-    _write_executable(
-        executable,
+    executable = _write_executable(
+        tmp_path / "fake-nvidia-smi",
         (
             "91, 14322, 67, 418.2, 2745, 14001",
             "N/A, 14323, 68, [Not Supported], 2700, 13990",
@@ -100,16 +99,15 @@ def test_collects_normalized_jsonl_without_raw_device_identifiers(tmp_path: Path
     assert records[3]["graceful"] is True
     assert str(executable).encode() not in encoded
     assert b"Not Supported" not in encoded
-    assert output_path.stat().st_mode & 0o777 == 0o600
+    assert has_mode(output_path, 0o600)
 
     with pytest.raises(FileExistsError):
         collect_nvidia_telemetry(config)
 
 
 def test_glitched_lines_become_all_missing_samples_and_collection_continues(tmp_path: Path) -> None:
-    executable = tmp_path / "glitching-nvidia-smi"
-    _write_executable(
-        executable,
+    executable = _write_executable(
+        tmp_path / "glitching-nvidia-smi",
         (
             "91, 14322, 67, 418.2, 2745, 14001",
             "",
@@ -151,8 +149,9 @@ def test_glitched_lines_become_all_missing_samples_and_collection_continues(tmp_
 
 
 def test_output_without_one_parseable_sample_is_not_graceful(tmp_path: Path) -> None:
-    executable = tmp_path / "unparseable-nvidia-smi"
-    _write_executable(executable, ("", "private raw driver error", "", "GPU is lost"))
+    executable = _write_executable(
+        tmp_path / "unparseable-nvidia-smi", ("", "private raw driver error", "", "GPU is lost")
+    )
     output_path = tmp_path / "unparseable-telemetry.jsonl"
 
     result = collect_nvidia_telemetry(CollectorConfig(output_path=output_path, executable=str(executable)))
@@ -170,9 +169,7 @@ def test_output_without_one_parseable_sample_is_not_graceful(tmp_path: Path) -> 
 
 
 def test_a_silent_collector_stops_when_the_stop_event_is_set(tmp_path: Path) -> None:
-    executable = tmp_path / "stalled-nvidia-smi"
-    executable.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
-    executable.chmod(0o700)
+    executable = write_python_executable(tmp_path / "stalled-nvidia-smi", "import time\ntime.sleep(30)\n")
     output_path = tmp_path / "stalled-telemetry.jsonl"
     stop_event = threading.Event()
     timer = threading.Timer(0.2, stop_event.set)
@@ -193,19 +190,14 @@ def test_a_silent_collector_stops_when_the_stop_event_is_set(tmp_path: Path) -> 
 
 
 def test_a_rejected_power_field_is_retried_with_the_legacy_field(tmp_path: Path) -> None:
-    executable = tmp_path / "old-driver-nvidia-smi"
-    executable.write_text(
-        "#!/bin/sh\n"
-        'case "$*" in\n'
-        "  *power.draw.average*)\n"
-        "    echo 'Field \"power.draw.average\" is not a valid field to query.' >&2\n"
-        "    exit 6\n"
-        "    ;;\n"
-        "esac\n"
-        "printf '%s\\n' '91, 14322, 67, 418.2, 2745, 14001'\n",
-        encoding="utf-8",
+    executable = write_python_executable(
+        tmp_path / "old-driver-nvidia-smi",
+        "import sys\n"
+        "if any('power.draw.average' in argument for argument in sys.argv):\n"
+        "    print('Field \"power.draw.average\" is not a valid field to query.', file=sys.stderr)\n"
+        "    sys.exit(6)\n"
+        "print('91, 14322, 67, 418.2, 2745, 14001')\n",
     )
-    executable.chmod(0o700)
     output_path = tmp_path / "legacy-telemetry.jsonl"
 
     result = collect_nvidia_telemetry(CollectorConfig(output_path=output_path, executable=str(executable)))
@@ -220,9 +212,7 @@ def test_a_rejected_power_field_is_retried_with_the_legacy_field(tmp_path: Path)
 
 
 def test_writes_a_closed_failure_footer_when_the_collector_process_fails(tmp_path: Path) -> None:
-    executable = tmp_path / "failing-nvidia-smi"
-    executable.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
-    executable.chmod(0o700)
+    executable = write_python_executable(tmp_path / "failing-nvidia-smi", "import sys\nsys.exit(3)\n")
     output_path = tmp_path / "failed-telemetry.jsonl"
 
     result = collect_nvidia_telemetry(CollectorConfig(output_path=output_path, executable=str(executable)))
