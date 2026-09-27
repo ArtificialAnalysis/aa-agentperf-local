@@ -214,7 +214,7 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
         await pilot.pause()
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        assert app.focused is app.query_one("#model-list", OptionList)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#model-list", OptionList))
 
         await _highlight_profile(app, pilot, "qwen38-27b-q4-k-m")
         await pilot.press("enter")
@@ -231,7 +231,7 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
         await pilot.press("enter")
         await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
-        assert app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
 
         await pilot.press("space")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
@@ -242,7 +242,7 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
 
         await pilot.press("escape")
         await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
         assert app.query_one("#output-input", Input).value == str(tmp_path / "private" / "results")
 
 
@@ -255,7 +255,7 @@ async def test_small_terminal_completes_mini_run_with_arrow_navigation(size: tup
         await pilot.pause()
         welcome = app.query_one("#welcome-start", Button)
         existing = app.query_one("#welcome-existing", Button)
-        assert app.focused is welcome
+        await _settle_until(pilot, lambda: app.focused is welcome)
         assert welcome.region.bottom <= existing.region.y
         assert existing.region.bottom < size[1]
         assert app.screen.active_bindings["question_mark"].binding.show
@@ -280,7 +280,7 @@ async def test_small_terminal_completes_mini_run_with_arrow_navigation(size: tup
 
         await pilot.press("down", "down")
         replay = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
-        assert app.focused is replay
+        await _settle_until(pilot, lambda: app.focused is replay)
         # The full replay is first, so the quick mini check sits one below it.
         await pilot.press("enter", "home", "down", "enter")
         assert replay.value == "aa-mini-v1"
@@ -290,7 +290,7 @@ async def test_small_terminal_completes_mini_run_with_arrow_navigation(size: tup
         await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
-        assert app.focused is consent
+        await _settle_until(pilot, lambda: app.focused is consent)
         assert consent.region.bottom < size[1]
         await pilot.press("space")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
@@ -327,14 +327,14 @@ async def test_arrow_keys_move_focus_across_closed_dropdowns_and_inputs(tmp_path
         await pilot.press("enter", "enter")
         await pilot.pause()
         assert app.step is TuiStep.CONFIG
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
         replay_select = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
         replay_select.focus()
         await pilot.pause()
         await pilot.press("down")
         assert not replay_select.expanded
-        assert app.focused is app.query_one("#base-url-input", Input)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#base-url-input", Input))
 
         await pilot.press("down")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-model-input", Input))
@@ -346,16 +346,16 @@ async def test_arrow_keys_move_focus_across_closed_dropdowns_and_inputs(tmp_path
         app.query_one("#advanced-toggle", Button).focus()
         await pilot.press("enter", "down")
         client_select = app.query_one("#client-backend-select", ClientBackendSelect)
-        assert app.focused is client_select
+        await _settle_until(pilot, lambda: app.focused is client_select)
         client_select.focus()
         await pilot.pause()
         await pilot.press("down")
         assert not client_select.expanded
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
         await pilot.press("shift+tab", "up", "up")
         assert not client_select.expanded
-        assert app.focused is app.query_one("#output-input", Input)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#output-input", Input))
 
 
 async def test_setup_field_focus_parks_the_cursor_and_blur_rewinds_the_view(tmp_path: Path) -> None:
@@ -406,7 +406,7 @@ async def test_setup_actions_stay_visible_and_help_returns_to_the_edit(size: tup
         await pilot.press("f1", "ctrl+p", "escape")
         await pilot.pause()
         assert app.step is TuiStep.CONFIG
-        assert app.focused is output
+        await _settle_until(pilot, lambda: app.focused is output)
         assert output.cursor_position == cursor
         assert page.scroll_y == scroll_y
         assert review.region == review_region
@@ -493,7 +493,7 @@ async def test_arrow_keys_only_scroll_the_run_page(size: tuple[int, int], tmp_pa
         await pilot.press("down", "down", "up", "enter")
         await pilot.pause()
         assert app.step is TuiStep.RUN
-        assert app.focused is app.query_one("#activity-lines", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
         assert not app.replay_cancelling
         assert not app.cancel_armed
 
@@ -525,7 +525,7 @@ async def test_a_second_run_starts_with_the_default_run_view(tmp_path: Path) -> 
         # The compact run page opens on the activity log; the details view belongs to one run.
         assert not app.query_one("#run").has_class("show-details")
         assert app.query_one("#activity-lines", RichLog).display
-        assert app.focused is app.query_one("#activity-lines", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
         release.set()
         await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
@@ -542,7 +542,7 @@ async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_pat
         await pilot.press("space")
         await pilot.pause()
         run = app.query_one("#run-start", Button)
-        assert app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
         assert run.disabled
         await pilot.press("f1")
         await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
@@ -554,15 +554,15 @@ async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_pat
         await pilot.press("escape")
         await pilot.pause()
         assert app.step is TuiStep.PREFLIGHT
-        assert app.focused is run
+        await _settle_until(pilot, lambda: app.focused is run)
 
         # With nothing left to become ready, a detour returns to the control the user left.
         await pilot.press("tab")
         back = app.query_one("#preflight-back", Button)
-        assert app.focused is back
+        await _settle_until(pilot, lambda: app.focused is back)
         await pilot.press("f1", "escape")
         await pilot.pause()
-        assert app.focused is back
+        await _settle_until(pilot, lambda: app.focused is back)
 
         # An answer that arrives after the user moved on leaves their control focused.
         probe_release.clear()
@@ -574,12 +574,12 @@ async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_pat
         await pilot.pause()
         await pilot.press("space", "tab")
         submit = app.query_one("#submit-checkbox", Checkbox)
-        assert app.focused is submit
+        await _settle_until(pilot, lambda: app.focused is submit)
         probe_release.set()
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert not run.disabled
-        assert app.focused is submit
+        await _settle_until(pilot, lambda: app.focused is submit)
 
 
 async def test_form_pages_leave_the_arrow_keys_to_focus_movement(tmp_path: Path) -> None:
@@ -588,7 +588,7 @@ async def test_form_pages_leave_the_arrow_keys_to_focus_movement(tmp_path: Path)
     async with app.run_test(size=(72, 24)) as pilot:
         await pilot.click("#welcome-existing")
         await pilot.pause()
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
         assert isinstance(app.query_one("#config"), FormPage)
         # A form page never claims the arrows, so even an overflowing form still moves between fields.
         assert app.screen.active_bindings["down"].binding.action == "focus_next"
@@ -597,7 +597,7 @@ async def test_form_pages_leave_the_arrow_keys_to_focus_movement(tmp_path: Path)
         await pilot.press("f1")
         await pilot.pause()
         back = app.query_one("#methodology-back", Button)
-        assert app.focused is back
+        await _settle_until(pilot, lambda: app.focused is back)
         # Reading pages keep the arrows for scrolling, and only real controls are focus stops.
         assert app.screen.active_bindings["down"].binding.action == "scroll_down"
         assert app.query_one("#help-privacy", Button).region.bottom <= 24
@@ -720,7 +720,7 @@ async def test_dropdown_opens_with_enter_and_escape_closes_it_on_the_same_screen
         await pilot.press("escape")
         assert not replay_select.expanded
         assert app.step is TuiStep.CONFIG
-        assert app.focused is replay_select
+        await _settle_until(pilot, lambda: app.focused is replay_select)
         assert replay_select.value == initial_value
 
         # The custom entry is the last option, whatever the bundled replay count.
@@ -1425,7 +1425,7 @@ async def test_managed_candidate_selects_a_compatible_framework_and_saves_eviden
         assert consent.region.height >= 2
         consent.value = True
         await pilot.pause()
-        assert app.focused is app.query_one("#run-start", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
         app.query_one("#run-start", Button).press()
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -1765,7 +1765,7 @@ async def test_blocked_preflight_names_its_cause(
         preflight_status = app.query_one("#preflight-status", Static)
         assert preflight_status.has_class("error-card")
         assert str(app.query_one("#preflight-hero", Static).content) == PREFLIGHT_BLOCKED_HERO
-        assert app.focused is app.query_one("#preflight-back", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#preflight-back", Button))
         status = str(preflight_status.content)
         assert status.startswith(expected_status)
         assert status.endswith(BLOCKED_ACTION_MESSAGE)
@@ -1829,7 +1829,7 @@ async def test_preflight_worker_does_not_block_navigation_or_apply_a_stale_resul
         assert "Checking files" in str(app.query_one("#preflight-status", Static).content)
         # The wait is animated so a slow probe still reads as alive.
         assert app.preflight_spinner_timer is not None
-        assert app.focused is app.query_one("#preflight-back", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#preflight-back", Button))
         assert app.query_one("#endpoint-consent-checkbox", Checkbox).disabled
         assert "Remote server URL" in str(app.query_one("#preflight-evidence", Static).content)
         await pilot.click("#preflight-back")
@@ -1864,19 +1864,19 @@ async def test_preflight_completion_while_privacy_is_open_preserves_visible_focu
 
         privacy_back = app.query_one("#privacy-back", Button)
         assert app.step is TuiStep.PRIVACY
-        assert app.focused is privacy_back
+        await _settle_until(pilot, lambda: app.focused is privacy_back)
 
         release.set()
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert app.step is TuiStep.PRIVACY
-        assert app.focused is privacy_back
+        await _settle_until(pilot, lambda: app.focused is privacy_back)
 
         app.query_one("#privacy-back", Button).focus()
         await pilot.press("enter")
         await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
-        assert app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
         assert app.request is not None
 
 
@@ -1919,8 +1919,8 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
 
     async with app.run_test(size=(72, 24)) as pilot:
         await pilot.pause()
-        assert app.focused is app.query_one("#welcome-start", Button)
-        assert app.focused.region.height == 2
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#welcome-start", Button))
+        assert app.query_one("#welcome-start", Button).region.height == 2
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#model-list", OptionList))
         rendered = app.export_screenshot()
@@ -1936,7 +1936,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         await _settle_until(pilot, lambda: app.focused is model_continue)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-        assert app.focused.region.bottom <= 24
+        assert app.query_one("#config-continue", Button).region.bottom <= 24
         rendered = app.export_screenshot()
         assert "STEP&#160;2&#160;OF&#160;4" in rendered
         assert "Set&#160;up&#160;the&#160;run" in rendered
@@ -1949,7 +1949,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
 
         assert app.step is TuiStep.PREFLIGHT
         endpoint_consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
-        assert app.focused is endpoint_consent
+        await _settle_until(pilot, lambda: app.focused is endpoint_consent)
         assert endpoint_consent.region.right <= 72
         assert endpoint_consent.region.height == 1
         await pilot.press("space")
@@ -2119,7 +2119,7 @@ async def test_execution_failure_hides_private_error_and_disables_upload_action(
         assert app.step is TuiStep.RESULT
         assert app.outcome is TuiOutcome.FAILED
         assert app.execution is None
-        assert app.focused is app.query_one("#result-new", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#result-new", Button))
         visible_text = " ".join(str(widget.content) for widget in app.query(Static))
         assert private_error not in visible_text
         assert private_error not in app.export_screenshot()
@@ -2154,7 +2154,7 @@ async def test_privacy_and_methodology_shortcuts_restore_the_previous_step(tmp_p
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.press("ctrl+p")
         await _settle_until(pilot, lambda: app.step is TuiStep.PRIVACY)
-        assert app.focused is app.query_one("#privacy-back", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#privacy-back", Button))
         await pilot.press("?")
         await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
         await pilot.press("ctrl+p")
@@ -2288,7 +2288,7 @@ async def test_cancel_discards_the_active_replay_without_resume(tmp_path: Path) 
         await _start_run_by_click(app, pilot)
         await pilot.pause()
         assert app.step is TuiStep.RUN
-        assert app.focused is app.query_one("#activity-lines", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
 
         await pilot.press("ctrl+c")
         await pilot.pause()
@@ -2323,15 +2323,15 @@ async def test_final_report_commit_cannot_be_cancelled(tmp_path: Path) -> None:
         assert app.replay_finalizing
         assert cancel.disabled
         assert "Saving" in str(cancel.label)
-        assert app.focused is timeline
+        await _settle_until(pilot, lambda: app.focused is timeline)
         await pilot.press("q")
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         assert app.replay_active
-        assert app.focused is timeline
+        await _settle_until(pilot, lambda: app.focused is timeline)
         await pilot.press("ctrl+c")
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         assert app.replay_active
-        assert app.focused is timeline
+        await _settle_until(pilot, lambda: app.focused is timeline)
 
         finalization_gate.set()
         await pilot.pause()
@@ -2355,19 +2355,19 @@ async def test_finalization_while_privacy_is_open_preserves_visible_keyboard_foc
 
         privacy_back = app.query_one("#privacy-back", Button)
         assert app.step is TuiStep.PRIVACY
-        assert app.focused is privacy_back
+        await _settle_until(pilot, lambda: app.focused is privacy_back)
 
         replay_gate.set()
         await pilot.pause()
         assert app.replay_finalizing
         assert app.step is TuiStep.PRIVACY
-        assert app.focused is privacy_back
+        await _settle_until(pilot, lambda: app.focused is privacy_back)
 
         app.query_one("#privacy-back", Button).focus()
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         assert app.step is TuiStep.RUN
-        assert app.focused is app.query_one("#activity-lines", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
 
         finalization_gate.set()
         await pilot.pause()
@@ -2469,7 +2469,7 @@ async def test_terminal_size_contract(size: tuple[int, int], warning_visible: bo
             assert not warning.display
             assert content.display
             assert str(app.query_one("#welcome-logo", PixelLogo).content) == PIXEL_LOGO_SMALL
-            assert app.focused is app.query_one("#welcome-start", Button)
+            await _settle_until(pilot, lambda: app.focused is app.query_one("#welcome-start", Button))
 
 
 async def test_a_second_run_with_unchanged_settings_starts_clean_in_a_fresh_run_folder(tmp_path: Path) -> None:
@@ -2554,7 +2554,7 @@ async def test_a_run_ending_while_privacy_is_open_keeps_the_page_and_returns_to_
         await pilot.pause()
 
         assert app.step is TuiStep.PRIVACY
-        assert app.focused is privacy_back
+        await _settle_until(pilot, lambda: app.focused is privacy_back)
         assert app.outcome is expected_outcome
 
         await pilot.press("escape")
@@ -3392,7 +3392,7 @@ async def test_setup_focuses_continue_unless_a_custom_manifest_needs_a_path(tmp_
         await pilot.press("enter", "enter")
         await pilot.pause()
         assert app.step is TuiStep.CONFIG
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
         app.query_one("#replay-workload-select", ReplayWorkloadSelect).value = CUSTOM_REPLAY_ID
         await _settle_until(pilot, lambda: app.focused is app.query_one("#manifest-input", Input))
@@ -3401,7 +3401,7 @@ async def test_setup_focuses_continue_unless_a_custom_manifest_needs_a_path(tmp_
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         assert app.step is TuiStep.CONFIG
-        assert app.focused is app.query_one("#manifest-input", Input)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#manifest-input", Input))
 
         app.query_one("#manifest-input", Input).value = str(tmp_path / "replay.json")
         await pilot.press("escape")
@@ -3463,7 +3463,7 @@ async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> No
         assert result_bindings["escape"].binding.show
         # Enter still starts a new run from the focused button, but the footer names
         # New run only once; the button label already names its action.
-        assert app.focused is app.query_one("#result-new", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#result-new", Button))
         assert not result_bindings["enter"].binding.show
 
 
@@ -3536,7 +3536,7 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         assert str(app.query_one("#run-left-title", Static).content) == "SERVER LOG · llama.cpp"
         server_log = "\n".join(strip.text for strip in app.query_one("#run-server-log", RichLog).lines)
         assert "llama_model_loader" in server_log
-        assert app.focused is app.query_one("#run-server-log", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-server-log", RichLog))
         await pilot.press("l")
         await pilot.pause()
         assert switcher.current == "run-activity"
@@ -3644,7 +3644,7 @@ async def test_consent_checks_the_server_before_run_is_offered(
         reduced_recorded = EligibilityReason.REDUCED_CONTEXT in app.evidence.ineligibility_reasons
         assert reduced_recorded is (probe.observed_tokens is None or probe.observed_tokens < 65_536)
         if run_offered:
-            assert app.focused is app.query_one("#run-start", Button)
+            await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
 
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = False
         await _settle_until(pilot, lambda: run.disabled and not server_check.display)
@@ -3860,13 +3860,13 @@ async def test_submission_stays_busy_until_server_responds(
                 assert new_run.disabled
                 # New run is disabled, so focus takes the visible details toggle and survives Help.
                 details = app.query_one("#result-details-toggle", Button)
-                assert app.focused is details
+                await _settle_until(pilot, lambda: app.focused is details)
                 await pilot.press("f1")
                 await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
                 await pilot.press("escape")
                 await pilot.pause()
                 assert app.step is TuiStep.RESULT
-                assert app.focused is details
+                await _settle_until(pilot, lambda: app.focused is details)
                 assert busy.region.height == 1
                 assert busy.region.right <= size[0]
                 assert busy.region.bottom < size[1]
@@ -3882,7 +3882,7 @@ async def test_submission_stays_busy_until_server_responds(
             assert not app.upload_active
             assert not busy.display
             assert not new_run.disabled
-            assert app.focused is new_run
+            await _settle_until(pilot, lambda: app.focused is new_run)
             await pilot.press("enter")
             await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
             await pilot.press("q")
