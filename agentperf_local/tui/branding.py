@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 
+from pydantic import BaseModel
 from textual.widgets import Static
 
 # Palette sourced from https://artificialanalysis.ai on 2026-09-01.
@@ -59,8 +59,7 @@ KITTY_BLINK = KITTY_CURIOUS.replace("o.o", "-.-")
 KITTY_GLANCE = KITTY_CURIOUS.replace(" o.o ", "o.o  ")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class KittyFrame:
+class KittyFrame(BaseModel, frozen=True):
     """Hold one expression before showing the next."""
 
     art: str

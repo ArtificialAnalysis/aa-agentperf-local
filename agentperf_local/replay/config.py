@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 import os
 import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
+
+from pydantic import BaseModel, SecretStr, model_validator
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend
 from agentperf_local.client.endpoint import normalize_base_url, url_is_cleartext_remote
@@ -57,8 +58,7 @@ def _require_finite(name: str, value: float | None) -> None:
         raise ValueError(f"{name} must be a finite number")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SamplingSettings:
+class SamplingSettings(BaseModel, frozen=True):
     """Store resolved sampling values for completion requests."""
 
     preset: SamplingPreset
@@ -66,19 +66,20 @@ class SamplingSettings:
     top_p: float | None
     extra_body: tuple[tuple[str, JsonValue], ...]
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject non-finite sampling values."""
         _require_finite("temperature", self.temperature)
         _require_finite("top_p", self.top_p)
+        return self
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunConfig:
+class RunConfig(BaseModel, frozen=True):
     """Configure one sequential manifest replay."""
 
     base_url: str
     model: str
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     client_backend: ClientBackend = "python"
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     output_token_policy: OutputTokenPolicy = "exact"
@@ -101,7 +102,13 @@ class RunConfig:
     live_timeout_seconds: float = DEFAULT_LIVE_TOOL_TIMEOUT_SECONDS
     live_docker_executable: str | None = None
 
-    def __post_init__(self) -> None:
+    @property
+    def api_key_text(self) -> str | None:
+        """Return the API key text for the request header, or None when there is no key."""
+        return None if self.api_key is None else self.api_key.get_secret_value()
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject invalid or contradictory settings."""
         _require_finite("request_timeout_seconds", self.request_timeout_seconds)
         _require_finite("temperature", self.temperature)
@@ -165,6 +172,7 @@ class RunConfig:
         )
         if self.tool_mode != "live" and live_options_set:
             raise ValueError("live Docker options require tool_mode=live")
+        return self
 
     def docker_executable(self) -> str:
         """Resolve the Docker-compatible executable this run drives."""

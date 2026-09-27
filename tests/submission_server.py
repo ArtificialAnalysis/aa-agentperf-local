@@ -8,6 +8,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
 
@@ -16,8 +17,7 @@ SUBMISSION_ID = "sub_abcdefghijklmnopqrstuvwxyz"
 ALLOWLISTED_REVISION = "2" * 40
 
 
-@dataclass(frozen=True, slots=True)
-class CapturedSubmission:
+class CapturedSubmission(BaseModel, frozen=True):
     """Store one request the fake service accepted or refused."""
 
     headers: dict[str, str]

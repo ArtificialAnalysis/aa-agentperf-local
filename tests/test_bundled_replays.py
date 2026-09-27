@@ -1,13 +1,13 @@
 """Exercise replay workloads shipped with the package."""
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agentperf_local.cli.options import DEFAULT_MANAGED_PROFILE_ID
 from agentperf_local.client.request import DEFAULT_MAX_OUTPUT_TOKENS
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import BUNDLED_RECIPES_ROOT, load_model_catalog
 from agentperf_local.deployment.context_policy import REDUCED_CONTEXT_LADDER, reduced_context_rungs
 from agentperf_local.provenance.benchmark import (
@@ -199,7 +199,7 @@ async def test_mini_replay_fits_8k_and_validates_submission_outputs(
             max_output_tokens=output_limit,
             output_token_policy=policy,
         )
-        context = replace(
+        context = replace_fields(
             create_attached_submission_context(replay.manifest_path, config.model), context_tokens=MINI_CONTEXT_TOKENS
         )
         binding = create_measurement_binding(

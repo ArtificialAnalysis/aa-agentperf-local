@@ -6,8 +6,10 @@ and schema constants.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.identity import validate_digest, validate_run_id
 from agentperf_local.common.json_fields import optional_object, require_exact_keys, required_object, required_string
@@ -49,8 +51,7 @@ _AUDIT_KEYS = frozenset(
 _RETENTION_KEYS = frozenset(("recipient", "published", "bounded_days"))
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PrivateAudit:
+class PrivateAudit(BaseModel, frozen=True):
     """Hold the evidence the service needs for classification but never publishes."""
 
     run_id: str
@@ -61,7 +62,8 @@ class PrivateAudit:
     power: PowerSummary | None
     version: int = PRIVATE_AUDIT_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require every companion record to name this run."""
         validate_run_id(self.run_id, "run_id")
         validate_digest(self.aggregate_payload_digest, "aggregate_payload_digest")
@@ -69,6 +71,7 @@ class PrivateAudit:
             raise ValueError("the runtime qualification report belongs to a different run")
         if self.power is not None and self.power.run_id != self.run_id:
             raise ValueError("the power summary belongs to a different run")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the closed private audit envelope."""

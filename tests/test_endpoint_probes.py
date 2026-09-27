@@ -74,7 +74,7 @@ async def test_probe_reads_ignore_eos_support_and_binds_the_policy(
     # The control request is sent only when the first answer did not settle it, and every
     # probe request streams, as the replay's turns do.
     assert [request.asks_ignore_eos for request in stub.requests] == [True, False][:expected_requests]
-    assert all(request.json is not None and request.json.get("stream") is True for request in stub.requests)
+    assert all(request.body_json is not None and request.body_json.get("stream") is True for request in stub.requests)
 
 
 @pytest.mark.parametrize(

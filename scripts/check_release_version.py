@@ -3,15 +3,15 @@
 import argparse
 import sys
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 TAG_PREFIX = "v"
 
 
-@dataclass(frozen=True, slots=True)
-class VersionSite:
+class VersionSite(BaseModel, frozen=True):
     """Name one file and the exact line it must hold for a version."""
 
     path: str
@@ -24,12 +24,16 @@ class VersionSite:
 
 # pyproject.toml is the source of truth; every other copy must repeat its version exactly.
 VERSION_SITES = (
-    VersionSite("pyproject.toml", 'rust = ["agentperf-local-rustcore=={version}"]'),
-    VersionSite("agentperf_local/__init__.py", '__version__ = "{version}"'),
-    VersionSite("agentperf_local/client/endpoint.py", 'MEASURED_USER_AGENT = "agentperf-local/{version}"'),
-    VersionSite("rustcore/pyproject.toml", 'version = "{version}"'),
-    VersionSite("rustcore/Cargo.toml", 'version = "{version}"'),
-    VersionSite("rustcore/src/engine.rs", 'const MEASURED_USER_AGENT: &str = "agentperf-local/{version}";'),
+    VersionSite(path="pyproject.toml", line_template='rust = ["agentperf-local-rustcore=={version}"]'),
+    VersionSite(path="agentperf_local/__init__.py", line_template='__version__ = "{version}"'),
+    VersionSite(
+        path="agentperf_local/client/endpoint.py", line_template='MEASURED_USER_AGENT = "agentperf-local/{version}"'
+    ),
+    VersionSite(path="rustcore/pyproject.toml", line_template='version = "{version}"'),
+    VersionSite(path="rustcore/Cargo.toml", line_template='version = "{version}"'),
+    VersionSite(
+        path="rustcore/src/engine.rs", line_template='const MEASURED_USER_AGENT: &str = "agentperf-local/{version}";'
+    ),
 )
 
 

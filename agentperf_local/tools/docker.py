@@ -7,9 +7,11 @@ import os
 import re
 import subprocess
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.workload.schema import RecordedToolCall
 
@@ -27,20 +29,20 @@ SWEBENCH_IMAGE_ARCHITECTURE_PATTERN = re.compile(rf"{re.escape(SWEBENCH_IMAGE_PR
 IMAGE_ARCHITECTURE_SEGMENTS = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "arm64", "aarch64": "arm64"}
 
 
-@dataclass(frozen=True, kw_only=True)
-class DockerEnvironmentVariable:
+class DockerEnvironmentVariable(BaseModel, frozen=True):
     """Store one environment variable passed to a tool container."""
 
     name: str
     value: str
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         if not self.name or "=" in self.name:
             raise ValueError("Docker environment variable names must not be empty or contain '='")
+        return self
 
 
-@dataclass(frozen=True, kw_only=True)
-class DockerToolEnvironmentConfig:
+class DockerToolEnvironmentConfig(BaseModel, frozen=True):
     """Configure one isolated live tool environment."""
 
     image: str
@@ -54,17 +56,18 @@ class DockerToolEnvironmentConfig:
     run_args: tuple[str, ...] = ("--rm",)
     environment: tuple[DockerEnvironmentVariable, ...] = ()
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         if not self.image:
             raise ValueError("Docker tool image must not be empty")
         if not self.interpreter:
             raise ValueError("Docker tool interpreter must not be empty")
         if self.command_timeout_seconds <= 0:
             raise ValueError("Docker tool command timeout must be positive")
+        return self
 
 
-@dataclass(frozen=True, kw_only=True)
-class ToolExecutionResult:
+class ToolExecutionResult(BaseModel, frozen=True):
     """Store the result of one live tool command."""
 
     output: str

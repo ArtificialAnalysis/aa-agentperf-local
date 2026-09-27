@@ -13,12 +13,12 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import IO, BinaryIO
+from typing import IO, BinaryIO, Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.argparse_fields import (
     read_integer,
@@ -39,6 +39,7 @@ from agentperf_local.common.json_fields import (
 )
 from agentperf_local.common.json_records import json_field_names, json_record
 from agentperf_local.common.json_types import JsonObject
+from agentperf_local.common.models import error_text
 
 # Version 2 added the run identifier to the header, the unparseable-line count to the
 # footer, and records a glitched sampler line as an all-missing sample.
@@ -86,8 +87,7 @@ MISSING_VALUES = (
 )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CollectorConfig:
+class CollectorConfig(BaseModel, frozen=True):
     """Store one NVIDIA collector policy."""
 
     output_path: Path
@@ -98,7 +98,8 @@ class CollectorConfig:
     # Set when a benchmark run owns this collection; the standalone command leaves it unset.
     run_id: str | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate collector settings."""
         if self.run_id is not None:
             validate_run_id(self.run_id, "run_id")
@@ -110,6 +111,7 @@ class CollectorConfig:
             raise ValueError("sample_limit must be positive")
         if not self.executable:
             raise ValueError("executable must not be empty")
+        return self
 
     def command(self, fields: tuple[str, ...]) -> tuple[str, ...]:
         """Return the exact allowlisted nvidia-smi command."""
@@ -122,8 +124,7 @@ class CollectorConfig:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NvidiaSample:
+class NvidiaSample(BaseModel, frozen=True):
     """Store one normalized sensor sample."""
 
     monotonic_ns: int
@@ -134,7 +135,8 @@ class NvidiaSample:
     graphics_clock_mhz: float | None
     memory_clock_mhz: float | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject invalid normalized values."""
         if self.monotonic_ns <= 0:
             raise ValueError("monotonic_ns must be positive")
@@ -150,6 +152,7 @@ class NvidiaSample:
             raise ValueError("telemetry values must be finite and non-negative")
         if self.gpu_utilization_percent is not None and self.gpu_utilization_percent > 100:
             raise ValueError("GPU utilization must not exceed 100 percent")
+        return self
 
     @classmethod
     def all_missing(cls, monotonic_ns: int) -> NvidiaSample:
@@ -205,8 +208,7 @@ class NvidiaSample:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CollectionResult:
+class CollectionResult(BaseModel, frozen=True):
     """Describe collector completion without raw error text."""
 
     output_path: Path
@@ -296,8 +298,7 @@ def _footer(
     }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TelemetryFooter:
+class TelemetryFooter(BaseModel, frozen=True):
     """Store how one collection ended, without any raw driver text."""
 
     sample_count: int
@@ -323,8 +324,7 @@ class TelemetryFooter:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TelemetryRecords:
+class TelemetryRecords(BaseModel, frozen=True):
     """Hold one telemetry file: its samples, and the footer when the collector finished."""
 
     samples: tuple[NvidiaSample, ...]
@@ -445,8 +445,7 @@ def _rejected_query(stderr_text: str) -> bool:
     return POWER_FIELD in lowered or INVALID_FIELD_MESSAGE in lowered
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _AttemptOutcome:
+class _AttemptOutcome(BaseModel, frozen=True):
     """Store what one collector process produced."""
 
     sample_count: int = 0
@@ -621,7 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             stop_event=stop_event,
         )
     except Exception as error:
-        print(f"error: {error}", file=sys.stderr)
+        print(f"error: {error_text(error)}", file=sys.stderr)
         return 1
     print(orjson.dumps(result.to_json(), option=orjson.OPT_INDENT_2).decode("utf-8"))
     return 0 if result.graceful else 1

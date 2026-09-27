@@ -7,8 +7,10 @@ import asyncio
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import SecretStr
 
 from agentperf_local.cli.options import (
     print_json,
@@ -44,6 +46,7 @@ from agentperf_local.common.durable_files import (
 )
 from agentperf_local.common.identity import mint_run_id
 from agentperf_local.common.json_types import JsonObject
+from agentperf_local.common.models import replace_fields
 from agentperf_local.common.units import BYTES_PER_GIB
 from agentperf_local.deployment.catalog import (
     ModelCatalog,
@@ -132,10 +135,11 @@ def _run_status(result: RunResult, failures_path: Path) -> int:
 
 def _run_config(namespace: argparse.Namespace, output_token_policy: OutputTokenPolicy) -> RunConfig:
     tool_mode = read_tool_mode(namespace)
+    api_key = read_api_key(namespace)
     return RunConfig(
         base_url=read_string(namespace, "base_url"),
         model=read_string(namespace, "model"),
-        api_key=read_api_key(namespace),
+        api_key=None if api_key is None else SecretStr(api_key),
         client_backend=read_client_backend(namespace),
         request_timeout_seconds=read_number(namespace, "timeout_seconds"),
         output_token_policy=output_token_policy,
@@ -414,7 +418,7 @@ def run_command(namespace: argparse.Namespace) -> int:
     probe = probe_served_context_tokens(
         config.base_url,
         config.model,
-        api_key=config.api_key,
+        api_key=config.api_key_text,
     )
     run_context = RunContextFacts(
         requested_tokens=BENCHMARK_CONTEXT_TOKENS,
@@ -427,7 +431,7 @@ def run_command(namespace: argparse.Namespace) -> int:
     # the command never switches the policy on the user's behalf.
     if config.output_token_policy == "exact":
         capability = asyncio.run(
-            probe_ignore_eos(config.base_url, config.model, config.client_backend, api_key=config.api_key)
+            probe_ignore_eos(config.base_url, config.model, config.client_backend, api_key=config.api_key_text)
         )
         if capability.output_token_policy != config.output_token_policy:
             raise RuntimeError(
@@ -438,7 +442,7 @@ def run_command(namespace: argparse.Namespace) -> int:
             print(f"warning: {capability.summary}; keeping the exact policy", file=sys.stderr)
     write_measurement_binding(
         measurement_path,
-        replace(binding, observed_context_tokens=probe.observed_tokens),
+        replace_fields(binding, observed_context_tokens=probe.observed_tokens),
     )
     with _discarded_binding_on_failure(measurement_path):
         observer: RunObserver | None = None

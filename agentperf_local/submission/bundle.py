@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import (
     PUBLIC_FILE_PERMISSIONS,
@@ -88,8 +89,7 @@ SANITIZED_EVIDENCE_ROLE = "sanitized_turn_evidence"
 PRIVATE_AUDIT_ROLE = "private_audit"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ArtifactContract:
+class ArtifactContract(BaseModel, frozen=True):
     """Name one bundle file's role, filename, schema, and privacy profile."""
 
     role: str
@@ -128,7 +128,7 @@ _MANIFEST_KEYS = frozenset(
 _PUBLIC_ENVELOPE_KEYS = frozenset(
     ("version", "kind", "privacy_profile", "payload_digest", "payload", "excluded_private_categories")
 )
-# These objects are not a writer dataclass's field list: the envelope and payload
+# These objects are not a writer model's field list: the envelope and payload
 # add constants, the producer adds its client name, the hardware profile adds a kind
 # and a notice, and the policy nests its fields. Each flat object is checked
 # against `json_field_names` of its writer instead.
@@ -163,8 +163,7 @@ _PUBLIC_POLICY_KEYS = frozenset(
 _PUBLIC_POLICY_CONTEXT_KEYS = frozenset(("requested_tokens", "observed_tokens", "full_benchmark_tokens", "reduced"))
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BundleArtifact:
+class BundleArtifact(BaseModel, frozen=True):
     """Bind one named bundle file to its exact bytes and schema."""
 
     role: str
@@ -175,13 +174,15 @@ class BundleArtifact:
     byte_size: int
     file_digest: str
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one fixed bundle artifact record."""
         validate_digest(self.file_digest, "file_digest")
         if self.byte_size <= 0:
             raise ValueError("bundle artifact byte size must be positive")
         if self.media_type != JSON_MEDIA_TYPE:
             raise ValueError("bundle artifacts must use the JSON media type")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return one exact-byte artifact record."""
@@ -202,8 +203,7 @@ class BundleArtifact:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SubmissionBundleManifest:
+class SubmissionBundleManifest(BaseModel, frozen=True):
     """Bind the aggregate, sanitized evidence, and private audit into one upload unit."""
 
     run_id: str
@@ -212,7 +212,8 @@ class SubmissionBundleManifest:
     artifacts: tuple[BundleArtifact, BundleArtifact, BundleArtifact]
     version: int = BUNDLE_MANIFEST_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate the closed three-file bundle layout."""
         validate_run_id(self.run_id, "run_id")
         validate_digest(self.aggregate_payload_digest, "aggregate_payload_digest")
@@ -224,6 +225,7 @@ class SubmissionBundleManifest:
             expected = (contract.role, contract.filename, contract.schema_id, contract.privacy_profile)
             if actual != expected:
                 raise ValueError(f"submission bundle {contract.role} artifact contract does not match")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the exact-byte bundle manifest."""
@@ -263,8 +265,7 @@ class SubmissionBundleManifest:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PreparedSubmissionBundle:
+class PreparedSubmissionBundle(BaseModel, frozen=True):
     """Hold validated objects and the exact bytes ready for local review."""
 
     aggregate: PublicSubmission
@@ -277,8 +278,7 @@ class PreparedSubmissionBundle:
     manifest_bytes: bytes
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class WrittenSubmissionBundle:
+class WrittenSubmissionBundle(BaseModel, frozen=True):
     """Describe a complete local bundle directory."""
 
     path: Path
@@ -286,8 +286,7 @@ class WrittenSubmissionBundle:
     total_byte_size: int
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ValidatedSubmissionBundle:
+class ValidatedSubmissionBundle(BaseModel, frozen=True):
     """Describe a bundle whose exact bytes and cross-file bindings match."""
 
     path: Path
@@ -378,7 +377,7 @@ def write_submission_bundle(output_dir: Path, bundle: PreparedSubmissionBundle) 
 def _validate_public_hardware(payload: JsonObject) -> PublicHardwareProfile | None:
     """Check the hardware profile against the public hardware writer.
 
-    Reconstructing the profile classes validates every label in their __post_init__.
+    Reconstructing the profile classes validates every label in their check_invariants.
     """
     source = "aggregate.payload.hardware"
     raw_hardware = payload.get("hardware")
@@ -413,8 +412,7 @@ def _validate_public_hardware(payload: JsonObject) -> PublicHardwareProfile | No
     return profile
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _PublicIdentity:
+class _PublicIdentity(BaseModel, frozen=True):
     """Hold the parsed identity blocks of one aggregate payload."""
 
     run_id: str

@@ -13,10 +13,10 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.common.identity import sha256_bytes, sha256_file
 from agentperf_local.common.json_records import json_record
@@ -53,8 +53,7 @@ MAX_FRAMEWORK_VERSION_CHARACTERS = 160
 type CommandFinder = Callable[[str], str | None]
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FrameworkExecutable:
+class FrameworkExecutable(BaseModel, frozen=True):
     """Store one installed framework command without a shell."""
 
     framework: DeploymentFramework
@@ -63,8 +62,7 @@ class FrameworkExecutable:
     executable_path: Path
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FrameworkOffer:
+class FrameworkOffer(BaseModel, frozen=True):
     """Describe one framework compatible with the detected accelerator."""
 
     framework: DeploymentFramework
@@ -82,8 +80,7 @@ class FrameworkOffer:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FrameworkIdentity:
+class FrameworkIdentity(BaseModel, frozen=True):
     """Identify the executable selected for one managed deployment."""
 
     version: str

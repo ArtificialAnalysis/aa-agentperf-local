@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import StrEnum
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
@@ -42,15 +44,15 @@ class ContextObservationReason(StrEnum):
     NON_POSITIVE_CONTEXT = "non-positive-context"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunContextFacts:
+class RunContextFacts(BaseModel, frozen=True):
     """Store what this run requested and observed about the served context window."""
 
     requested_tokens: int
     observed_tokens: int | None
     observed_reason: ContextObservationReason
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible context claims."""
         if self.requested_tokens <= 0 or self.requested_tokens > BENCHMARK_CONTEXT_TOKENS:
             raise ValueError(f"requested context must be between 1 and {BENCHMARK_CONTEXT_TOKENS} tokens")
@@ -58,6 +60,7 @@ class RunContextFacts:
             raise ValueError("observed context must be positive or None")
         if (self.observed_tokens is not None) != (self.observed_reason is ContextObservationReason.REPORTED):
             raise ValueError("observed_reason must be 'reported' exactly when a context observation exists")
+        return self
 
     @property
     def reduced(self) -> bool:

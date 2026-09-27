@@ -12,12 +12,14 @@ import asyncio
 import threading
 import time
 from contextlib import suppress
-from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
+from pydantic import BaseModel
+
 from agentperf_local.client.backends import ClientBackend
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
@@ -90,8 +92,7 @@ class RunActivityKind(StrEnum):
     SERVER_STOPPED = "server-stopped"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunActivity:
+class RunActivity(BaseModel, frozen=True):
     """Describe one run step with display-safe facts: counts, sizes, and names, never content or URLs."""
 
     kind: RunActivityKind
@@ -128,8 +129,7 @@ class ManagedRunObserver(RunObserver, Protocol):
         ...
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedRunInputs:
+class ManagedRunInputs(BaseModel, frozen=True):
     """Describe one managed run after its caller has validated the choice."""
 
     manifest_path: Path
@@ -153,8 +153,7 @@ class ManagedRunInputs:
     observe_replay: bool = True
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedRunOutcome:
+class ManagedRunOutcome(BaseModel, frozen=True):
     """Store the result and every evidence file one managed run wrote."""
 
     result: RunResult
@@ -216,8 +215,7 @@ async def write_run_artifacts_uncancellable(
         return await write_task
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _OwnedArtifact:
+class _OwnedArtifact(BaseModel, frozen=True):
     """Store the verified model files and whether this run had to download any."""
 
     artifact: VerifiedDeployment
@@ -394,7 +392,7 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         await asyncio.to_thread(
             write_measurement_binding,
             measurement_path,
-            replace(
+            replace_fields(
                 binding,
                 observed_context_tokens=served_context_tokens,
                 deployment_digest=written_deployment.file_digest,

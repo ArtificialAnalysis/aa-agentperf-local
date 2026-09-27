@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import ast
 import pathlib
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from agentperf_local.common.json_records import json_field_names, json_record, json_value
 from agentperf_local.common.json_types import JsonObject
@@ -20,8 +20,7 @@ class Colour(StrEnum):
     RED = "red"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Inner:
+class Inner(BaseModel, frozen=True):
     depth: int
 
     def to_json(self) -> JsonObject:
@@ -29,8 +28,7 @@ class Inner:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Outer:
+class Outer(BaseModel, frozen=True):
     name: str
     colour: Colour
     where: Path
@@ -82,13 +80,9 @@ def test_json_value_encodes_each_supported_kind(value: object, expected: object)
     assert json_value(value) == expected
 
 
-def test_unencodable_values_and_non_dataclasses_are_refused() -> None:
+def test_unencodable_values_are_refused() -> None:
     with pytest.raises(TypeError, match="has no JSON encoding"):
         json_value(object())
-    with pytest.raises(TypeError, match="is not a dataclass"):
-        json_field_names(Colour)
-    with pytest.raises(TypeError, match="must be a dataclass instance"):
-        json_record(Outer)
 
 
 def _classes_with_derived_keys() -> list[tuple[str, str, bool, bool]]:

@@ -6,8 +6,10 @@ import os
 import secrets
 import stat
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.identity import sha256_bytes
 
@@ -28,17 +30,18 @@ else:
 NEW_FILE_OPEN_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | PRIVATE_OPEN_FLAGS
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NewFile:
+class NewFile(BaseModel, frozen=True):
     """Hold one final path and its complete encoded bytes."""
 
     path: Path
     data: bytes
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require a concrete file name."""
         if self.path.name in {"", ".", ".."}:
             raise ValueError("new file path must name a file")
+        return self
 
 
 def _exists_without_following(path: Path) -> bool:
@@ -186,8 +189,7 @@ def validate_public_output_directory(private_root: Path, output_dir: Path, label
         raise FileExistsError(f"{label} already exists: {output_dir}")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class WrittenFile:
+class WrittenFile(BaseModel, frozen=True):
     """Describe one exact file written to disk."""
 
     path: Path

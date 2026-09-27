@@ -11,13 +11,14 @@ import socket
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, Self
 
 import httpx
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import (
     NEW_FILE_OPEN_FLAGS,
@@ -38,6 +39,7 @@ from agentperf_local.common.json_fields import (
     required_string,
 )
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     DEPLOYMENT_FRAMEWORK_ORDER,
     DeploymentFramework,
@@ -125,8 +127,7 @@ def strip_log_hint(message: str, log_path: Path) -> str:
     return message.replace(_log_hint("", log_path), "")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeploymentPlan:
+class DeploymentPlan(BaseModel, frozen=True):
     """Bind an exact model file, runtime command, and local endpoint."""
 
     profile_id: str
@@ -229,8 +230,7 @@ class ManagedDeployment:
             print(f"warning: managed server teardown failed: {error}", file=sys.stderr)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BoundDeploymentDevice:
+class BoundDeploymentDevice(BaseModel, frozen=True):
     """Bind one detected accelerator plus the environment that pins a child server to it."""
 
     snapshot: HardwareSnapshot
@@ -263,7 +263,7 @@ def bind_snapshot_to_device(snapshot: HardwareSnapshot, device_index: int | None
         raise ValueError(
             f"device index {device_index} is out of range; detected accelerators run from 0 to {count - 1}"
         )
-    bound = replace(snapshot, accelerators=(snapshot.accelerators[device_index],))
+    bound = replace_fields(snapshot, accelerators=(snapshot.accelerators[device_index],))
     platform = accelerator_platform(bound)
     return BoundDeploymentDevice(
         snapshot=bound,
@@ -936,8 +936,7 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeploymentRecord:
+class DeploymentRecord(BaseModel, frozen=True):
     """Hold the deployment facts a private audit may carry.
 
     The artifact path, launch command, host, and port stay in the on-disk record.
@@ -965,7 +964,8 @@ class DeploymentRecord:
     launch_configuration_digest: str
     record_digest: str
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate the identifiers and digests the audit chain relies on."""
         validate_run_id(self.deployment_id, "deployment_id")
         for field, value in (
@@ -981,6 +981,7 @@ class DeploymentRecord:
             raise ValueError("deployment artifact size and context tokens must be positive")
         if not self.gpu_startup_verified:
             raise ValueError("a deployment record without verified GPU startup cannot be audited")
+        return self
 
     @classmethod
     def from_audit_json(cls, data: JsonObject, source: str) -> DeploymentRecord:

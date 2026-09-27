@@ -15,7 +15,9 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TextIO
+from typing import Self, TextIO
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.units import BYTES_PER_GIB, MILLISECONDS_PER_SECOND
 from agentperf_local.provenance.hardware import HardwareSnapshot
@@ -51,8 +53,7 @@ class RunPhase(StrEnum):
     FAILED = "failed"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunProgress:
+class RunProgress(BaseModel, frozen=True):
     """Store one phase-boundary UI snapshot."""
 
     phase: RunPhase
@@ -71,7 +72,8 @@ class RunProgress:
     request_prompt_tokens: int | None
     note: str
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one display snapshot."""
         pairs = (
             (self.task, self.tasks, "task"),
@@ -95,6 +97,7 @@ class RunProgress:
             raise ValueError("TUI decode speed must be finite and non-negative")
         if "\n" in self.note or "\r" in self.note:
             raise ValueError("TUI notes must fit on one line")
+        return self
 
     @property
     def elapsed_seconds(self) -> float:
@@ -102,8 +105,7 @@ class RunProgress:
         return self.elapsed_ms / MILLISECONDS_PER_SECOND
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunTurnSample:
+class RunTurnSample(BaseModel, frozen=True):
     """Store the chart-safe numbers of one closed turn: timings and counts, never content."""
 
     turn: int
@@ -150,8 +152,7 @@ def cumulative_decode_tokens_per_second(samples: Sequence[RunTurnSample]) -> flo
     )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunProgressState:
+class RunProgressState(BaseModel, frozen=True):
     """Store the latest boundary-derived replay progress and every closed turn's sample."""
 
     progress: RunProgress | None = None
@@ -243,17 +244,18 @@ def reduce_run_boundary(state: RunProgressState, event: RunBoundaryEvent) -> Run
     return RunProgressState(progress=progress, samples=samples)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TerminalStyle:
+class TerminalStyle(BaseModel, frozen=True):
     """Store terminal rendering capabilities."""
 
     width: int
     color: bool
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Clamp responsibility stays with the constructor helper."""
         if self.width < MINIMUM_WIDTH or self.width > MAXIMUM_WIDTH:
             raise ValueError("terminal width is outside the supported range")
+        return self
 
 
 def terminal_style(*, color: bool | None = None, width: int | None = None) -> TerminalStyle:

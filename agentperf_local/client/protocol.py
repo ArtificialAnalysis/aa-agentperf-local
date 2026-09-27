@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Protocol
 
+from pydantic import BaseModel
+
 from agentperf_local.client.request import CompletionRequest
 
 
@@ -22,6 +24,8 @@ class CompletionError(RuntimeError):
         self.response_body = response_body
 
 
+# RawRead stays a slotted dataclass: the Python client builds one per network read
+# inside the stream loop, so its construction cost is part of the measurement.
 @dataclass(frozen=True, slots=True)
 class RawRead:
     """Hold one timestamped network read."""
@@ -30,8 +34,7 @@ class RawRead:
     data: bytes
 
 
-@dataclass(frozen=True, slots=True)
-class CompletionResult:
+class CompletionResult(BaseModel, frozen=True):
     """Hold raw reads from one completed or aborted request."""
 
     reads: tuple[RawRead, ...]

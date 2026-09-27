@@ -13,11 +13,11 @@ import base64
 import os
 import re
 from collections.abc import AsyncIterator, Callable, Iterator
-from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local import __version__
 from agentperf_local.client.endpoint import url_is_cleartext_remote
@@ -79,8 +79,7 @@ class SubmissionError(RuntimeError):
         self.retry_after_seconds = retry_after_seconds
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SubmissionReceipt:
+class SubmissionReceipt(BaseModel, frozen=True):
     """Store the service's answer to one upload."""
 
     submission_id: str
@@ -89,8 +88,7 @@ class SubmissionReceipt:
     bytes_sent: int
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _PreparedUpload:
+class _PreparedUpload(BaseModel, frozen=True):
     """Hold one encoded request shared by synchronous and asynchronous transports."""
 
     url: str
@@ -98,16 +96,14 @@ class _PreparedUpload:
     encoded: bytes
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SubmissionReason:
+class SubmissionReason(BaseModel, frozen=True):
     """Store one coded reason for a tier placement or a rejection."""
 
     code: str
     message: str
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SubmissionStatus:
+class SubmissionStatus(BaseModel, frozen=True):
     """Store one submission's current state as the service reports it."""
 
     submission_id: str
@@ -132,16 +128,14 @@ class SubmissionStatus:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RevisionAllowlist:
+class RevisionAllowlist(BaseModel, frozen=True):
     """Store the commit window the service currently accepts for the verified tier."""
 
     revisions: tuple[str, ...]
     window_days: int | None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RevisionCheck:
+class RevisionCheck(BaseModel, frozen=True):
     """Store the outcome of the advisory allowlist check before a run or an upload."""
 
     reachable: bool

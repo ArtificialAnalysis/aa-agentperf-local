@@ -12,6 +12,7 @@ from pathlib import Path
 import orjson
 import pytest
 from jsonschema import Draft202012Validator
+from pydantic import BaseModel
 
 from agentperf_local.cli import main
 from agentperf_local.deployment.catalog import (
@@ -74,8 +75,7 @@ def _two_gpu_hardware() -> HardwareSnapshot:
     )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _FakeRuntime:
+class _FakeRuntime(BaseModel, frozen=True):
     """Name the catalog model the fake runtime serves and the port it listens on."""
 
     catalog: ModelCatalog

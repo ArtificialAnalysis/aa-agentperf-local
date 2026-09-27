@@ -3,13 +3,14 @@
 import os
 import platform
 import sys
-from dataclasses import dataclass, replace
 from pathlib import Path
 
 import orjson
 import pytest
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonValue
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.frameworks import available_accelerator_memory
 from agentperf_local.provenance.accelerator_probes import NVIDIA_SMI_COMMAND, ROCMINFO_COMMAND
 from agentperf_local.provenance.hardware import (
@@ -27,8 +28,7 @@ from agentperf_local.provenance.hardware_facts import (
 )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FakeSystemProbe:
+class FakeSystemProbe(BaseModel, frozen=True):
     system: str
     cpu: str
     command_name: str
@@ -158,7 +158,7 @@ def test_amd_gpu_pool_capacity_requires_explicit_apu_evidence(memory_kind: str) 
       Allocatable: TRUE
 """
     snapshot = collect_hardware_snapshot(
-        replace(probe, rocminfo_result=CommandResult(returncode=0, stdout=info.encode(), stderr=b""))
+        replace_fields(probe, rocminfo_result=CommandResult(returncode=0, stdout=info.encode(), stderr=b""))
     )
     expected = pool_kib * 1024 if memory_kind == "APU" else 512 * 1024**2
     assert snapshot.accelerators[0].memory_bytes == expected

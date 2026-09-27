@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import StrEnum
+
+from pydantic import BaseModel
 
 
 class SelectionKind(StrEnum):
@@ -56,8 +57,7 @@ class EligibilityReason(StrEnum):
     REDUCED_CONTEXT = "reduced-context"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class EvidenceSummary:
+class EvidenceSummary(BaseModel, frozen=True):
     """Store evidence derived from closed app state."""
 
     selection: SelectionKind

@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
 
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.common.json_fields import lenient_integer, lenient_string
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json, normalize_json_object
+from agentperf_local.common.models import replace_fields
 from agentperf_local.common.units import BYTES_PER_MIB
 from agentperf_local.provenance.hardware_facts import (
     AcceleratorSnapshot,
@@ -120,8 +121,7 @@ def _optional_smi_integer(value: str) -> int | None:
     return None if number is None else round(number)
 
 
-@dataclass(frozen=True, slots=True)
-class _MacInspection:
+class _MacInspection(BaseModel, frozen=True):
     cpu_model: str | None
     accelerators: tuple[AcceleratorSnapshot, ...]
     warning: HardwareWarningCode | None
@@ -510,7 +510,7 @@ def _amd_apu_memory(
         matches = [index for index, accelerator in enumerate(updated) if accelerator.name == name.group(1)]
         if capacities and len(matches) == 1 and max(capacities) > 0:
             index = matches[0]
-            updated[index] = replace(updated[index], memory_bytes=max(capacities), memory_is_unified=True)
+            updated[index] = replace_fields(updated[index], memory_bytes=max(capacities), memory_is_unified=True)
     return tuple(updated)
 
 

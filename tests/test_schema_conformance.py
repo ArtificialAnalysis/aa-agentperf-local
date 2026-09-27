@@ -1,4 +1,4 @@
-"""Hold every published schema to the dataclass that produces it.
+"""Hold every published schema to the model that produces it.
 
 A schema under `docs/schemas` is a contract the submission service reads. The
 map below names, for each schema object, the class whose fields it describes.
@@ -11,6 +11,7 @@ import pathlib
 
 import orjson
 import pytest
+from pydantic import BaseModel
 
 from agentperf_local.common.json_records import json_field_names
 from agentperf_local.common.json_types import JsonObject
@@ -41,7 +42,7 @@ from agentperf_local.telemetry.power import PowerPhaseSummary
 SCHEMA_ROOT = pathlib.Path(__file__).parents[1] / "docs" / "schemas"
 
 # (schema file, pointer to the object, the class whose fields it describes).
-SCHEMA_OBJECTS: tuple[tuple[str, str, type], ...] = (
+SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
     ("recipe-v1.schema.json", "$defs/artifact", DeploymentArtifact),
     ("recipe-v1.schema.json", "$defs/memory", DeploymentMemory),
     ("recipe-v1.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
@@ -81,7 +82,7 @@ def _resolve(schema_file: str, pointer: str) -> JsonObject:
     SCHEMA_OBJECTS,
     ids=[f"{name}#{pointer}" for name, pointer, _ in SCHEMA_OBJECTS],
 )
-def test_schema_object_describes_exactly_its_record(schema_file: str, pointer: str, record: type) -> None:
+def test_schema_object_describes_exactly_its_record(schema_file: str, pointer: str, record: type[BaseModel]) -> None:
     node = _resolve(schema_file, pointer)
     properties = node.get("properties")
     required = node.get("required")
@@ -97,7 +98,7 @@ def test_schema_object_describes_exactly_its_record(schema_file: str, pointer: s
 def test_every_schema_is_a_valid_draft_and_is_covered_or_named() -> None:
     """No schema file is forgotten: each is parseable and either mapped or listed as unmapped."""
     unmapped = {
-        # Envelopes and records whose JSON shape is not one dataclass's field list.
+        # Envelopes and records whose JSON shape is not one model's field list.
         "private-nvidia-telemetry-v2.schema.json",
     }
     present = {path.name for path in SCHEMA_ROOT.glob("*.json")}

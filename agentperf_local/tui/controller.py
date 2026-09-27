@@ -8,7 +8,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import SecretStr
+
 from agentperf_local.client.backends import ClientBackend
+from agentperf_local.common.models import error_text
 from agentperf_local.deployment.catalog import ModelCandidate, ModelDeployment
 from agentperf_local.deployment.context_policy import (
     largest_fitting_reduced_context,
@@ -92,7 +95,7 @@ async def _execute_validated_replay(
     run_id: str,
 ) -> ReplayExecution:
     """Run one attached replay under the run identifier its measurement binding already carries."""
-    api_key = None if request.api_key_env is None else require_api_key_value(request.api_key_env)
+    api_key = None if request.api_key_env is None else SecretStr(require_api_key_value(request.api_key_env))
     config = RunConfig(
         base_url=request.normalized_base_url,
         model=request.endpoint_model,
@@ -222,7 +225,7 @@ class LocalReplayController:
         except SetupProblem as error:
             return blocked(str(error), error.block_code)
         except (OSError, ValueError) as error:
-            return blocked(str(error), PreflightBlockCode.INPUTS_INVALID)
+            return blocked(error_text(error), PreflightBlockCode.INPUTS_INVALID)
         hardware = SafeHardwareSummary.from_snapshot(self.hardware_collector())
         return ReplayPreflight(
             ready=True,
@@ -402,7 +405,7 @@ class LocalManagedReplayController:
         try:
             offers = self.offer_collector(bound.snapshot, candidate, context_tokens)
         except ValueError as error:
-            return ManagedModelAvailability(hardware=safe_hardware, offers=(), reason=str(error))
+            return ManagedModelAvailability(hardware=safe_hardware, offers=(), reason=error_text(error))
         deployable = tuple(offer for offer in offers if offer.installed and offer.memory_fit is True)
         if deployable:
             reason = None
@@ -469,7 +472,7 @@ class LocalManagedReplayController:
         except SetupProblem as error:
             return blocked(str(error), error.block_code)
         except (OSError, ValueError) as error:
-            return blocked(str(error), PreflightBlockCode.DEPLOYMENT_UNAVAILABLE)
+            return blocked(error_text(error), PreflightBlockCode.DEPLOYMENT_UNAVAILABLE)
         return ReplayPreflight(
             ready=True,
             manifest_tasks=inputs.manifest_tasks,

@@ -1,7 +1,7 @@
 # Data formats
 
-`agentperf-local` uses versioned JSON and JSONL at its boundaries. Python
-dataclasses implement the runtime contracts and are the code that runs. The
+`agentperf-local` uses versioned JSON and JSONL at its boundaries. Pydantic
+models implement the runtime contracts and are the code that runs. The
 closed JSON Schemas under [`docs/schemas`](schemas) are the normative reference
 for shareable and supporting artifacts; they are enforced in tests, not loaded
 at run time, and the Python validators enforce some rules the schemas do not.

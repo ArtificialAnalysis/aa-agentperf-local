@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import yaml
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import read_bounded_file
 from agentperf_local.common.identity import sha256_bytes, validate_identifier
@@ -117,7 +117,7 @@ def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int |
     return value
 
 
-def _require_recipe_fields(data: JsonObject, cls: type, source: str) -> None:
+def _require_recipe_fields(data: JsonObject, cls: type[BaseModel], source: str) -> None:
     """Require every field of one record that has no default; a recipe may leave out the rest."""
     require_allowed_keys(data, required_json_field_names(cls), json_field_names(cls), source)
 
@@ -162,8 +162,7 @@ def validate_artifact_path(value: str, field: str) -> str:
     return value
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeploymentArtifact:
+class DeploymentArtifact(BaseModel, frozen=True):
     """Pin one file of a managed deployment by path, digest, and size."""
 
     filename: str
@@ -172,7 +171,8 @@ class DeploymentArtifact:
     source_repository: str | None = None
     source_revision: str | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require a relative path with an exact digest and a non-negative size."""
         validate_artifact_path(self.filename, "artifact.filename")
         _sha256(self.sha256, "artifact.sha256")
@@ -186,6 +186,7 @@ class DeploymentArtifact:
             if self.source_revision is None:
                 raise ValueError("artifact.source_revision must be set with source_repository")
             _revision(self.source_revision, "artifact.source_revision")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentArtifact:
@@ -200,8 +201,7 @@ class DeploymentArtifact:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class LlamaCppLaunch:
+class LlamaCppLaunch(BaseModel, frozen=True):
     """Pin llama.cpp loading, batching, and speculative decoding."""
 
     batch_size: int
@@ -218,7 +218,8 @@ class LlamaCppLaunch:
     disable_fit: bool = False
     cache_ram_mib: int | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require usable batch sizes and a positive draft depth."""
         if min(self.batch_size, self.ubatch_size, self.speculative_tokens) <= 0:
             raise ValueError("llama.cpp batch sizes and speculative token count must be positive")
@@ -236,6 +237,7 @@ class LlamaCppLaunch:
             raise ValueError("llama.cpp threads must be positive")
         if self.cache_ram_mib is not None and self.cache_ram_mib < 0:
             raise ValueError("llama.cpp cache_ram_mib must be non-negative")
+        return self
 
     @property
     def backend_device(self) -> str | None:
@@ -277,14 +279,14 @@ class LlamaCppLaunch:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class VllmLaunch:
+class VllmLaunch(BaseModel, frozen=True):
     """Pin extra vLLM arguments and environment variables for one recipe."""
 
     arguments: tuple[str, ...]
     environment: tuple[tuple[str, str], ...] = ()
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require stable arguments and a unique sorted environment."""
         if not self.arguments or any(not argument or not argument.isprintable() for argument in self.arguments):
             raise ValueError("vLLM arguments must be non-empty printable text")
@@ -294,6 +296,7 @@ class VllmLaunch:
         for name, value in self.environment:
             if re.fullmatch(r"[A-Z][A-Z0-9_]*", name) is None or not value or not value.isprintable():
                 raise ValueError("vLLM environment must use uppercase names and printable values")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> VllmLaunch:
@@ -315,8 +318,7 @@ class VllmLaunch:
         return cls(arguments=tuple(arguments), environment=tuple(environment))
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeploymentMemory:
+class DeploymentMemory(BaseModel, frozen=True):
     """Describe how one model's resident memory grows with the served context.
 
     A recipe stores the attention shape rather than a single opaque number, so the
@@ -345,7 +347,8 @@ class DeploymentMemory:
     # floor leaves them out.
     lazy_read_bytes: int = 0
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require an attention shape that can hold a cache."""
         if self.full_attention_layers < 0 or self.sliding_attention_layers < 0:
             raise ValueError("attention layer counts must not be negative")
@@ -373,6 +376,7 @@ class DeploymentMemory:
             raise ValueError("recurrent state slots must not be negative")
         if self.lazy_read_bytes < 0:
             raise ValueError("lazy_read_bytes must not be negative")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentMemory:
@@ -415,8 +419,7 @@ def _runtime_versions_from_json(data: JsonObject, source: str) -> tuple[tuple[De
     return tuple(pairs)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ModelDeployment:
+class ModelDeployment(BaseModel, frozen=True):
     """Describe one exact managed model artifact set and its runtimes."""
 
     artifact_kind: ArtifactKind
@@ -437,7 +440,8 @@ class ModelDeployment:
     llama_cpp: LlamaCppLaunch | None = None
     vllm: VllmLaunch | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require one complete pinned recipe the managed launcher can serve."""
         if not self.artifacts or len(self.artifacts) > MAX_DEPLOYMENT_ARTIFACTS:
             raise ValueError("a managed deployment must pin between one and 512 files")
@@ -498,6 +502,7 @@ class ModelDeployment:
                 raise ValueError("llama.cpp draft_model_filename must name a pinned artifact")
         if self.vllm is not None and "vllm" not in self.frameworks:
             raise ValueError("only a vLLM recipe can name vLLM launch settings")
+        return self
 
     @property
     def artifact_size_bytes(self) -> int:
@@ -567,8 +572,7 @@ class ModelDeployment:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ModelCandidate:
+class ModelCandidate(BaseModel, frozen=True):
     """Describe one recipe: what to download, where it runs, and how to launch it."""
 
     profile_id: str
@@ -584,7 +588,8 @@ class ModelCandidate:
     speculation_policy: SpeculationPolicy
     deployment: ModelDeployment
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
         _iso_date(self.as_of, "as_of")
@@ -607,6 +612,7 @@ class ModelCandidate:
         if self.speculation_policy == "enabled-mtp-self-draft" and llama_cpp is not None:
             if llama_cpp.draft_model_filename is not None:
                 raise ValueError("an MTP self-draft policy must not name an external draft model")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> ModelCandidate:
@@ -647,20 +653,21 @@ class ModelCandidate:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ModelCatalog:
+class ModelCatalog(BaseModel, frozen=True):
     """Store every recipe of one folder and the folder's identity."""
 
     models: tuple[ModelCandidate, ...]
     digest: str
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require at least one recipe and unique names."""
         if not self.models:
             raise ValueError("recipe folder must contain at least one recipe")
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")
+        return self
 
     @property
     def as_of(self) -> str:

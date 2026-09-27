@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.identity import sha256_bytes, validate_digest
 from agentperf_local.common.json_fields import (
@@ -83,8 +84,7 @@ _EVIDENCE_KEYS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SanitizedTiming:
+class SanitizedTiming(BaseModel, frozen=True):
     """Store one turn's allowlisted timing evidence."""
 
     e2e_latency_ms: float
@@ -92,7 +92,8 @@ class SanitizedTiming:
     time_to_first_token_ms: float
     generation_ms: float
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible or abusive timing values."""
         values = (
             self.e2e_latency_ms,
@@ -108,6 +109,7 @@ class SanitizedTiming:
             raise ValueError("time to first token must not exceed end-to-end latency")
         if self.generation_ms > self.e2e_latency_ms:
             raise ValueError("generation time must not exceed end-to-end latency")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return safe timing evidence."""
@@ -125,8 +127,7 @@ class SanitizedTiming:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SanitizedTokens:
+class SanitizedTokens(BaseModel, frozen=True):
     """Store one turn's allowlisted token evidence."""
 
     server_prompt_tokens: int
@@ -138,7 +139,8 @@ class SanitizedTokens:
     target_output_tokens: int
     cache_accounting_fields_present: bool = True
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible or abusive token values."""
         values = (
             self.server_prompt_tokens,
@@ -166,6 +168,7 @@ class SanitizedTokens:
             raise ValueError("cached and uncached prompt tokens must add up to prompt tokens")
         if not self.cache_accounting_fields_present and any(value is not None for value in cache_counts):
             raise ValueError("absent cache accounting fields cannot carry token counts")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return safe token evidence."""
@@ -201,8 +204,7 @@ class SanitizedTokens:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SanitizedTurn:
+class SanitizedTurn(BaseModel, frozen=True):
     """Store one ordinal-only turn row for server recomputation."""
 
     turn_ordinal: int
@@ -217,7 +219,8 @@ class SanitizedTurn:
     timing: SanitizedTiming
     tokens: SanitizedTokens
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate ordinal, action, and pacing evidence."""
         if self.turn_ordinal < 0 or self.task_ordinal < 0 or self.turn_in_task < 0:
             raise ValueError("sanitized ordinals must be non-negative")
@@ -231,6 +234,7 @@ class SanitizedTurn:
         pacing = (self.recorded_pacing_ms, self.replayed_pacing_ms)
         if any(not math.isfinite(value) or value < 0 or value > MAX_TURN_DURATION_MS for value in pacing):
             raise ValueError("pacing values must be finite and within the per-turn limit")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return one sanitized turn row."""
@@ -255,8 +259,7 @@ class SanitizedTurn:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SanitizedEvidence:
+class SanitizedEvidence(BaseModel, frozen=True):
     """Store one experimental sanitized evidence envelope."""
 
     aggregate_payload_digest: str
@@ -266,7 +269,8 @@ class SanitizedEvidence:
     normalization_policy_id: str = OUTPUT_LENGTH_NORMALIZATION_POLICY
     version: int = SANITIZED_EVIDENCE_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate bindings and ordinal completeness."""
         validate_digest(self.aggregate_payload_digest, "aggregate_payload_digest")
         validate_digest(self.source_turns_digest, "source_turns_digest")
@@ -284,6 +288,7 @@ class SanitizedEvidence:
         _validate_task_layout(self.turns)
         if self.rows_digest != _rows_digest(self.turns):
             raise ValueError("sanitized rows digest does not match the turn rows")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the sanitized evidence envelope."""
@@ -332,8 +337,7 @@ class SanitizedEvidence:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RecomputedSanitizedMetrics:
+class RecomputedSanitizedMetrics(BaseModel, frozen=True):
     """Store aggregates derived only from sanitized rows."""
 
     totals: PublicTotals

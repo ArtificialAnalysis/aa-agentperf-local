@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from pydantic import BaseModel, Field
 from rich.markup import escape
 from rich.text import Text
 from textual import events, work
@@ -34,6 +35,7 @@ from textual.widgets.option_list import Option
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.common.json_fields import one_of
+from agentperf_local.common.models import error_text, raising_validator_errors
 from agentperf_local.common.statistics import P50_PERCENTILE, P90_PERCENTILE, percentile
 from agentperf_local.common.units import BYTES_PER_GIB, MILLISECONDS_PER_SECOND
 from agentperf_local.deployment.catalog import (
@@ -321,8 +323,7 @@ BACK_BUTTON_IDS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ClosedTurnSeries:
+class ClosedTurnSeries(BaseModel, frozen=True):
     """Hold the chartable numbers of every successful closed turn, one series per metric."""
 
     ttft_ms: tuple[float, ...]
@@ -407,7 +408,7 @@ def _failure_cause(request: ReplayRequest, error: BaseException) -> str | None:
         return str(error)
     if request.managed_deployment is None or not isinstance(error, ValueError | RuntimeError | TimeoutError):
         return None
-    cause = strip_log_hint(str(error), request.output_dir / DEPLOYMENT_LOG_FILENAME).strip()
+    cause = strip_log_hint(error_text(error), request.output_dir / DEPLOYMENT_LOG_FILENAME).strip()
     return cause or None
 
 
@@ -418,8 +419,7 @@ def _device_option_label(option: ManagedDeviceOption) -> str:
     return f"{option.index} · {escape(option.name)} · {option.memory_bytes / BYTES_PER_GIB:.0f} GiB"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BenchmarkSelection:
+class BenchmarkSelection(BaseModel, frozen=True):
     """Store model intent separately from execution evidence."""
 
     kind: SelectionKind
@@ -458,8 +458,7 @@ class BenchmarkSelection:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TuiDefaults:
+class TuiDefaults(BaseModel, frozen=True):
     """Seed editable fields without starting work."""
 
     replay_id: str = DEFAULT_BUNDLED_REPLAY.replay_id
@@ -469,7 +468,7 @@ class TuiDefaults:
     endpoint_model: str | None = None
     api_key_env: str | None = None
     client_backend: ClientBackend = "python"
-    model_cache_root: Path = field(default_factory=default_model_cache_root)
+    model_cache_root: Path = Field(default_factory=default_model_cache_root)
     deployment_port: int = DEFAULT_DEPLOYMENT_PORT
     deployment_startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS
     device_index: int | None = None
@@ -1141,17 +1140,18 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         framework = one_of(value, DEPLOYMENT_FRAMEWORK_ORDER, "framework")
         if not any(offer.framework == framework for offer in availability.deployable_offers):
             raise ValueError("selected framework is not deployable on this computer")
-        return ManagedDeploymentChoice(
-            candidate=candidate,
-            catalog_as_of=self.catalog.as_of,
-            catalog_digest=self.catalog.digest,
-            framework=framework,
-            device_index=device_index,
-            context_tokens=context_tokens,
-            cache_root=self.defaults.model_cache_root,
-            port=self.defaults.deployment_port,
-            startup_timeout_seconds=self.defaults.deployment_startup_timeout_seconds,
-        )
+        with raising_validator_errors():
+            return ManagedDeploymentChoice(
+                candidate=candidate,
+                catalog_as_of=self.catalog.as_of,
+                catalog_digest=self.catalog.digest,
+                framework=framework,
+                device_index=device_index,
+                context_tokens=context_tokens,
+                cache_root=self.defaults.model_cache_root,
+                port=self.defaults.deployment_port,
+                startup_timeout_seconds=self.defaults.deployment_startup_timeout_seconds,
+            )
 
     def _candidate_detail(self, candidate: ModelCandidate) -> str:
         # Detail values stay short enough for one line beside their key at the full-size
@@ -1658,21 +1658,22 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             )
             selection = BenchmarkSelection.custom(endpoint_model) if downgrades_to_custom else self.selection
             client_backend = self._selected_client_backend()
-            request = ReplayRequest(
-                manifest_path=self._selected_manifest_path(),
-                # The typed folder is a stable parent; every attempt writes one fresh
-                # run subdirectory, so running again never needs a new folder choice.
-                output_dir=next_run_directory(Path(output_value).expanduser()),
-                base_url=base_url,
-                endpoint_model=endpoint_model,
-                api_key_env=api_key_env_value or None,
-                client_backend=client_backend,
-                selection_kind=selection.kind,
-                catalog_profile_id=selection.profile_id,
-                catalog_digest=selection.catalog_digest,
-                candidate_revision=selection.candidate_revision,
-                managed_deployment=managed_deployment,
-            )
+            with raising_validator_errors():
+                request = ReplayRequest(
+                    manifest_path=self._selected_manifest_path(),
+                    # The typed folder is a stable parent; every attempt writes one fresh
+                    # run subdirectory, so running again never needs a new folder choice.
+                    output_dir=next_run_directory(Path(output_value).expanduser()),
+                    base_url=base_url,
+                    endpoint_model=endpoint_model,
+                    api_key_env=api_key_env_value or None,
+                    client_backend=client_backend,
+                    selection_kind=selection.kind,
+                    catalog_profile_id=selection.profile_id,
+                    catalog_digest=selection.catalog_digest,
+                    candidate_revision=selection.candidate_revision,
+                    managed_deployment=managed_deployment,
+                )
         except SetupProblem as problem:
             message = block_code_message(problem.block_code, api_key_env_value or None)
             self._block_setup(SETUP_UNUSABLE_MESSAGE if message is None else message)
@@ -2431,7 +2432,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             )
             raise
         except (SubmissionError, ValueError, OSError) as error:
-            self.post_message(UploadFailedMessage(generation, str(error), bundle_dir if prepared else None))
+            self.post_message(UploadFailedMessage(generation, error_text(error), bundle_dir if prepared else None))
             return
         self.post_message(UploadCompletedMessage(generation, receipt, bundle_dir))
 

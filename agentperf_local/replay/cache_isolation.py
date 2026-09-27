@@ -5,8 +5,9 @@ from __future__ import annotations
 import copy
 import os
 import secrets
-from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonObject
 
@@ -16,8 +17,7 @@ CACHE_NAMESPACE_DIGITS = 32
 type CacheIsolationMode = Literal["none", "run_namespace_prefix"]
 
 
-@dataclass(frozen=True, kw_only=True)
-class CacheIsolationMetadata:
+class CacheIsolationMetadata(BaseModel, frozen=True):
     """Describe the prompt cache isolation used by one run."""
 
     enabled: bool

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_fields import (
     optional_integer,
@@ -33,8 +34,7 @@ PUBLIC_HARDWARE_PROFILE_VERSION = 1
 HOST_MEMORY_BUCKET_GIB = 8
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HardwareSnapshot:
+class HardwareSnapshot(BaseModel, frozen=True):
     """Describe public hardware and operating system facts."""
 
     operating_system: str
@@ -49,7 +49,8 @@ class HardwareSnapshot:
     cpu_base_frequency_mhz: int | None = None
     version: int = HARDWARE_SNAPSHOT_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject unsafe or impossible public values."""
         for field, value in (
             ("operating_system", self.operating_system),
@@ -65,6 +66,7 @@ class HardwareSnapshot:
             raise ValueError("memory_bytes must be positive")
         if self.cpu_base_frequency_mhz is not None and self.cpu_base_frequency_mhz <= 0:
             raise ValueError("cpu_base_frequency_mhz must be positive")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the snapshot as JSON data."""
@@ -85,8 +87,7 @@ class HardwareSnapshot:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicAcceleratorProfile:
+class PublicAcceleratorProfile(BaseModel, frozen=True):
     """Describe the accelerator fields needed for public comparison."""
 
     vendor: str
@@ -96,21 +97,22 @@ class PublicAcceleratorProfile:
     driver_branch: str | None
     api: str | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Hold every label to the public contract, wherever the profile was built."""
         validate_public_label(self.vendor, "vendor")
         validate_public_label(self.product, "product")
         for field_name, value in (("driver_branch", self.driver_branch), ("api", self.api)):
             if value is not None:
                 validate_public_label(value, field_name)
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the public accelerator profile."""
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicHardwareProfile:
+class PublicHardwareProfile(BaseModel, frozen=True):
     """Store normalized hardware facts approved for public sharing."""
 
     platform_family: str
@@ -120,12 +122,14 @@ class PublicHardwareProfile:
     accelerator: PublicAcceleratorProfile
     version: int = PUBLIC_HARDWARE_PROFILE_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Hold every label to the public contract, wherever the profile was built."""
         validate_public_label(self.platform_family, "platform_family")
         validate_public_label(self.architecture, "architecture")
         if self.platform_major is not None:
             validate_public_label(self.platform_major, "platform_major")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the normalized public profile."""

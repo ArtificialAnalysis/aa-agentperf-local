@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from dataclasses import dataclass
 from enum import StrEnum
 
 import httpx
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.client.backends import ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError
@@ -115,8 +115,7 @@ def served_context_tokens(raw_model: JsonObject) -> int | None:
     return None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ContextProbeResult:
+class ContextProbeResult(BaseModel, frozen=True):
     """Store one served-context probe outcome and why an observation is missing."""
 
     observed_tokens: int | None
@@ -185,8 +184,7 @@ class ProbeFailure(StrEnum):
     UNREACHABLE = "unreachable"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ProbeAnswer:
+class ProbeAnswer(BaseModel, frozen=True):
     """Hold the two facts one probe completion is judged on, read the way a replay turn is."""
 
     finish_reason: str | None
@@ -201,8 +199,7 @@ class ProbeAnswer:
 type ProbeOutcome = ProbeAnswer | ProbeFailure
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class IgnoreEosProbeResult:
+class IgnoreEosProbeResult(BaseModel, frozen=True):
     """Record what the probe observed and the policy that observation supports."""
 
     support: IgnoreEosSupport

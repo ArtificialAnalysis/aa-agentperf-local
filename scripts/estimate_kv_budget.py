@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
 from agentperf_local.common.units import BYTES_PER_GIB
@@ -38,8 +39,7 @@ def _required_strings(data: JsonObject, key: str, source: str) -> tuple[str, ...
     return tuple(item for item in value if isinstance(item, str))
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ModelCacheShape:
+class ModelCacheShape(BaseModel, frozen=True):
     """Store attention dimensions relevant to KV tensor payload."""
 
     layers: int
@@ -53,7 +53,8 @@ class ModelCacheShape:
     layer_types: tuple[str, ...]
     sliding_window: int
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate the cache shape."""
         dimensions = (
             self.layers,
@@ -69,6 +70,7 @@ class ModelCacheShape:
             raise ValueError("layer_types must describe every hidden layer")
         if any(layer_type not in ("full_attention", "sliding_attention") for layer_type in self.layer_types):
             raise ValueError("cache estimator supports only full_attention and sliding_attention layers")
+        return self
 
     @classmethod
     def from_config(cls, data: JsonObject) -> ModelCacheShape:
@@ -99,8 +101,7 @@ class ModelCacheShape:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BudgetInputs:
+class BudgetInputs(BaseModel, frozen=True):
     """Store explicit memory-planning assumptions."""
 
     context_tokens: int
@@ -109,7 +110,8 @@ class BudgetInputs:
     device_memory_gib: float
     runtime_reserve_gib: float
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate planning assumptions."""
         if self.context_tokens <= 0 or self.cache_bytes_per_scalar <= 0:
             raise ValueError("context and cache scalar size must be positive")
@@ -118,6 +120,7 @@ class BudgetInputs:
             raise ValueError("memory planning values must be finite and non-negative")
         if self.model_weight_gib + self.runtime_reserve_gib > self.device_memory_gib:
             raise ValueError("weights plus runtime reserve already exceed device memory")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return explicit budget assumptions."""
@@ -130,8 +133,7 @@ class BudgetInputs:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CacheBudgetEstimate:
+class CacheBudgetEstimate(BaseModel, frozen=True):
     """Store theoretical KV payload bounds and remaining headroom."""
 
     shape: ModelCacheShape

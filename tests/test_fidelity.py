@@ -1,15 +1,13 @@
 """Exercise content-free post-close tool fidelity evaluation."""
 
-from dataclasses import dataclass
-
 import pytest
+from pydantic import BaseModel
 
 from agentperf_local.metrics.response import ToolCall
 from agentperf_local.replay.fidelity import ExpectedToolCall, FidelityIssue, FidelityLevel, evaluate_tool_fidelity
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FidelityCase:
+class FidelityCase(BaseModel, frozen=True):
     name: str
     observed: tuple[ToolCall, ...]
     expected: tuple[ExpectedToolCall, ...]

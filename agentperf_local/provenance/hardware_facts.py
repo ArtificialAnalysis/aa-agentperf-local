@@ -14,9 +14,10 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_fields import one_of
 from agentperf_local.common.json_records import json_record
@@ -196,8 +197,7 @@ def _linux_cpu_base_frequency_mhz() -> int | None:
     return megahertz if megahertz > 0 else None
 
 
-@dataclass(frozen=True, slots=True)
-class CommandResult:
+class CommandResult(BaseModel, frozen=True):
     """Store one command result."""
 
     returncode: int
@@ -336,8 +336,7 @@ class LocalSystemProbe:
         return CommandResult(returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class AcceleratorSnapshot:
+class AcceleratorSnapshot(BaseModel, frozen=True):
     """Describe one accelerator without stable device identifiers."""
 
     vendor: str
@@ -355,7 +354,8 @@ class AcceleratorSnapshot:
     max_graphics_clock_mhz: int | None = None
     max_memory_clock_mhz: int | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject unsafe or impossible public values."""
         for field, value in (("vendor", self.vendor), ("name", self.name)):
             validate_public_label(value, field)
@@ -374,6 +374,7 @@ class AcceleratorSnapshot:
         ):
             if clock is not None and clock <= 0:
                 raise ValueError(f"{field} must be positive")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return the accelerator as JSON data."""
