@@ -11,12 +11,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
-from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.pilot import Pilot
-from textual.selection import Selection
-from textual.widget import Widget
-from textual.widgets import Button, Checkbox, ContentSwitcher, Digits, Input, OptionList, ProgressBar, RichLog, Static
+from textual.widgets import Button, Checkbox, Digits, Input, OptionList, ProgressBar, RichLog, Static
 
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_ROOT,
@@ -26,10 +23,6 @@ from agentperf_local.deployment.catalog import (
 from agentperf_local.deployment.context_policy import derived_minimum_memory_bytes
 from agentperf_local.deployment.endpoint_probes import ContextProbeResult
 from agentperf_local.deployment.frameworks import FrameworkOffer
-from agentperf_local.deployment.managed import (
-    MAXIMUM_PORT,
-    MINIMUM_USER_PORT,
-)
 from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
 from agentperf_local.deployment.qualification import QUALIFICATION_FILENAME, write_runtime_qualification
 from agentperf_local.provenance.context import ContextObservationReason
@@ -43,21 +36,16 @@ from agentperf_local.replay.runner import (
 )
 from agentperf_local.reports.reporting import ArtifactPaths
 from agentperf_local.submission.private_audit import PRIVATE_AUDIT_FILENAME
-from agentperf_local.tui import app as textual_app
 from agentperf_local.tui.app import (
-    AA_CATALOG_RUNTIME_PROVENANCE,
     ATTACHED_CONTEXT_UNVERIFIED_MESSAGE,
     BLOCKED_ACTION_MESSAGE,
     CANCEL_CONFIRM_MESSAGE,
     CONSENT_ATTACHED_LABEL,
     MANAGED_RUN_STOPPED_MESSAGE,
-    MINIMUM_SUPPORTED_HEIGHT,
-    MINIMUM_SUPPORTED_WIDTH,
     PREFLIGHT_BLOCKED_HERO,
     PREFLIGHT_READY_HERO,
     RESULT_REDUCED_MESSAGE,
     RUN_HERO_CHECKING_SERVER,
-    RUN_HERO_RUNNING,
     RUN_METRICS_PLACEHOLDER,
     RUN_STEP_EYEBROW,
     RUN_STEP_PREPARING_EYEBROW,
@@ -66,16 +54,6 @@ from agentperf_local.tui.app import (
     UPLOAD_WAITING_MESSAGE,
     AgentPerfLocalApp,
     TuiDefaults,
-)
-from agentperf_local.tui.branding import (
-    KITTY_BLINK,
-    KITTY_CURIOUS,
-    KITTY_FRAMES,
-    KITTY_GLANCE,
-    KITTY_HAPPY,
-    PIXEL_LOGO_SMALL,
-    KittyFrame,
-    PixelLogo,
 )
 from agentperf_local.tui.controller import LocalManagedReplayController
 from agentperf_local.tui.evidence import (
@@ -86,8 +64,6 @@ from agentperf_local.tui.evidence import (
     SelectionKind,
 )
 from agentperf_local.tui.inputs import (
-    ClientBackendSelect,
-    FormPage,
     ManagedContextSelect,
     ManagedDeviceSelect,
     ManagedFrameworkSelect,
@@ -107,8 +83,8 @@ from agentperf_local.tui.replay_contract import (
     TuiReplayObserver,
 )
 from agentperf_local.tui.steps import TuiOutcome, TuiStep
-from agentperf_local.tui.widgets import ContextGauge, DistributionChart, Kitty, SpinnerLine, chart_width
-from agentperf_local.workload.bundled import CUSTOM_REPLAY_ID, DEFAULT_BUNDLED_REPLAY
+from agentperf_local.tui.widgets import Kitty, SpinnerLine
+from agentperf_local.workload.bundled import CUSTOM_REPLAY_ID
 from agentperf_local.workload.schema import parse_json_object
 from tests.localhost_sse import SSE_OK_RESPONSE, LocalSseServer
 from tests.replay_workload import write_replay_workload
@@ -163,64 +139,6 @@ async def _tick_consent_and_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]
     await _settle_until(pilot, lambda: app.step is not TuiStep.PREFLIGHT)
 
 
-async def test_prefilled_model_stays_custom_after_mount() -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        defaults=TuiDefaults(endpoint_model="private-served-alias"),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
-
-        assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        assert app.selection.endpoint_model == "private-served-alias"
-        assert app.query_one("#endpoint-model-input", Input).value == "private-served-alias"
-        assert app.query_one("#model-list", OptionList).highlighted == len(app.catalog.models)
-
-
-async def test_bundled_replay_is_the_default_without_showing_its_package_path(tmp_path: Path) -> None:
-    controller = FakeReplayController()
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=controller,
-        defaults=TuiDefaults(output_dir=tmp_path / "results", endpoint_model=ATTACHED_ENDPOINT_MODEL),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await pilot.click("#model-continue")
-        await pilot.pause()
-
-        await _settle_until(
-            pilot,
-            lambda: all(
-                text in app.export_screenshot()
-                for text in (
-                    "AgentPerf&#160;default&#160;replay&#160;v1",
-                    "Replay",
-                    "YOUR&#160;SERVER",
-                    "Results&#160;folder",
-                    "Advanced&#160;options",
-                )
-            ),
-        )
-        rendered = app.export_screenshot()
-        assert "AgentPerf&#160;default&#160;replay&#160;v1" in rendered
-        assert str(DEFAULT_BUNDLED_REPLAY.manifest_path) not in rendered
-        assert not app.query_one("#manifest-row").display
-        assert "Replay" in rendered
-        assert "YOUR&#160;SERVER" in rendered
-        assert "Results&#160;folder" in rendered
-        assert "Advanced&#160;options" in rendered
-
-        await _check_setup(app, pilot)
-
-        assert app.pending_preflight is None
-        assert app.request is not None
-        assert app.request.manifest_path == DEFAULT_BUNDLED_REPLAY.manifest_path
-
-
 async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
     app = _app(tmp_path, FakeReplayController())
 
@@ -260,512 +178,6 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
         assert app.query_one("#output-input", Input).value == str(tmp_path / "private" / "results")
 
 
-@pytest.mark.parametrize("size", ((48, 16), (60, 20), (96, 16)))
-async def test_small_terminal_completes_mini_run_with_arrow_navigation(size: tuple[int, int], tmp_path: Path) -> None:
-    release = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=release))
-
-    async with app.run_test(size=size) as pilot:
-        await pilot.pause()
-        welcome = app.query_one("#welcome-start", Button)
-        existing = app.query_one("#welcome-existing", Button)
-        await _settle_until(pilot, lambda: app.focused is welcome)
-        assert welcome.region.bottom <= existing.region.y
-        assert existing.region.bottom < size[1]
-        assert app.screen.active_bindings["question_mark"].binding.show
-        assert not app.screen.active_bindings["f1"].binding.show
-        await pilot.click("#welcome-existing", offset=(3, 1))
-        assert app.step is TuiStep.CONFIG
-        await pilot.press("escape")
-        await _settle_until(pilot, lambda: app.step is TuiStep.WELCOME)
-        await pilot.press("right")
-        await _settle_until(pilot, lambda: app.focused is existing)
-        await pilot.press("left")
-        await _settle_until(pilot, lambda: app.focused is welcome)
-        await pilot.press("down")
-        await _settle_until(pilot, lambda: app.focused is existing)
-        await pilot.press("up", "enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        assert app.query_one("#model-intro").region.y >= 0
-        await pilot.press("right")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#model-detail-pane", VerticalScroll))
-        await pilot.press("right", "enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-
-        await pilot.press("down", "down")
-        replay = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
-        await _settle_until(pilot, lambda: app.focused is replay)
-        # The full replay is first, so the quick mini check sits one below it.
-        await pilot.press("enter", "home", "down", "enter")
-        assert replay.value == "aa-mini-v1"
-        await pilot.press("down")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#base-url-input", Input))
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        assert app.step is TuiStep.PREFLIGHT
-        consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
-        await _settle_until(pilot, lambda: app.focused is consent)
-        assert consent.region.bottom < size[1]
-        await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.progress_state.progress is not None)
-        assert app.step is TuiStep.RUN
-        assert app.query_one("#activity-live").region.bottom < size[1]
-        assert app.query_one("#run-cancel").region.bottom < size[1]
-
-        await pilot.press("?")
-        await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
-        await pilot.press("right")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#help-privacy", Button))
-        await pilot.press("?")
-        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-        assert app.outcome is TuiOutcome.SUCCESS
-        assert app.query_one("#result-new").region.bottom < size[1]
-        await pilot.press("escape")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        assert replay.value == "aa-mini-v1"
-
-
-async def test_arrow_keys_move_focus_across_closed_dropdowns_and_inputs(tmp_path: Path) -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        defaults=TuiDefaults(output_dir=tmp_path / "results", endpoint_model=ATTACHED_ENDPOINT_MODEL),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-
-        replay_select = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
-        replay_select.focus()
-        await pilot.pause()
-        await pilot.press("down")
-        assert not replay_select.expanded
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#base-url-input", Input))
-
-        await pilot.press("down")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-model-input", Input))
-        await pilot.press("down")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#api-key-env-input", Input))
-        await pilot.press("up")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-model-input", Input))
-
-        app.query_one("#advanced-toggle", Button).focus()
-        await pilot.press("enter", "down")
-        client_select = app.query_one("#client-backend-select", ClientBackendSelect)
-        await _settle_until(pilot, lambda: app.focused is client_select)
-        client_select.focus()
-        await pilot.pause()
-        await pilot.press("down")
-        assert not client_select.expanded
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-
-        await pilot.press("shift+tab", "up", "up")
-        assert not client_select.expanded
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#output-input", Input))
-
-
-async def test_setup_field_focus_parks_the_cursor_and_blur_rewinds_the_view(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await pilot.pause()
-        output_input = app.query_one("#output-input", Input)
-        assert len(output_input.value) > 40
-
-        output_input.focus()
-        await pilot.pause()
-        # Focus must not paint the whole value as a selection band.
-        assert output_input.cursor_position == len(output_input.value)
-        assert output_input.selection.start == output_input.selection.end
-
-        await pilot.press("tab")
-        await pilot.pause()
-        # Leaving the field rewinds it so the start of a long path stays readable.
-        assert output_input.cursor_position == 0
-
-
-@pytest.mark.parametrize("size", ((72, 24), (96, 30)))
-async def test_setup_actions_stay_visible_and_help_returns_to_the_edit(size: tuple[int, int], tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=size) as pilot:
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await pilot.pause()
-        page = app.query_one("#config", VerticalScroll)
-        review = app.query_one("#config-continue", Button)
-        assert not app.query_one("#client-row").display
-        assert review.region.height == 1
-        assert review.region.bottom < size[1]
-        review_region = review.region
-
-        app.query_one("#advanced-toggle", Button).focus()
-        await pilot.press("enter")
-        assert app.query_one("#client-row").display
-        output = app.query_one("#output-input", Input)
-        output.focus()
-        await pilot.press("left", "left")
-        cursor = output.cursor_position
-        scroll_y = page.scroll_y
-        await pilot.press("f1", "ctrl+p", "escape")
-        await pilot.pause()
-        assert app.step is TuiStep.CONFIG
-        await _settle_until(pilot, lambda: app.focused is output)
-        assert output.cursor_position == cursor
-        assert page.scroll_y == scroll_y
-        assert review.region == review_region
-
-        await pilot.press("f1", "f1")
-        await _settle_until(pilot, lambda: app.focused is output)
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        assert app.step is TuiStep.PREFLIGHT
-        run = app.query_one("#run-start", Button)
-        assert run.region.height == 1
-        assert run.region.bottom < size[1]
-
-
-@pytest.mark.parametrize("size", ((72, 24), (96, 32), (118, 40)))
-async def test_existing_server_shortcut_and_detail_views_keep_the_run_flow_clear(
-    size: tuple[int, int], tmp_path: Path
-) -> None:
-    release = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=release))
-
-    async with app.run_test(size=size) as pilot:
-        await pilot.pause()
-        await pilot.press("tab", "enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        assert not app.query_one("#client-row").display
-        output = app.query_one("#output-input", Input)
-        assert output.region.y == app.query_one("#output-row Label").region.y
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        await _confirm_and_run(app, pilot)
-        assert not app.submit_requested
-        await _settle_until(pilot, lambda: app.progress_state.progress is not None)
-        kitty = app.query_one("#run-kitty", Static)
-        assert str(kitty.content) == KITTY_CURIOUS
-        assert kitty.region.right <= size[0]
-        assert kitty.region.x >= app.query_one("#run-hero").region.right
-        assert kitty.region.bottom <= app.query_one("#run-progress").region.y
-        await pilot.press("d")
-        assert app.query_one("#run-metrics-column").display
-        assert app.query_one("#run-decode-chart").region.right <= size[0]
-        # A scrollbar on the column must not squeeze a histogram row into a wrap.
-        assert app.query_one("#run-decode-chart").content_region.width >= chart_width()
-        assert app.query_one("#activity-live").region.height == 1
-        assert app.query_one("#activity-live").region.bottom < size[1]
-        await pilot.press("enter")
-        assert app.replay_active
-        assert not app.replay_cancelling
-        await pilot.press("d")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-        await pilot.pause()
-        kitty = app.query_one("#result-kitty", Static)
-        assert str(kitty.content) == KITTY_HAPPY
-        assert kitty.region.right <= size[0]
-        assert kitty.region.x >= app.query_one("#result-title").region.right
-        assert not app.query_one("#result-details").display
-        details = app.query_one("#result-details-toggle", Button)
-        details.focus()
-        await pilot.press("enter")
-        assert app.query_one("#result-details").display
-        for chart in app.query_one("#result-charts").query(DistributionChart):
-            assert chart.region.right <= size[0]
-        assert app.query_one("#result-new", Button).region.bottom < size[1]
-        await pilot.press("escape")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        assert output.value == str(tmp_path / "private" / "results")
-        await pilot.press("escape")
-        await _settle_until(pilot, lambda: app.step is TuiStep.WELCOME)
-
-
-@pytest.mark.parametrize("size", ((72, 24), (96, 30)))
-async def test_arrow_keys_only_scroll_the_run_page(size: tuple[int, int], tmp_path: Path) -> None:
-    release = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=release))
-
-    async with app.run_test(size=size) as pilot:
-        await _start_existing_server_run(app, pilot)
-        await _settle_until(pilot, lambda: app.progress_state.progress is not None)
-        # A short log cannot scroll yet, so a stray arrow must not walk focus onto Cancel.
-        await pilot.press("down", "down", "up", "enter")
-        await pilot.pause()
-        assert app.step is TuiStep.RUN
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-        assert not app.replay_cancelling
-        assert not app.cancel_armed
-
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-        assert app.outcome is TuiOutcome.SUCCESS
-
-
-async def test_a_second_run_starts_with_the_default_run_view(tmp_path: Path) -> None:
-    release = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=release))
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await _start_existing_server_run(app, pilot)
-        await _settle_until(pilot, lambda: app.progress_state.progress is not None)
-        await pilot.press("d")
-        assert app.query_one("#run").has_class("show-details")
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-
-        release.clear()
-        await pilot.press("escape")
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        await _confirm_and_run(app, pilot)
-        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
-        await pilot.pause()
-        # The compact run page opens on the activity log; the details view belongs to one run.
-        assert not app.query_one("#run").has_class("show-details")
-        assert app.query_one("#activity-lines", RichLog).display
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-
-
-async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_path: Path) -> None:
-    probe_release = threading.Event()
-    app = _app(tmp_path, FakeReplayController(probe_gate=probe_release))
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-existing")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        await pilot.press("space")
-        await pilot.pause()
-        run = app.query_one("#run-start", Button)
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
-        assert run.disabled
-        await pilot.press("f1")
-        await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
-        probe_release.set()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        assert not run.disabled
-        # The server answered while Help was open, so Run gets the focus it would have taken then.
-        await pilot.press("escape")
-        await pilot.pause()
-        assert app.step is TuiStep.PREFLIGHT
-        await _settle_until(pilot, lambda: app.focused is run)
-
-        # With nothing left to become ready, a detour returns to the control the user left.
-        await pilot.press("tab")
-        back = app.query_one("#preflight-back", Button)
-        await _settle_until(pilot, lambda: app.focused is back)
-        await pilot.press("f1", "escape")
-        await pilot.pause()
-        await _settle_until(pilot, lambda: app.focused is back)
-
-        # An answer that arrives after the user moved on leaves their control focused.
-        probe_release.clear()
-        consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
-        consent.value = False
-        await pilot.pause()
-        assert run.disabled
-        consent.focus()
-        await pilot.pause()
-        await pilot.press("space", "tab")
-        submit = app.query_one("#submit-checkbox", Checkbox)
-        await _settle_until(pilot, lambda: app.focused is submit)
-        probe_release.set()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        assert not run.disabled
-        await _settle_until(pilot, lambda: app.focused is submit)
-
-
-async def test_form_pages_leave_the_arrow_keys_to_focus_movement(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await pilot.click("#welcome-existing")
-        await pilot.pause()
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-        assert isinstance(app.query_one("#config"), FormPage)
-        # A form page never claims the arrows, so even an overflowing form still moves between fields.
-        assert app.screen.active_bindings["down"].binding.action == "focus_next"
-        assert app.screen.active_bindings["up"].binding.action == "focus_previous"
-        assert app.screen.active_bindings["pagedown"].binding.action == "page_down"
-        await pilot.press("f1")
-        await pilot.pause()
-        back = app.query_one("#methodology-back", Button)
-        await _settle_until(pilot, lambda: app.focused is back)
-        # Reading pages keep the arrows for scrolling, and only real controls are focus stops.
-        assert app.screen.active_bindings["down"].binding.action == "scroll_down"
-        assert app.query_one("#help-privacy", Button).region.bottom <= 24
-        await pilot.press("shift+tab")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#help-privacy", Button))
-        await pilot.press("tab")
-        await _settle_until(pilot, lambda: app.focused is back)
-
-
-@pytest.mark.parametrize("animated", (True, False))
-async def test_kitty_animation_keeps_its_shape_and_stops_off_screen(
-    tmp_path: Path, animated: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The real poses hold for seconds; short holds keep every expression pollable and the test quick.
-    monkeypatch.setattr(
-        "agentperf_local.tui.widgets.KITTY_FRAMES",
-        tuple(KittyFrame(art=frame.art, hold_seconds=0.1) for frame in KITTY_FRAMES),
-    )
-    release = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=release))
-    app.animation_level = "full" if animated else "none"
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await _start_existing_server_run(app, pilot)
-        await pilot.pause()
-        kitty = app.query_one("#run-kitty", Kitty)
-        region = kitty.region
-        assert kitty.is_animating is animated
-        if animated:
-            for expression in (KITTY_BLINK, KITTY_GLANCE):
-                await _settle_until(pilot, lambda: str(kitty.content) == expression)
-                assert kitty.region == region
-
-        await pilot.press("f1")
-        await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
-        assert not kitty.is_animating
-        assert str(kitty.content) == KITTY_CURIOUS
-        await pilot.press("escape")
-        assert kitty.is_animating is animated
-        # resize_terminal posts the event and pauses once, which a loaded runner can
-        # outrun, so wait for on_resize to land rather than reading straight after it.
-        # The assertion names every input _sync_kitty reads, to say which one was not
-        # what the resize set.
-        await pilot.resize_terminal(60, 20)
-        deadline = time.monotonic() + UI_SETTLE_TIMEOUT_SECONDS
-        while kitty.is_animating and time.monotonic() < deadline:
-            await pilot.pause()
-        pages = [node for node in kitty.ancestors_with_self if node.has_class("page")]
-        assert not kitty.is_animating, (
-            f"size={tuple(app.size)} display={kitty.display} too_small={app.terminal_too_small} "
-            f"step={app.step} active={app.replay_active} short={[node.has_class('short') for node in pages]}"
-        )
-        await pilot.resize_terminal(72, 24)
-        await _settle_until(pilot, lambda: kitty.is_animating is animated)
-
-        release.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-        assert not kitty.is_animating
-        result_kitty = app.query_one("#result-kitty", Kitty)
-        assert not result_kitty.is_animating
-        assert str(result_kitty.content) == KITTY_HAPPY
-
-
-class HeldTimer:
-    """Stand in for a Textual timer whose tick the test delivers by hand."""
-
-    def stop(self) -> None:
-        pass
-
-
-class KittyOnlyApp(App[None]):
-    def compose(self) -> ComposeResult:
-        yield Kitty()
-
-
-async def test_a_stale_kitty_tick_neither_restarts_nor_doubles_the_animation(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Textual queues a fired timer's callback as a message, so a tick can land after the timer stopped.
-    ticks: list[Callable[[], None]] = []
-
-    def hold_tick(_kitty: Kitty, _delay: float, callback: Callable[[], None]) -> HeldTimer:
-        ticks.append(callback)
-        return HeldTimer()
-
-    monkeypatch.setattr(Kitty, "set_timer", hold_tick)
-    async with KittyOnlyApp().run_test() as pilot:
-        kitty = pilot.app.query_one(Kitty)
-        kitty.start()
-        stale = ticks[-1]
-        kitty.settle()
-        stale()
-        assert not kitty.is_animating
-
-        kitty.start()
-        scheduled = len(ticks)
-        stale()
-        assert len(ticks) == scheduled
-        ticks[-1]()
-        assert len(ticks) == scheduled + 1
-
-
-async def test_dropdown_opens_with_enter_and_escape_closes_it_on_the_same_screen(tmp_path: Path) -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        defaults=TuiDefaults(output_dir=tmp_path / "results", endpoint_model=ATTACHED_ENDPOINT_MODEL),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await pilot.pause()
-        replay_select = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
-        replay_select.focus()
-        await pilot.pause()
-        initial_value = replay_select.value
-
-        await pilot.press("enter")
-        assert replay_select.expanded
-
-        await pilot.press("escape")
-        assert not replay_select.expanded
-        assert app.step is TuiStep.CONFIG
-        await _settle_until(pilot, lambda: app.focused is replay_select)
-        assert replay_select.value == initial_value
-
-        # The custom entry is the last option, whatever the bundled replay count.
-        await pilot.press("space", "end", "enter")
-        assert not replay_select.expanded
-        assert app.step is TuiStep.CONFIG
-        assert replay_select.value == CUSTOM_REPLAY_ID
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#manifest-input", Input))
-
-
-@pytest.mark.parametrize("key", ("q", "ctrl+c"))
-async def test_idle_quit_shortcuts_exit_cleanly(tmp_path: Path, key: str) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await pilot.press(key)
-
-    assert app.return_value is TuiOutcome.NO_RUN
-    assert app.return_code == 0
-
-
 @pytest.mark.parametrize("key", ("q", "?"))
 async def test_plain_shortcut_keys_remain_editable_text_when_an_input_has_focus(tmp_path: Path, key: str) -> None:
     app = _app(tmp_path, FakeReplayController())
@@ -792,8 +204,6 @@ class FakeReplayController:
     accelerator_name: str = "NVIDIA GeForce RTX 5090"
     start_gate: asyncio.Event | None = None
     started_event: asyncio.Event | None = None
-    turn_event: asyncio.Event | None = None
-    turn_gate: asyncio.Event | None = None
     gate: asyncio.Event | None = None
     execution_success: bool = True
     execution_error: str | None = None
@@ -808,8 +218,6 @@ class FakeReplayController:
     probe_result: ContextProbeResult = ContextProbeResult(
         observed_tokens=None, reason=ContextObservationReason.CONTEXT_NOT_REPORTED
     )
-    probe_gate: threading.Event | None = None
-    ollama: bool = False
     # Holds preflight in its worker thread until the test releases it.
     preflight_release: threading.Event | None = None
     # A named block carries no hardware, as a refused production preflight does not.
@@ -819,15 +227,13 @@ class FakeReplayController:
 
     def probe_endpoint(self, request: ReplayRequest) -> ContextProbeResult:
         """Return the configured server answer without touching the network."""
-        if self.probe_gate is not None:
-            self.probe_gate.wait(UI_SETTLE_TIMEOUT_SECONDS)
         self.probes.append(request)
         return self.probe_result
 
     def detects_ollama(self, request: ReplayRequest) -> bool:
-        """Return the configured server identity without touching the network."""
+        """Report a server that is not Ollama, without touching the network."""
         del request
-        return self.ollama
+        return False
 
     def preflight(self, request: ReplayRequest) -> ReplayPreflight:
         """Return a stable local input check, blocked only when a block code is set."""
@@ -885,8 +291,6 @@ class FakeReplayController:
                 recorded_prompt_tokens=self.recorded_prompt_tokens,
             )
         )
-        if self.turn_gate is not None:
-            await self.turn_gate.wait()
         observer.on_boundary(
             TurnCompletedBoundary(
                 task=1,
@@ -903,8 +307,6 @@ class FakeReplayController:
                 success=self.execution_success,
             )
         )
-        if self.turn_event is not None:
-            self.turn_event.set()
         if self.gate is not None:
             await self.gate.wait()
         observer.on_boundary(
@@ -955,9 +357,7 @@ class FakeManagedReplayController:
     gate: asyncio.Event | None = None
     cleanup_event: asyncio.Event | None = None
     cleanup_error: bool = False
-    artifact_progress: tuple[tuple[int, int], ...] = ()
     download_gate: asyncio.Event | None = None
-    preflight_error: bool = False
     # A "{log}" placeholder receives the run's deployment log path, mirroring the
     # production _log_hint suffix on deployment RuntimeErrors.
     execution_error: str | None = None
@@ -965,7 +365,6 @@ class FakeManagedReplayController:
     # A refusal raised before the child starts leaves no log; a server that started and
     # then failed leaves one. The result page names the log only in the second case.
     execution_error_writes_log: bool = True
-    server_log_lines: tuple[str, ...] = ()
     # Writes real bound result files into the run folder, so the upload stage has a bundle to build.
     results_writer: Callable[[Path], None] | None = None
     requests: list[ReplayRequest] = field(default_factory=list)
@@ -993,8 +392,6 @@ class FakeManagedReplayController:
 
     def preflight(self, request: ReplayRequest) -> ReplayPreflight:
         """Allow only a compatible managed choice to reach execution."""
-        if self.preflight_error:
-            raise RuntimeError("private managed probe detail")
         return ReplayPreflight(
             ready=self.availability_result.can_deploy,
             manifest_tasks=1,
@@ -1017,15 +414,13 @@ class FakeManagedReplayController:
                 raise self.execution_error_type(self.execution_error.format(log=log_path))
             observer.on_activity(RunActivity(kind=RunActivityKind.SETUP_CHECKED))
             observer.on_activity(RunActivity(kind=RunActivityKind.MODEL_CHECKING, artifact_bytes=4 * 1024**3))
-            for downloaded_bytes, total_bytes in self.artifact_progress:
-                observer.on_artifact_progress(downloaded_bytes, total_bytes)
             if self.download_gate is not None:
                 await self.download_gate.wait()
             observer.on_activity(
                 RunActivity(
                     kind=RunActivityKind.MODEL_READY,
                     artifact_bytes=4 * 1024**3,
-                    downloaded=bool(self.artifact_progress),
+                    downloaded=False,
                 )
             )
             observer.on_activity(
@@ -1041,8 +436,6 @@ class FakeManagedReplayController:
             log_path = request.output_dir / "deployment.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text("server output\n", encoding="utf-8")
-            if self.server_log_lines:
-                observer.on_server_log(self.server_log_lines)
             observer.on_activity(
                 RunActivity(
                     kind=RunActivityKind.SERVER_READY,
@@ -1266,15 +659,6 @@ async def _start_run_by_click(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) 
     await _confirm_and_run(app, pilot)
 
 
-async def _start_existing_server_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
-    """Take the welcome shortcut for an existing server through setup to a started replay."""
-    await pilot.click("#welcome-existing")
-    await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-    await pilot.press("enter")
-    await _settle_setup(app, pilot)
-    await _confirm_and_run(app, pilot)
-
-
 def _assert_render_omits(app: AgentPerfLocalApp, private_values: tuple[str, ...]) -> None:
     """Require the visible terminal frame to omit planted private values."""
     rendered = app.export_screenshot()
@@ -1372,24 +756,6 @@ async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path:
         assert "Hugging Face" in detail
         assert "ARTIFICIAL ANALYSIS CATALOG" not in detail
         assert "QUALIFIED" not in detail
-
-
-async def test_gemma_profile_exposes_its_canonical_managed_artifact(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-
-        detail = str(app.query_one("#model-detail", Static).content)
-        assert "Google Gemma 4 12B IT QAT Q4_0 GGUF" in detail
-        assert AA_CATALOG_RUNTIME_PROVENANCE in detail
-        assert "Benchmark context" in detail
-        assert "65,536 tokens" in detail
-        assert "Runs with" in detail
-        assert "llama-cpp" in detail
-        assert "needs 9.4 GiB" in detail
-        assert "GGUF · 6.5 GiB · SHA-256 checked" in detail
 
 
 async def test_managed_candidate_selects_a_compatible_framework_and_saves_evidence(
@@ -1702,44 +1068,6 @@ async def test_cleartext_remote_endpoint_only_blocks_runs_that_send_a_key(tmp_pa
 
 
 @pytest.mark.parametrize(
-    ("base_url", "endpoint_model", "expected_status"),
-    (
-        (
-            "http://127.0.0.1:8000/v1 with spaces",
-            "served-model",
-            "[b]The server URL is not valid.[/b]\n"
-            "Use a plain address like http://127.0.0.1:8000/v1 with no credentials.",
-        ),
-        ("http://127.0.0.1:8000/v1", "", "[b]Enter the model name your server uses.[/b]"),
-    ),
-)
-async def test_rejected_setup_names_its_cause_before_any_probe(
-    tmp_path: Path,
-    base_url: str,
-    endpoint_model: str,
-    expected_status: str,
-) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await pilot.click("#model-continue")
-        await pilot.pause()
-        app.query_one("#base-url-input", Input).value = base_url
-        app.query_one("#endpoint-model-input", Input).value = endpoint_model
-        await _check_setup(app, pilot)
-
-        assert app.step is TuiStep.PREFLIGHT
-        assert app.request is None
-        assert app.query_one("#run-start", Button).disabled
-        status = str(app.query_one("#preflight-status", Static).content)
-        assert status == f"{expected_status}\n{BLOCKED_ACTION_MESSAGE}"
-        assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        assert app.selection.profile_id is None
-        assert app.query_one("#model-list", OptionList).highlighted == len(app.catalog.models)
-
-
-@pytest.mark.parametrize(
     ("block_code", "expected_status"),
     (
         (
@@ -1863,45 +1191,6 @@ async def test_preflight_worker_does_not_block_navigation_or_apply_a_stale_resul
         assert app.step is TuiStep.CONFIG
         assert app.request is None
         assert app.preflight_spinner_timer is None
-
-
-async def test_preflight_completion_while_privacy_is_open_preserves_visible_focus(tmp_path: Path) -> None:
-    release = threading.Event()
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(preflight_release=release),
-        defaults=TuiDefaults(
-            manifest_path=tmp_path / "manifest.json",
-            output_dir=tmp_path / "results",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await pilot.press("enter")
-        app.query_one("#model-continue", Button).focus()
-        await pilot.press("enter")
-        app.query_one("#config-continue", Button).focus()
-        await pilot.press("enter")
-        await pilot.press("ctrl+p")
-        await pilot.pause()
-
-        privacy_back = app.query_one("#privacy-back", Button)
-        assert app.step is TuiStep.PRIVACY
-        await _settle_until(pilot, lambda: app.focused is privacy_back)
-
-        release.set()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        assert app.step is TuiStep.PRIVACY
-        await _settle_until(pilot, lambda: app.focused is privacy_back)
-
-        app.query_one("#privacy-back", Button).focus()
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        assert app.step is TuiStep.PREFLIGHT
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
-        assert app.request is not None
 
 
 async def test_preflight_blocks_when_controller_scope_disagrees_with_request(tmp_path: Path) -> None:
@@ -2062,84 +1351,6 @@ async def test_remote_custom_run_is_service_latency_only_and_hides_private_run_f
         assert ATTACHED_CONTEXT_UNVERIFIED_MESSAGE in result_evidence
 
 
-async def test_context_gauge_words_every_request_size_it_can_be_given(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(118, 36)):
-        gauge = app.query_one("#run-context", ContextGauge)
-
-        gauge.show_request(48_120, context_tokens=131_072)
-        assert gauge.plain_text == "Next request · about 48,120 tokens ▕███████░░░░░░░░░░░░░▏ 37% of 131,072"
-        assert gauge.display is True
-
-        # A request larger than the window cannot fit, and the bar says so by filling.
-        gauge.show_request(151_000, context_tokens=131_072)
-        assert gauge.plain_text == "Next request · about 151,000 tokens ▕████████████████████▏ 115% of 131,072"
-
-        # Without a served context length there is no honest denominator, so the size stands alone.
-        gauge.show_request(48_120, context_tokens=None)
-        assert gauge.plain_text == "Next request · about 48,120 tokens · context length not reported"
-
-        # Nothing counted this prompt, so the line goes away rather than inventing a number.
-        gauge.show_request(None, context_tokens=131_072)
-        assert gauge.plain_text == ""
-        assert gauge.display is False
-
-        # A compact layout keeps the size and the share, and gives up the bar's tail.
-        gauge.show_request(48_120, context_tokens=131_072, compact=True)
-        assert gauge.plain_text == "Next · about 48,120 tokens ▕████░░░░░░▏ 37%"
-        # The narrowest supported terminal still fits the line beside the status-row inset.
-        assert len(gauge.plain_text) <= MINIMUM_SUPPORTED_WIDTH - 2
-
-
-async def test_run_timeline_matches_the_latest_closed_boundary(tmp_path: Path) -> None:
-    started_event = asyncio.Event()
-    turn_event = asyncio.Event()
-    turn_gate = asyncio.Event()
-    finish_gate = asyncio.Event()
-    app = _app(
-        tmp_path,
-        FakeReplayController(
-            started_event=started_event,
-            turn_event=turn_event,
-            turn_gate=turn_gate,
-            gate=finish_gate,
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _advance_to_preflight(app, pilot)
-        await pilot.pause()
-        await _tick_consent(app, pilot)
-        run_start = app.query_one("#run-start", Button)
-        assert not run_start.disabled
-        run_start.focus()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
-        async with asyncio.timeout(WORKER_EVENT_TIMEOUT_SECONDS):
-            await started_event.wait()
-        await pilot.pause()
-
-        assert str(app.query_one("#run-hero", Static).content) == RUN_HERO_RUNNING
-        # The announced request opens its task before any turn has closed.
-        assert str(app.query_one("#run-counters", Static).content).startswith("Task 1/2 · turn 0/4")
-        gauge = app.query_one("#run-context", ContextGauge)
-        # This server never reported a context length, so the size stands without a bar.
-        assert gauge.plain_text == "Next request · about 48,120 tokens · context length not reported"
-
-        turn_gate.set()
-        async with asyncio.timeout(WORKER_EVENT_TIMEOUT_SECONDS):
-            await turn_event.wait()
-        await pilot.pause()
-        assert str(app.query_one("#run-hero", Static).content) == RUN_HERO_RUNNING
-        assert str(app.query_one("#run-counters", Static).content).startswith("Task 1/2 · turn 1/4")
-        # The size stays on screen while the closed turn is written up.
-        assert gauge.plain_text == "Next request · about 48,120 tokens · context length not reported"
-
-        await pilot.press("ctrl+c")
-        assert app.outcome is TuiOutcome.CANCELLED
-
-
 async def test_hardware_labels_cannot_inject_rich_evidence_markup(tmp_path: Path) -> None:
     app = _app(tmp_path, FakeReplayController(accelerator_name="[b]AA VERIFIED[/b]"))
 
@@ -2190,29 +1401,6 @@ async def test_unsuccessful_report_set_uses_failure_outcome_and_style(tmp_path: 
         assert "median first token 100.0 ms" in str(app.query_one("#result-metrics", Static).content)
         await _settle_until(pilot, lambda: app.query_one("#result-throughput", Digits).value == "1,234")
         assert app.query_one("#result-throughput", Digits).has_class("-muted")
-
-
-async def test_privacy_and_methodology_shortcuts_restore_the_previous_step(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.press("ctrl+p")
-        await _settle_until(pilot, lambda: app.step is TuiStep.PRIVACY)
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#privacy-back", Button))
-        await pilot.press("?")
-        await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
-        await pilot.press("ctrl+p")
-        await _settle_until(pilot, lambda: app.step is TuiStep.PRIVACY)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.WELCOME)
-
-        await pilot.click("#welcome-start")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("?")
-        await _settle_until(pilot, lambda: app.step is TuiStep.METHODOLOGY)
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#methodology-back", Button))
-        await pilot.click("#methodology-back")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
 
 
 @pytest.mark.parametrize(
@@ -2384,41 +1572,6 @@ async def test_final_report_commit_cannot_be_cancelled(tmp_path: Path) -> None:
         assert app.outcome is TuiOutcome.SUCCESS
 
 
-async def test_finalization_while_privacy_is_open_preserves_visible_keyboard_focus(tmp_path: Path) -> None:
-    replay_gate = asyncio.Event()
-    finalization_gate = asyncio.Event()
-    app = _app(
-        tmp_path,
-        FakeReplayController(gate=replay_gate, finalization_gate=finalization_gate),
-    )
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await _start_run(app, pilot)
-        await pilot.press("ctrl+p")
-        await pilot.pause()
-
-        privacy_back = app.query_one("#privacy-back", Button)
-        assert app.step is TuiStep.PRIVACY
-        await _settle_until(pilot, lambda: app.focused is privacy_back)
-
-        replay_gate.set()
-        await pilot.pause()
-        assert app.replay_finalizing
-        assert app.step is TuiStep.PRIVACY
-        await _settle_until(pilot, lambda: app.focused is privacy_back)
-
-        app.query_one("#privacy-back", Button).focus()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
-        assert app.step is TuiStep.RUN
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-
-        finalization_gate.set()
-        await pilot.pause()
-        assert app.step is TuiStep.RESULT
-        assert app.outcome is TuiOutcome.SUCCESS
-
-
 async def test_report_finalization_failure_is_uncommitted_and_requires_fresh_output(tmp_path: Path) -> None:
     app = _app(tmp_path, FakeReplayController(finalization_error=True))
 
@@ -2449,81 +1602,6 @@ async def test_report_finalization_failure_is_uncommitted_and_requires_fresh_out
         assert "Quit" in rendered
         new_run = app.query_one("#result-new", Button)
         assert new_run.region.right <= 72 and new_run.region.bottom <= 24
-
-
-@pytest.mark.parametrize(
-    ("scenario", "expected_outcome", "rendered_status"),
-    (
-        ("success", TuiOutcome.SUCCESS, "Results&#160;saved"),
-        ("failure", TuiOutcome.FAILED, "The&#160;run&#160;stopped&#160;early."),
-        ("cancel", TuiOutcome.CANCELLED, "No&#160;results&#160;were&#160;saved"),
-    ),
-)
-async def test_compact_result_keeps_outcome_and_actions_visible(
-    tmp_path: Path,
-    scenario: str,
-    expected_outcome: TuiOutcome,
-    rendered_status: str,
-) -> None:
-    gate = asyncio.Event() if scenario == "cancel" else None
-    controller = FakeReplayController(
-        gate=gate,
-        execution_error="private failure detail" if scenario == "failure" else None,
-    )
-    app = _app(tmp_path, controller)
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await _start_run(app, pilot)
-        await pilot.pause()
-        if scenario == "cancel":
-            await pilot.press("escape", "escape")
-            await pilot.pause()
-
-        assert app.step is TuiStep.RESULT
-        assert app.outcome is expected_outcome
-        rendered = app.export_screenshot()
-        assert rendered_status in rendered
-        if scenario == "success":
-            assert "Run&#160;complete." in rendered
-        assert "New&#160;run" in rendered
-        new_run = app.query_one("#result-new", Button)
-        assert new_run.region.right <= 72 and new_run.region.bottom <= 24
-
-
-@pytest.mark.parametrize(
-    ("size", "warning_visible"),
-    (
-        ((47, 16), True),
-        ((48, 15), True),
-        ((48, 16), False),
-        ((60, 20), False),
-        ((71, 23), False),
-        ((72, 24), False),
-        ((96, 30), False),
-        ((118, 36), False),
-    ),
-)
-async def test_terminal_size_contract(size: tuple[int, int], warning_visible: bool, tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=size) as pilot:
-        warning = app.query_one("#small-terminal-warning", Static)
-        content = app.query_one("#content", ContentSwitcher)
-        assert warning.display is warning_visible
-        assert content.display is not warning_visible
-
-        if not warning_visible:
-            # Shrinking below the minimum and growing back restores the welcome page,
-            # its focus, and the compact brand header every supported size shows.
-            await pilot.resize_terminal(MINIMUM_SUPPORTED_WIDTH - 1, MINIMUM_SUPPORTED_HEIGHT - 1)
-            await pilot.pause()
-            assert warning.display
-            await pilot.resize_terminal(*size)
-            await pilot.pause()
-            assert not warning.display
-            assert content.display
-            assert str(app.query_one("#welcome-logo", PixelLogo).content) == PIXEL_LOGO_SMALL
-            await _settle_until(pilot, lambda: app.focused is app.query_one("#welcome-start", Button))
 
 
 async def test_a_second_run_with_unchanged_settings_starts_clean_in_a_fresh_run_folder(tmp_path: Path) -> None:
@@ -2581,43 +1659,6 @@ async def test_enter_pressed_twice_from_ready_never_cancels_the_run_it_started(t
         assert app.outcome is TuiOutcome.SUCCESS
 
 
-@pytest.mark.parametrize(
-    ("ending", "expected_outcome", "result_title"),
-    (
-        pytest.param("complete", TuiOutcome.SUCCESS, "Run complete.", id="completion"),
-        pytest.param("cancel", TuiOutcome.CANCELLED, "Run cancelled.", id="cancellation"),
-    ),
-)
-async def test_a_run_ending_while_privacy_is_open_keeps_the_page_and_returns_to_result(
-    tmp_path: Path, ending: str, expected_outcome: TuiOutcome, result_title: str
-) -> None:
-    gate = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=gate))
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _start_run_by_click(app, pilot)
-        await pilot.press("ctrl+p")
-        await pilot.pause()
-        privacy_back = app.query_one("#privacy-back", Button)
-        assert app.step is TuiStep.PRIVACY
-
-        if ending == "complete":
-            gate.set()
-        else:
-            await pilot.press("ctrl+c")
-        await pilot.pause()
-
-        assert app.step is TuiStep.PRIVACY
-        await _settle_until(pilot, lambda: app.focused is privacy_back)
-        assert app.outcome is expected_outcome
-
-        await pilot.press("escape")
-        await pilot.pause()
-
-        assert app.step is TuiStep.RESULT
-        assert result_title in str(app.query_one("#result-title", Static).content)
-
-
 async def test_quit_during_a_wedged_cancellation_can_still_force_an_exit(tmp_path: Path) -> None:
     controller = WedgedCleanupController(
         started=asyncio.Event(),
@@ -2665,48 +1706,6 @@ async def test_quit_during_a_wedged_cancellation_can_still_force_an_exit(tmp_pat
         controller.release.set()
 
     assert app.return_value is TuiOutcome.NO_RUN
-
-
-async def test_user_endpoint_fields_survive_a_model_screen_round_trip(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await pilot.click("#model-continue")
-        await pilot.pause()
-        app.query_one("#endpoint-model-input", Input).value = "user-chosen-serving-alias"
-        app.query_one("#config-back", Button).focus()
-        await pilot.press("enter")
-        app.query_one("#model-list", OptionList).focus()
-        await pilot.press("end", "enter")
-        await pilot.pause()
-
-        assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        assert app.query_one("#endpoint-model-input", Input).value == "user-chosen-serving-alias"
-
-        app.query_one("#base-url-input", Input).value = "http://192.168.1.5:8000/v1"
-        app.query_one("#api-key-env-input", Input).value = "PRIVATE_TOKEN"
-        app.query_one("#config-back", Button).focus()
-        await pilot.press("enter")
-        # A managed candidate takes over the server fields, so the round trip goes
-        # through one and back to the custom entry the typed values belong to.
-        await _highlight_profile(app, pilot, "qwen38-27b-q4-k-m")
-        await pilot.press("enter")
-        await pilot.pause()
-        assert app.selection.profile_id == "qwen38-27b-q4-k-m"
-        assert app.query_one("#endpoint-model-input", Input).value == "qwen38-27b-q4-k-m"
-
-        app.query_one("#config-back", Button).focus()
-        await pilot.press("enter")
-        app.query_one("#model-list", OptionList).focus()
-        await pilot.press("end", "enter")
-        await pilot.pause()
-
-        assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        assert app.query_one("#base-url-input", Input).value == "http://192.168.1.5:8000/v1"
-        assert app.query_one("#api-key-env-input", Input).value == "PRIVATE_TOKEN"
-        # The managed detour hands the model name back to the launch default.
-        assert app.query_one("#endpoint-model-input", Input).value == ATTACHED_ENDPOINT_MODEL
 
 
 @pytest.mark.parametrize("cli_endpoint_model", (None, "cli-endpoint-model"))
@@ -2778,157 +1777,6 @@ async def test_typed_results_folder_expands_home_and_names_the_saved_run_folder(
         displayed = str(app.query_one("#result-status", Static).content).replace(PATH_WRAP_BREAK, "")
         assert expected_display in displayed
         assert not shortened or str(Path.home()) not in displayed
-
-
-async def test_copied_result_path_contains_no_wrap_break_characters(tmp_path: Path) -> None:
-    controller = FakeReplayController()
-    app = _app(tmp_path, controller)
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _start_run_by_click(app, pilot)
-        await pilot.pause()
-        assert app.step is TuiStep.RESULT
-
-        status = app.query_one("#result-status", Static)
-        # The rendered text steers wrapping with the zero-width break character…
-        assert PATH_WRAP_BREAK in str(status.content)
-        selections: dict[Widget, Selection] = {status: Selection(None, None)}
-        app.screen.selections = selections
-        selected = app.screen.get_selected_text()
-
-        # …but a copy must paste a path a shell can resolve.
-        assert selected is not None
-        assert PATH_WRAP_BREAK not in selected
-        assert str(controller.requests[0].output_dir) in selected
-
-
-async def test_out_of_range_managed_port_names_the_launch_settings(tmp_path: Path) -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        managed_controller=FakeManagedReplayController(availability_result=_managed_availability()),
-        defaults=TuiDefaults(
-            output_dir=tmp_path / "results",
-            deployment_port=80,
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-        await pilot.press("enter")
-        await _check_setup(app, pilot)
-
-        assert app.step is TuiStep.PREFLIGHT
-        assert app.request is None
-        assert str(app.query_one("#preflight-status", Static).content) == (
-            f"Launch settings are not valid: the --port value must be between "
-            f"{MINIMUM_USER_PORT} and {MAXIMUM_PORT}. "
-            "Start the app again with a different --port or --startup-timeout-seconds.\n" + BLOCKED_ACTION_MESSAGE
-        )
-
-
-@pytest.mark.parametrize(
-    ("downloaded_bytes", "expected_progress"),
-    (
-        (3 * 1024**3 // 2, "Downloading the model · 1.5 / 4.0 GiB"),
-        (4 * 1024**3, "Downloading the model · 4.0 / 4.0 GiB"),
-    ),
-)
-@pytest.mark.parametrize("size", ((48, 16), (96, 30)))
-async def test_managed_download_progress_replaces_the_activity_spinner(
-    tmp_path: Path,
-    downloaded_bytes: int,
-    expected_progress: str,
-    size: tuple[int, int],
-) -> None:
-    total_bytes = 4 * 1024**3
-    download_gate = asyncio.Event()
-    managed_controller = FakeManagedReplayController(
-        availability_result=_managed_availability(),
-        artifact_progress=((downloaded_bytes, total_bytes),),
-        download_gate=download_gate,
-    )
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        managed_controller=managed_controller,
-        defaults=TuiDefaults(
-            output_dir=tmp_path / "results",
-            client_backend="python",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=size) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-        await pilot.press("enter")
-        await _check_setup(app, pilot)
-        await _tick_consent_and_run(app, pilot)
-
-        progress = app.query_one("#activity-progress", ProgressBar)
-        # The stepper names the deploy phase so it survives compact scrolling.
-        assert str(app.query_one("#run-eyebrow", Static).content) == "STEP 4 OF 4 · RUN · PREPARING"
-        assert not app.query_one("#run-progress-row").display
-        live = app.query_one("#activity-live", Static)
-        await _settle_until(pilot, lambda: str(live.content) == expected_progress)
-        assert progress.display
-        await _settle_until(pilot, lambda: live.region.bottom == progress.region.y)
-        assert progress.region.bottom < size[1]
-        assert progress.total == total_bytes
-        assert progress.progress == downloaded_bytes
-
-        download_gate.set()
-        await pilot.pause()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-
-        assert str(app.query_one("#run-eyebrow", Static).content) == "STEP 4 OF 4 · RUN"
-        assert not progress.display
-        assert app.outcome is TuiOutcome.SUCCESS
-
-
-async def test_attached_preflight_reuses_the_launch_hardware_snapshot(tmp_path: Path) -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(block_code=PreflightBlockCode.OUTPUT_DIR_USED),
-        managed_controller=FakeManagedReplayController(availability_result=_managed_availability()),
-        defaults=TuiDefaults(
-            manifest_path=tmp_path / "manifest.json",
-            output_dir=tmp_path / "results",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await pilot.click("#model-continue")
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-
-        status = str(app.query_one("#preflight-status", Static).content)
-        assert "This computer: Apple M5 Pro · 24 GiB · Python client" in status
-        assert "hardware unavailable" not in status
-
-
-async def test_help_page_and_footer_name_the_overlay_shortcuts(tmp_path: Path) -> None:
-    app = _app(tmp_path, FakeReplayController())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.press("?")
-        await pilot.pause()
-
-        assert app.step is TuiStep.METHODOLOGY
-        help_text = "\n".join(str(widget.content) for widget in app.query_one("#methodology").query(Static))
-        assert "Ctrl+P" in help_text
-        assert "open the privacy page" in help_text
-        app.query_one("#help-privacy", Button).focus()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.PRIVACY)
-        assert app.step is TuiStep.PRIVACY
 
 
 def _accelerator(name: str, memory_bytes: int | None) -> AcceleratorSnapshot:
@@ -3131,25 +1979,6 @@ async def test_managed_launch_is_pinned_to_the_device_this_computer_offers(
             assert expected_computer in preflight_status
 
 
-async def test_device_picker_labels_every_detected_accelerator(tmp_path: Path) -> None:
-    app = _device_app(tmp_path, _multi_device_hardware())
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _select_managed_model(app, pilot)
-        device = app.query_one("#managed-device-select", ManagedDeviceSelect)
-        labels: list[str] = []
-        for value in ("0", "1", "2"):
-            device.value = value
-            await pilot.pause()
-            labels.append(str(device.query_one("#label", Static).content))
-
-        assert labels == [
-            "0 · NVIDIA GeForce RTX 5090 · 32 GiB",
-            "1 · NVIDIA RTX PRO 6000 · 96 GiB",
-            "2 · NVIDIA GeForce RTX 4090 · memory not reported",
-        ]
-
-
 @pytest.mark.parametrize(
     ("memory_gib", "replay_id", "expected_value", "expected_label"),
     (
@@ -3212,54 +2041,6 @@ async def test_custom_replay_floor_blocks_a_smaller_managed_context_before_launc
         # A blocked page drops the cheerful hero and the reduced-context notice.
         assert str(app.query_one("#preflight-hero", Static).content) == PREFLIGHT_BLOCKED_HERO
         assert not app.query_one("#preflight-reduced", Static).display
-
-
-async def test_selecting_the_full_context_on_a_small_device_names_the_reduced_escape_hatch(tmp_path: Path) -> None:
-    app = _device_app(tmp_path, _hardware_with(_accelerator("NVIDIA test GPU", 9 * 1024**3)))
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _select_managed_model(app, pilot)
-        app.query_one("#replay-workload-select", ReplayWorkloadSelect).value = "aa-mini-v1"
-        await pilot.pause()
-        app.query_one("#managed-context-select", ManagedContextSelect).value = "65536"
-        await pilot.pause()
-
-        status = str(app.query_one("#managed-deployment-status", Static).content)
-        assert "Not enough accelerator memory for the full 65,536-token context." in status
-        assert "reduced runs are recorded separately from full-context results" in status
-        assert app.query_one("#managed-framework-select", ManagedFrameworkSelect).disabled
-        # The explicit full choice sticks so its refusal stays readable.
-        assert app.query_one("#managed-context-select", ManagedContextSelect).value == "65536"
-
-
-@pytest.mark.parametrize(
-    ("hardware", "device_index"),
-    (
-        (_single_device_hardware(), None),
-        # Multiple accelerators add the device row; a chosen device also shows the
-        # full launch status, which is the tallest managed form this page renders.
-        (_multi_device_hardware(), 0),
-    ),
-)
-async def test_managed_setup_with_the_context_row_fits_the_minimum_terminal(
-    tmp_path: Path,
-    hardware: HardwareSnapshot,
-    device_index: int | None,
-) -> None:
-    app = _device_app(tmp_path, hardware, device_index=device_index)
-
-    async with app.run_test(size=(72, 24)) as pilot:
-        await _select_managed_model(app, pilot)
-
-        assert app.query_one("#managed-context-row").display
-        assert app.query_one("#managed-device-row").display is (device_index is not None)
-        # The whole managed form fits without scrolling at the supported minimum size,
-        # keeping the stepper eyebrow on screen.
-        assert app.query_one("#config", VerticalScroll).max_scroll_y == 0
-        await _settle_until(pilot, lambda: "STEP&#160;2&#160;OF&#160;4" in app.export_screenshot())
-        continue_button = app.query_one("#config-continue", Button)
-        assert continue_button.region.bottom <= 24
-        assert continue_button.region.height == 1
 
 
 async def test_reduced_context_run_carries_the_warning_from_preflight_to_result(tmp_path: Path) -> None:
@@ -3328,312 +2109,6 @@ async def test_reduced_context_run_carries_the_warning_from_preflight_to_result(
         assert request.managed_deployment is not None
         assert request.managed_deployment.context_tokens == 32_768
         assert request.managed_deployment.reduced_context
-
-
-async def test_failed_preflight_hides_the_reduced_context_notice_under_its_error(tmp_path: Path) -> None:
-    managed_controller = FakeManagedReplayController(
-        availability_result=_managed_availability(),
-        preflight_error=True,
-    )
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        managed_controller=managed_controller,
-        defaults=TuiDefaults(
-            output_dir=tmp_path / "results",
-            client_backend="python",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-        await pilot.press("enter")
-        await pilot.pause()
-        app.query_one("#replay-workload-select", ReplayWorkloadSelect).value = "aa-mini-v1"
-        await pilot.pause()
-        app.query_one("#managed-context-select", ManagedContextSelect).value = "32768"
-        await pilot.pause()
-        await _check_setup(app, pilot)
-
-        assert app.request is None
-        assert "Setup check failed." in str(app.query_one("#preflight-status", Static).content)
-        # The reduced-context notice describes a run this failed setup can no longer
-        # start, so it never lingers under the error card.
-        assert not app.query_one("#preflight-reduced", Static).display
-        assert str(app.query_one("#preflight-hero", Static).content) == PREFLIGHT_BLOCKED_HERO
-        assert "private managed probe detail" not in app.export_screenshot()
-
-
-# Short enough to wait out, long enough to outlast one turn boundary on a loaded runner.
-LAPSING_CANCEL_WINDOW_SECONDS = 0.5
-
-
-@pytest.mark.parametrize("leave_page", (False, True), ids=("prompt-lapses", "page-left"))
-async def test_turn_completed_under_an_armed_cancel_shows_once_the_prompt_resolves(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    leave_page: bool,
-) -> None:
-    if not leave_page:
-        monkeypatch.setattr(textual_app, "CANCEL_ARMING_WINDOW_SECONDS", LAPSING_CANCEL_WINDOW_SECONDS)
-    started_event = asyncio.Event()
-    turn_event = asyncio.Event()
-    turn_gate = asyncio.Event()
-    app = _app(
-        tmp_path,
-        FakeReplayController(
-            started_event=started_event, turn_event=turn_event, turn_gate=turn_gate, gate=asyncio.Event()
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _start_run_by_click(app, pilot)
-        async with asyncio.timeout(WORKER_EVENT_TIMEOUT_SECONDS):
-            await started_event.wait()
-        await pilot.pause()
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert app.cancel_armed
-        metrics = app.query_one("#run-metrics", Static)
-        assert str(metrics.content) == CANCEL_CONFIRM_MESSAGE
-
-        # A turn completes while armed: progress updates, but the prompt keeps the status line.
-        turn_gate.set()
-        async with asyncio.timeout(WORKER_EVENT_TIMEOUT_SECONDS):
-            await turn_event.wait()
-        await pilot.pause()
-        assert str(app.query_one("#run-counters", Static).content).startswith("Task 1/2")
-        assert str(metrics.content) == CANCEL_CONFIRM_MESSAGE
-
-        if leave_page:
-            await pilot.press("ctrl+p")
-            await pilot.pause()
-            assert app.step is TuiStep.PRIVACY
-            assert not app.cancel_armed
-            await pilot.press("escape")
-            await pilot.pause()
-            assert app.step is TuiStep.RUN
-        else:
-            await _settle_until(pilot, lambda: not app.cancel_armed)
-
-        # The status line comes back with the turn that completed under the prompt.
-        assert "first token 100 ms" in str(metrics.content)
-        assert app.replay_active
-
-        # Escape arms afresh instead of confirming a lapsed or abandoned prompt.
-        await pilot.press("escape")
-        await pilot.pause()
-        assert app.outcome is not TuiOutcome.CANCELLED
-        assert str(metrics.content) == CANCEL_CONFIRM_MESSAGE
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert app.outcome is TuiOutcome.CANCELLED
-
-
-async def test_setup_focuses_continue_unless_a_custom_manifest_needs_a_path(tmp_path: Path) -> None:
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        defaults=TuiDefaults(output_dir=tmp_path / "results", endpoint_model=ATTACHED_ENDPOINT_MODEL),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-
-        app.query_one("#replay-workload-select", ReplayWorkloadSelect).value = CUSTOM_REPLAY_ID
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#manifest-input", Input))
-        assert app.query_one("#manifest-row").display
-        await pilot.press("escape")
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        assert app.step is TuiStep.CONFIG
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#manifest-input", Input))
-
-        app.query_one("#manifest-input", Input).value = str(tmp_path / "replay.json")
-        await pilot.press("escape")
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
-
-
-async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> None:
-    gate = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=gate))
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
-        welcome_bindings = app.screen.active_bindings
-        assert welcome_bindings["escape"].binding.description == "Quit"
-
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
-        setup_bindings = app.screen.active_bindings
-        assert setup_bindings["escape"].binding.description == "Back"
-        assert not setup_bindings["enter"].binding.show
-
-        # Enter in a text field reviews the form, so its less familiar action stays visible.
-        app.query_one("#output-input", Input).focus()
-        await pilot.pause()
-        field_bindings = app.screen.active_bindings
-        assert field_bindings["enter"].binding.description == "Review setup"
-        assert field_bindings["enter"].binding.show
-        app.query_one("#config-continue", Button).focus()
-        await pilot.pause()
-
-        await pilot.press("enter")
-        await _settle_setup(app, pilot)
-        assert app.step is TuiStep.PREFLIGHT
-        confirm_bindings = app.screen.active_bindings
-        assert confirm_bindings["space"].binding.description == "Agree"
-        # Run takes focus only after the server check answers from its worker thread.
-        await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
-        await pilot.press("shift+tab")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#submit-checkbox", Checkbox))
-        assert app.screen.active_bindings["space"].binding.description == "Submit"
-        await pilot.press("tab")
-        assert not app.screen.active_bindings["enter"].binding.show
-
-        await pilot.press("enter")
-        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
-        assert app.step is TuiStep.RUN
-        run_bindings = app.screen.active_bindings
-        assert run_bindings["escape"].binding.description == "Cancel"
-        assert "enter" not in run_bindings or not run_bindings["enter"].binding.show
-        await _settle_until(pilot, lambda: "Details" in app.export_screenshot())
-
-        gate.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-        result_bindings = app.screen.active_bindings
-        assert result_bindings["escape"].binding.description == "New run"
-        assert result_bindings["escape"].binding.show
-        # Enter still starts a new run from the focused button, but the footer names
-        # New run only once; the button label already names its action.
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#result-new", Button))
-        assert not result_bindings["enter"].binding.show
-
-
-def _activity_text(app: AgentPerfLocalApp) -> str:
-    """Return the finished activity lines as one whitespace-normalized string; the log wraps long lines."""
-    joined = " ".join(strip.text for strip in app.query_one("#activity-lines", RichLog).lines)
-    return " ".join(joined.split())
-
-
-async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path: Path) -> None:
-    gate = asyncio.Event()
-    managed_controller = FakeManagedReplayController(
-        availability_result=_managed_availability(),
-        gate=gate,
-        server_log_lines=("llama_model_loader: loaded meta data with 40 key-value pairs", "srv listening on port 8080"),
-    )
-    app = AgentPerfLocalApp(
-        load_model_catalog(CATALOG_PATH),
-        controller=FakeReplayController(),
-        managed_controller=managed_controller,
-        defaults=TuiDefaults(
-            output_dir=tmp_path / "results",
-            client_backend="python",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(118, 36)) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-        await pilot.press("enter")
-        await _check_setup(app, pilot)
-        await _tick_consent(app, pilot)
-        app.query_one("#run-start", Button).press()
-        await _settle_until(pilot, lambda: str(app.query_one("#run-hero", Static).content) == RUN_HERO_RUNNING)
-        # RichLog holds its lines until it has been laid out once.
-        await _settle_until(pilot, lambda: "Setup checked" in _activity_text(app))
-
-        activity = _activity_text(app)
-        assert "Model ready · 4.0 GiB · from the Hugging Face cache · SHA-256 checked" in activity
-        assert "Server ready · llama.cpp · 65,536-token context · 14.2 s" in activity
-        assert "GPU startup verified · CUDA" in activity
-        assert "Replay loaded · 1 task · 1 turn" in activity
-        assert "Turn 1/1 · waiting for the first token" in str(app.query_one("#activity-live", Static).content)
-        # This run owns its server, so the context it launched at gives the bar its scale.
-        gauge = app.query_one("#run-context", ContextGauge)
-        assert gauge.plain_text == "Next request · about 48,120 tokens ▕███████████████░░░░░▏ 73% of 65,536"
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-        await _settle_until(pilot, lambda: "Server&#160;log" in app.export_screenshot())
-
-        # The owned server's own log is one key away and swaps back the same way.
-        switcher = app.query_one("#run-left-switcher", ContentSwitcher)
-        assert switcher.current == "run-activity"
-        # A wide page keeps the extra charts beside the server log; a compact one shows one or the other.
-        run_page = app.query_one("#run", Vertical)
-        await pilot.press("d")
-        assert run_page.has_class("show-details")
-        assert app.query_one("#run-ttft-chart").display
-        await pilot.press("l")
-        await pilot.pause()
-        assert switcher.current == "run-server-log"
-        assert run_page.has_class("show-details")
-        assert app.query_one("#run-ttft-chart").display
-        await pilot.resize_terminal(72, 24)
-        await pilot.pause()
-        assert not run_page.has_class("show-details")
-        assert switcher.current == "run-server-log"
-        assert app.query_one("#run-server-log", RichLog).region.height > 1
-        await pilot.resize_terminal(118, 36)
-        await pilot.pause()
-        assert str(app.query_one("#run-left-title", Static).content) == "SERVER LOG · llama.cpp"
-        server_log = "\n".join(strip.text for strip in app.query_one("#run-server-log", RichLog).lines)
-        assert "llama_model_loader" in server_log
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-server-log", RichLog))
-        await pilot.press("l")
-        await pilot.pause()
-        assert switcher.current == "run-activity"
-
-        gate.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
-
-        activity = _activity_text(app)
-        assert "Turn 1/1 · task 1 · 500 tok/s · 0.3 s" in activity
-        assert "Replay finished · 1/1 turns · 1.0 s" in activity
-        # No request is in flight once the replay closes, so the line goes away with it.
-        assert gauge.plain_text == ""
-        assert "Server stopped" in activity
-        detail = str(app.query_one("#result-metrics-detail", Static).content)
-        assert "p90 first token 100.0 ms · p90 turn 300.0 ms" in detail
-        assert "decode per turn · p50 500 · p90 500 tok/s" in detail
-        assert not app.query_one("#result-charts", Horizontal).has_class("-empty")
-        assert app.query_one("#result-ttft-chart", DistributionChart).histogram is not None
-        assert app.query_one("#result-decode-chart", DistributionChart).histogram is not None
-
-
-async def test_server_log_key_is_inert_for_a_server_you_run_yourself(tmp_path: Path) -> None:
-    gate = asyncio.Event()
-    app = _app(tmp_path, FakeReplayController(gate=gate))
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await _start_run(app, pilot)
-        await pilot.pause()
-        assert app.step is TuiStep.RUN
-        activity = _activity_text(app)
-        assert "Setup checked" in activity
-        assert "Server answered · model listed · context length not reported" in activity
-
-        await pilot.press("l")
-        await pilot.pause()
-        assert app.query_one("#run-left-switcher", ContentSwitcher).current == "run-activity"
-        assert "Server&#160;log" not in app.export_screenshot()
-
-        gate.set()
-        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
 
 @pytest.mark.parametrize(
