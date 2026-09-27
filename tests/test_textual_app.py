@@ -140,6 +140,17 @@ async def _check_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None
     await pilot.pause()
 
 
+async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Tick consent, wait until Run is offered, press it, and wait until the run page shows.
+
+    An attached run offers Run only after its server check answers on a worker thread.
+    """
+    app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
+    await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+    app.query_one("#run-start", Button).press()
+    await _settle_until(pilot, lambda: app.step is not TuiStep.PREFLIGHT)
+
+
 async def test_prefilled_model_stays_custom_after_mount() -> None:
     app = AgentPerfLocalApp(
         load_model_catalog(CATALOG_PATH),
@@ -2017,8 +2028,7 @@ async def test_remote_custom_run_is_service_latency_only_and_hides_private_run_f
         assert app.evidence.partition is ResultPartition.SERVICE_LATENCY_ONLY
         _assert_render_omits(app, planted_private_values)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
-        assert not app.query_one("#run-start", Button).disabled
+        await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
         await pilot.press("enter")
         assert app.step is TuiStep.RUN
         await pilot.pause(0.2)
@@ -2190,7 +2200,7 @@ async def test_privacy_and_methodology_shortcuts_restore_the_previous_step(tmp_p
         await pilot.click("#welcome-start")
         await pilot.press("?")
         assert app.step is TuiStep.METHODOLOGY
-        assert app.focused is app.query_one("#methodology-back", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#methodology-back", Button))
         await pilot.click("#methodology-back")
         assert app.step is TuiStep.MODEL
 
@@ -2513,10 +2523,7 @@ async def test_a_second_run_with_unchanged_settings_starts_clean_in_a_fresh_run_
         await pilot.pause()
         assert app.query_one("#output-input", Input).value == str(tmp_path / "private" / "results")
         await _check_setup(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
-        app.query_one("#run-start", Button).press()
-        await pilot.pause()
+        await _start_run(app, pilot)
 
         progress = app.query_one("#run-progress", ProgressBar)
         assert app.step is TuiStep.RUN
@@ -2737,14 +2744,13 @@ async def test_typed_results_folder_expands_home_and_names_the_saved_run_folder(
         assert run_dir.name.startswith("run-")
         assert not Path("~").exists()
 
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
-        app.query_one("#run-start", Button).press()
-        await pilot.pause()
+        await _start_run(app, pilot)
 
-        assert app.step is TuiStep.RESULT
+        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
+        assert app.execution is not None
+        assert app.execution.output_dir.parent == expected_output_dir
         # The saved-to path shortens home to ~, except on Windows, and wraps only at directory boundaries.
-        absolute_run_dir = run_dir.absolute()
+        absolute_run_dir = app.execution.output_dir.absolute()
         shortened = sys.platform != "win32" and absolute_run_dir.is_relative_to(Path.home())
         expected_display = (
             str(Path("~") / absolute_run_dir.relative_to(Path.home())) if shortened else str(absolute_run_dir)
@@ -2841,10 +2847,7 @@ async def test_managed_download_progress_replaces_the_activity_spinner(
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
         await _check_setup(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
-        app.query_one("#run-start", Button).press()
-        await pilot.pause()
+        await _start_run(app, pilot)
 
         progress = app.query_one("#activity-progress", ProgressBar)
         # The stepper names the deploy phase so it survives compact scrolling.
@@ -2853,7 +2856,7 @@ async def test_managed_download_progress_replaces_the_activity_spinner(
         live = app.query_one("#activity-live", Static)
         assert str(live.content) == expected_progress
         assert progress.display
-        assert live.region.bottom == progress.region.y
+        await _settle_until(pilot, lambda: live.region.bottom == progress.region.y)
         assert progress.region.bottom < size[1]
         assert progress.total == total_bytes
         assert progress.progress == downloaded_bytes
@@ -3291,10 +3294,7 @@ async def test_reduced_context_run_carries_the_warning_from_preflight_to_result(
         )
         assert EligibilityReason.REDUCED_CONTEXT in app.evidence.ineligibility_reasons
 
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
-        app.query_one("#run-start", Button).press()
-        await pilot.pause()
+        await _start_run(app, pilot)
         run_eyebrow = app.query_one("#run-eyebrow", Static)
         assert str(run_eyebrow.content) == f"{RUN_STEP_PREPARING_EYEBROW} · REDUCED CONTEXT"
 
@@ -3551,7 +3551,7 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         # This run owns its server, so the context it launched at gives the bar its scale.
         gauge = app.query_one("#run-context", ContextGauge)
         assert gauge.plain_text == "Next request · about 48,120 tokens ▕███████████████░░░░░▏ 73% of 65,536"
-        assert app.focused is app.query_one("#activity-lines", RichLog)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
         assert "Server&#160;log" in app.export_screenshot()
 
         # The owned server's own log is one key away and swaps back the same way.

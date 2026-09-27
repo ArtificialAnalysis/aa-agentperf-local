@@ -466,7 +466,16 @@ def _collect_once(
 ) -> _AttemptOutcome:
     """Run one collector process and write every parsed sample."""
     try:
-        process = subprocess.Popen(config.command(fields), stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+        # On Windows the owner stops this collector with a break event sent to its whole process
+        # group. The sampler gets its own group, so it keeps sampling until the collector stops it,
+        # as on POSIX. That last sample after the phase ends is what closes the energy integral.
+        process = subprocess.Popen(
+            config.command(fields),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        )
     except OSError:
         return _AttemptOutcome(failure_code="collector_start_failed")
     stdout = process.stdout
