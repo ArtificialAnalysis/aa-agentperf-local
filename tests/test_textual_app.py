@@ -125,7 +125,8 @@ async def _settle_until(pilot: Pilot[TuiOutcome], condition: Callable[[], bool])
     deadline = time.monotonic() + UI_SETTLE_TIMEOUT_SECONDS
     while not condition() and time.monotonic() < deadline:
         await pilot.pause()
-    assert condition()
+    workers = [(worker.name, worker.state.name) for worker in pilot.app.workers]
+    assert condition(), f"focused={pilot.app.focused!r} workers={workers}"
 
 
 async def _settle_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
@@ -337,9 +338,10 @@ async def test_arrow_keys_move_focus_across_closed_dropdowns_and_inputs(tmp_path
 
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.pause()
-        await pilot.press("enter", "enter")
-        await pilot.pause()
-        assert app.step is TuiStep.CONFIG
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
         replay_select = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
@@ -376,7 +378,10 @@ async def test_setup_field_focus_parks_the_cursor_and_blur_rewinds_the_view(tmp_
 
     async with app.run_test(size=(72, 24)) as pilot:
         await pilot.pause()
-        await pilot.press("enter", "enter")
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await pilot.pause()
         output_input = app.query_one("#output-input", Input)
         assert len(output_input.value) > 40
@@ -399,7 +404,10 @@ async def test_setup_actions_stay_visible_and_help_returns_to_the_edit(size: tup
 
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
-        await pilot.press("enter", "enter")
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await pilot.pause()
         page = app.query_one("#config", VerticalScroll)
         review = app.query_one("#config-continue", Button)
@@ -720,7 +728,10 @@ async def test_dropdown_opens_with_enter_and_escape_closes_it_on_the_same_screen
 
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.pause()
-        await pilot.press("enter", "enter")
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await pilot.pause()
         replay_select = app.query_one("#replay-workload-select", ReplayWorkloadSelect)
         replay_select.focus()
@@ -2862,7 +2873,7 @@ async def test_managed_download_progress_replaces_the_activity_spinner(
         assert str(app.query_one("#run-eyebrow", Static).content) == "STEP 4 OF 4 · RUN · PREPARING"
         assert not app.query_one("#run-progress-row").display
         live = app.query_one("#activity-live", Static)
-        assert str(live.content) == expected_progress
+        await _settle_until(pilot, lambda: str(live.content) == expected_progress)
         assert progress.display
         await _settle_until(pilot, lambda: live.region.bottom == progress.region.y)
         assert progress.region.bottom < size[1]
@@ -3432,9 +3443,10 @@ async def test_setup_focuses_continue_unless_a_custom_manifest_needs_a_path(tmp_
 
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.pause()
-        await pilot.press("enter", "enter")
-        await pilot.pause()
-        assert app.step is TuiStep.CONFIG
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
         app.query_one("#replay-workload-select", ReplayWorkloadSelect).value = CUSTOM_REPLAY_ID
@@ -3461,9 +3473,10 @@ async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> No
         welcome_bindings = app.screen.active_bindings
         assert welcome_bindings["escape"].binding.description == "Quit"
 
-        await pilot.press("enter", "enter")
-        await pilot.pause()
-        assert app.step is TuiStep.CONFIG
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.MODEL)
+        await pilot.press("enter")
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         setup_bindings = app.screen.active_bindings
         assert setup_bindings["escape"].binding.description == "Back"
         assert not setup_bindings["enter"].binding.show
@@ -3542,9 +3555,10 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         await _tick_consent(app, pilot)
         app.query_one("#run-start", Button).press()
         await _settle_until(pilot, lambda: str(app.query_one("#run-hero", Static).content) == RUN_HERO_RUNNING)
+        # RichLog holds its lines until it has been laid out once.
+        await _settle_until(pilot, lambda: "Setup checked" in _activity_text(app))
 
         activity = _activity_text(app)
-        assert "Setup checked" in activity
         assert "Model ready · 4.0 GiB · from the Hugging Face cache · SHA-256 checked" in activity
         assert "Server ready · llama.cpp · 65,536-token context · 14.2 s" in activity
         assert "GPU startup verified · CUDA" in activity
