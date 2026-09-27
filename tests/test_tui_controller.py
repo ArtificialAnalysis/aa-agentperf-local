@@ -213,7 +213,6 @@ def _installed_llama_offer(
     candidate: ModelCandidate,
     context_tokens: int | None = None,
 ) -> tuple[FrameworkOffer, ...]:
-    assert candidate.deployment is not None
     deployment = candidate.deployment
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
@@ -654,8 +653,6 @@ def test_managed_choice_rejects_a_context_outside_the_recipe(context_tokens: int
 def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> None:
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
-    deployment = candidate.deployment
-    assert deployment is not None
     choice = ManagedDeploymentChoice(
         candidate=candidate,
         catalog_as_of=catalog.as_of,
@@ -692,8 +689,6 @@ def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> 
 async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_path: Path) -> None:
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
-    deployment = candidate.deployment
-    assert deployment is not None
     choice = ManagedDeploymentChoice(
         candidate=candidate,
         catalog_as_of=catalog.as_of,
@@ -740,8 +735,6 @@ async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_pat
 
 def _managed_request(tmp_path: Path, catalog: ModelCatalog, choice: ManagedDeploymentChoice) -> ReplayRequest:
     """Build the managed replay request the TUI would submit for one deployment choice."""
-    deployment = choice.candidate.deployment
-    assert deployment is not None
     return ReplayRequest(
         manifest_path=_runnable_manifest(tmp_path / "workload"),
         output_dir=tmp_path / "results",

@@ -148,7 +148,6 @@ def test_default_replay_declares_the_smallest_rung_that_holds_its_largest_turn()
         for model in load_model_catalog(BUNDLED_RECIPES_ROOT).models
         if model.profile_id == DEFAULT_MANAGED_PROFILE_ID
     )
-    assert deployment is not None
     assert manifest.required_context_tokens == BENCHMARK_CONTEXT_TOKENS
     assert reduced_context_rungs(deployment, manifest.required_context_tokens) == ()
 

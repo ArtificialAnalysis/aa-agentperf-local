@@ -25,7 +25,6 @@ from agentperf_local.deployment.catalog import (
     DeploymentFramework,
     ModelCandidate,
     ModelCatalog,
-    ModelDeployment,
     load_model_catalog,
 )
 from agentperf_local.deployment.managed import (
@@ -197,17 +196,16 @@ def read_deployment_framework(namespace: argparse.Namespace) -> DeploymentFramew
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ManagedTarget:
-    """Name the catalog, candidate, and recipe one managed command targets."""
+    """Name the catalog and candidate one managed command targets."""
 
     catalog: ModelCatalog
     candidate: ModelCandidate
-    deployment: ModelDeployment
 
 
 def read_managed_target(namespace: argparse.Namespace) -> ManagedTarget:
     catalog = load_model_catalog(read_path(namespace, "recipes"))
     candidate = catalog_candidate(catalog, read_string(namespace, "profile_id"))
-    return ManagedTarget(catalog=catalog, candidate=candidate, deployment=candidate.deployment)
+    return ManagedTarget(catalog=catalog, candidate=candidate)
 
 
 def read_bound_device(namespace: argparse.Namespace) -> BoundDeploymentDevice:

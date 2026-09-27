@@ -11,10 +11,13 @@ from typing import Literal
 
 import yaml
 
+from agentperf_local.common.durable_files import read_bounded_file
 from agentperf_local.common.identity import sha256_bytes, validate_identifier
 from agentperf_local.common.json_fields import (
     one_of,
+    optional_boolean,
     optional_integer,
+    optional_non_negative_integer,
     optional_object,
     optional_string,
     require_allowed_keys,
@@ -25,8 +28,9 @@ from agentperf_local.common.json_fields import (
     required_non_negative_integer,
     required_object,
     required_string,
+    required_strings,
 )
-from agentperf_local.common.json_records import json_field_names
+from agentperf_local.common.json_records import json_field_names, required_json_field_names
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
@@ -45,6 +49,8 @@ RELEASE_VERSION_PARTS = 3
 DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+\.dev\d+\+g[0-9a-f]{7,40}$")
 ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-Za-z0-9_])?$")
 # Recipes live at recipes/<model>/<hardware>/<profile_id>.yaml.
+# libyaml's loader parses the recipes about four times faster; the pure-Python one is the fallback.
+_YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 RECIPE_SUFFIX = ".yaml"
 RECIPES_README = "README.md"
 # A wheel carries a copy of the repository's recipes/ folder inside the package. A
@@ -100,16 +106,6 @@ ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set",
 # A weights repository is only servable when the runtime can read the model shape
 # and the tokenizer beside the tensors.
 REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
-# Fields a recipe may leave out. Each one is unset (null, empty, or zero) when absent.
-_ARTIFACT_OPTIONAL_FIELDS = frozenset({"source_repository", "source_revision"})
-_LLAMA_CPP_OPTIONAL_FIELDS = frozenset(
-    {"draft_model_filename", "backend", "load_mode", "lazy_mode", "threads", "cache_ram_mib"}
-)
-_VLLM_OPTIONAL_FIELDS = frozenset({"environment"})
-_MEMORY_OPTIONAL_FIELDS = frozenset({"lazy_read_bytes"})
-_DEPLOYMENT_OPTIONAL_FIELDS = frozenset(
-    {"runtime_versions", "moe_runner_backend", "model_filename", "llama_cpp", "vllm"}
-)
 
 
 def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int | None:
@@ -121,10 +117,9 @@ def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int |
     return value
 
 
-def _require_recipe_fields(data: JsonObject, cls: type, optional: frozenset[str], source: str) -> None:
-    """Require every field of one record except the optional ones."""
-    allowed = json_field_names(cls)
-    require_allowed_keys(data, allowed - optional, allowed, source)
+def _require_recipe_fields(data: JsonObject, cls: type, source: str) -> None:
+    """Require every field of one record that has no default; a recipe may leave out the rest."""
+    require_allowed_keys(data, required_json_field_names(cls), json_field_names(cls), source)
 
 
 def _revision(value: str, field: str) -> str:
@@ -195,7 +190,7 @@ class DeploymentArtifact:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentArtifact:
         """Read one pinned artifact record."""
-        _require_recipe_fields(data, cls, _ARTIFACT_OPTIONAL_FIELDS, source)
+        _require_recipe_fields(data, cls, source)
         return cls(
             filename=validate_artifact_path(required_string(data, "filename", source), f"{source}.filename"),
             sha256=_sha256(required_string(data, "sha256", source), f"{source}.sha256"),
@@ -212,7 +207,7 @@ class LlamaCppLaunch:
     batch_size: int
     ubatch_size: int
     speculative_tokens: int
-    draft_model_filename: str | None
+    draft_model_filename: str | None = None
     target_backend_sampling: bool
     draft_backend_sampling: bool
     backend: LlamaCppBackend | None = None
@@ -256,7 +251,7 @@ class LlamaCppLaunch:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> LlamaCppLaunch:
         """Read one pinned llama.cpp launch configuration."""
-        _require_recipe_fields(data, cls, _LLAMA_CPP_OPTIONAL_FIELDS, source)
+        _require_recipe_fields(data, cls, source)
         draft_model_filename = optional_string(data, "draft_model_filename", source)
         backend = optional_string(data, "backend", source)
         load_mode = optional_string(data, "load_mode", source)
@@ -276,8 +271,8 @@ class LlamaCppLaunch:
             load_mode=one_of(load_mode, LLAMA_CPP_LOAD_MODES, f"{source}.load_mode") if load_mode is not None else None,
             lazy_mode=one_of(lazy_mode, LLAMA_CPP_LAZY_MODES, f"{source}.lazy_mode") if lazy_mode is not None else None,
             threads=_optional_positive_integer(data, "threads", source),
-            flash_attention=required_boolean(data, "flash_attention", source),
-            disable_fit=required_boolean(data, "disable_fit", source),
+            flash_attention=optional_boolean(data, "flash_attention", source) or False,
+            disable_fit=optional_boolean(data, "disable_fit", source) or False,
             cache_ram_mib=optional_integer(data, "cache_ram_mib", source),
         )
 
@@ -287,7 +282,7 @@ class VllmLaunch:
     """Pin extra vLLM arguments and environment variables for one recipe."""
 
     arguments: tuple[str, ...]
-    environment: tuple[tuple[str, str], ...]
+    environment: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         """Require stable arguments and a unique sorted environment."""
@@ -303,16 +298,14 @@ class VllmLaunch:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> VllmLaunch:
         """Read one pinned vLLM launch configuration."""
-        _require_recipe_fields(data, cls, _VLLM_OPTIONAL_FIELDS, source)
+        _require_recipe_fields(data, cls, source)
         raw_arguments = required_list(data, "arguments", source)
         arguments: list[str] = []
         for index, value in enumerate(raw_arguments):
             if not isinstance(value, str) or not value:
                 raise ValueError(f"{source}.arguments[{index}] must be non-empty text")
             arguments.append(value)
-        raw_environment = data.get("environment", {})
-        if not isinstance(raw_environment, dict):
-            raise ValueError(f"{source}.environment must be an object")
+        raw_environment = optional_object(data, "environment", source) or {}
         environment: list[tuple[str, str]] = []
         for name, value in raw_environment.items():
             if not isinstance(value, str) or not value:
@@ -384,7 +377,7 @@ class DeploymentMemory:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentMemory:
         """Read one memory-shape record."""
-        _require_recipe_fields(data, cls, _MEMORY_OPTIONAL_FIELDS, source)
+        _require_recipe_fields(data, cls, source)
         return cls(
             full_attention_layers=required_non_negative_integer(data, "full_attention_layers", source),
             full_kv_heads=required_non_negative_integer(data, "full_kv_heads", source),
@@ -397,9 +390,7 @@ class DeploymentMemory:
             recurrent_state_slots=required_non_negative_integer(data, "recurrent_state_slots", source),
             constant_state_bytes=required_non_negative_integer(data, "constant_state_bytes", source),
             runtime_overhead_bytes=required_integer(data, "runtime_overhead_bytes", source),
-            lazy_read_bytes=(
-                required_non_negative_integer(data, "lazy_read_bytes", source) if "lazy_read_bytes" in data else 0
-            ),
+            lazy_read_bytes=optional_non_negative_integer(data, "lazy_read_bytes", source) or 0,
         )
 
 
@@ -413,9 +404,7 @@ def _optional_moe_runner_backend(data: JsonObject, source: str) -> MoeRunnerBack
 
 def _runtime_versions_from_json(data: JsonObject, source: str) -> tuple[tuple[DeploymentFramework, str], ...]:
     """Read the per-framework runtime pins as canonical-ordered (framework, version) pairs."""
-    raw = data.get("runtime_versions", {})
-    if not isinstance(raw, dict):
-        raise ValueError(f"{source}.runtime_versions must be an object")
+    raw = optional_object(data, "runtime_versions", source) or {}
     pairs: list[tuple[DeploymentFramework, str]] = []
     for key, value in raw.items():
         framework = one_of(key, DEPLOYMENT_FRAMEWORK_ORDER, f"{source}.runtime_versions key '{key}'")
@@ -440,10 +429,10 @@ class ModelDeployment:
     # nonsense, and nothing downstream reads generated text, so the launcher serves the
     # named version and refuses every other. A framework with no comparable release
     # (llama.cpp) is simply absent from the map.
-    runtime_versions: tuple[tuple[DeploymentFramework, str], ...]
+    runtime_versions: tuple[tuple[DeploymentFramework, str], ...] = ()
     # The fused-expert kernel this recipe is served with, or None when it has no
     # mixture-of-experts layers or the runtime's own choice is known to serve it.
-    moe_runner_backend: MoeRunnerBackend | None
+    moe_runner_backend: MoeRunnerBackend | None = None
     model_filename: str | None = None
     llama_cpp: LlamaCppLaunch | None = None
     vllm: VllmLaunch | None = None
@@ -539,7 +528,7 @@ class ModelDeployment:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> ModelDeployment:
         """Read one exact managed-deployment record."""
-        _require_recipe_fields(data, cls, _DEPLOYMENT_OPTIONAL_FIELDS, source)
+        _require_recipe_fields(data, cls, source)
         raw_frameworks = data.get("frameworks")
         if not isinstance(raw_frameworks, list):
             raise ValueError(f"{source}.frameworks must be an array")
@@ -623,21 +612,17 @@ class ModelCandidate:
     def from_json(cls, data: JsonObject, source: str) -> ModelCandidate:
         """Read one closed recipe record."""
         require_exact_keys(data, json_field_names(cls), source)
-        raw_devices = data.get("devices")
-        if not isinstance(raw_devices, list):
-            raise ValueError(f"{source}.devices must be an array")
-        devices: list[DeviceId] = []
-        for index, value in enumerate(raw_devices):
-            if not isinstance(value, str):
-                raise ValueError(f"{source}.devices[{index}] must be text")
-            devices.append(one_of(value, DEVICE_IDS, f"{source}.devices[{index}]"))
+        devices = tuple(
+            one_of(value, DEVICE_IDS, f"{source}.devices[{index}]")
+            for index, value in enumerate(required_strings(data, "devices", source))
+        )
         return cls(
             profile_id=required_string(data, "profile_id", source),
             as_of=required_string(data, "as_of", source),
             display_name=required_string(data, "display_name", source),
             hf_repository=required_string(data, "hf_repository", source),
             hf_revision=_revision(required_string(data, "hf_revision", source), f"{source}.hf_revision"),
-            devices=tuple(devices),
+            devices=devices,
             tool_call_parser=one_of(
                 required_string(data, "tool_call_parser", source),
                 TOOL_CALL_PARSERS,
@@ -697,20 +682,9 @@ def _iso_date(value: str, field: str) -> None:
         raise ValueError(f"{field} must be an ISO date")
 
 
-def _read_recipe(path: Path) -> bytes:
-    """Read one regular recipe file within the size limit."""
-    if path.is_symlink() or not path.is_file():
-        raise ValueError(f"recipe {path.name} must be a regular file, not a symbolic link")
-    with path.open("rb") as source:
-        encoded = source.read(MAX_RECIPE_BYTES + 1)
-    if len(encoded) > MAX_RECIPE_BYTES:
-        raise ValueError(f"recipe {path.name} must not exceed {MAX_RECIPE_BYTES} bytes")
-    return encoded
-
-
 def _parse_recipe(encoded: bytes, name: str) -> JsonObject:
     try:
-        decoded = yaml.safe_load(encoded)
+        decoded = yaml.load(encoded, Loader=_YAML_SAFE_LOADER)
     except yaml.YAMLError as error:
         raise ValueError(f"invalid recipe YAML: {name}") from error
     try:
@@ -719,11 +693,11 @@ def _parse_recipe(encoded: bytes, name: str) -> JsonObject:
         raise ValueError(f"recipe {name} must be a mapping of JSON values; quote dates") from error
 
 
-def _subfolders(folder: Path, allowed_files: frozenset[str]) -> tuple[Path, ...]:
-    """Return the named subfolders of one recipe folder level, in name order."""
+def _subfolders(folder: Path, skip: str | None = None) -> tuple[Path, ...]:
+    """Return the named subfolders of one recipe folder level, in name order, ignoring one named file."""
     folders: list[Path] = []
     for path in sorted(folder.iterdir()):
-        if path.name in allowed_files:
+        if path.name == skip:
             continue
         if path.is_symlink() or not path.is_dir():
             raise ValueError(f"recipe folder {folder.name} may only hold folders, but holds {path.name}")
@@ -737,8 +711,8 @@ def _recipe_paths(root: Path) -> tuple[Path, ...]:
     if root.is_symlink() or not root.is_dir():
         raise ValueError("recipe folder must be a directory, not a symbolic link")
     paths: list[Path] = []
-    for model_folder in _subfolders(root, frozenset({RECIPES_README})):
-        for hardware_folder in _subfolders(model_folder, frozenset()):
+    for model_folder in _subfolders(root, skip=RECIPES_README):
+        for hardware_folder in _subfolders(model_folder):
             for path in sorted(hardware_folder.iterdir()):
                 if path.suffix != RECIPE_SUFFIX:
                     raise ValueError(f"recipe folder holds {path.name}; recipes must be {RECIPE_SUFFIX} files")
@@ -758,7 +732,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
-        encoded = _read_recipe(path)
+        encoded = read_bounded_file(path, MAX_RECIPE_BYTES, label="recipe")
         model = ModelCandidate.from_json(_parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")

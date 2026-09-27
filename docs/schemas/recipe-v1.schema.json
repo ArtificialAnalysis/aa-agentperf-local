@@ -81,9 +81,7 @@
         "ubatch_size",
         "speculative_tokens",
         "target_backend_sampling",
-        "draft_backend_sampling",
-        "flash_attention",
-        "disable_fit"
+        "draft_backend_sampling"
       ],
       "properties": {
         "batch_size": {

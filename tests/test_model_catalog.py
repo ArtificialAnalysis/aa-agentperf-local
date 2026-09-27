@@ -35,13 +35,6 @@ def _named(catalog: ModelCatalog, profile_id: str) -> ModelCandidate:
     return next(model for model in catalog.models if model.profile_id == profile_id)
 
 
-def _deployment(catalog: ModelCatalog, profile_id: str) -> ModelDeployment:
-    """Return one model's managed recipe, which every bundled candidate carries."""
-    deployment = _named(catalog, profile_id).deployment
-    assert deployment is not None
-    return deployment
-
-
 def _read(root: Path, recipe: Path) -> JsonObject:
     return normalize_json_object(yaml.safe_load((root / recipe).read_bytes()))
 
@@ -104,7 +97,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     # release version to pin.
     weights = [model.deployment for model in catalog.models if "sglang" in model.deployment.frameworks]
     assert {deployment.runtime_version_for("sglang") for deployment in weights} == {"0.5.18"}
-    assert _deployment(catalog, "gemma4-12b-it-q4-0").runtime_versions == ()
+    assert _named(catalog, "gemma4-12b-it-q4-0").deployment.runtime_versions == ()
     gemma = _named(catalog, "gemma4-12b-it-q4-0")
     assert gemma.deployment.artifact_kind == "gguf-single-file"
     assert gemma.deployment.artifacts[0].sha256 == ("93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b")
@@ -123,12 +116,12 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         candidate = _named(catalog, profile_id)
         assert candidate.devices == ("nvidia-cuda",)
         assert candidate.deployment.llama_cpp is not None
-    nemotron = _deployment(catalog, "nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090")
+    nemotron = _named(catalog, "nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090").deployment
     assert nemotron.artifact_kind == "gguf-file-set"
     draft = next(artifact for artifact in nemotron.artifacts if artifact.filename.startswith("dflash-"))
     assert draft.source_repository == "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF"
     assert draft.source_revision == "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
-    flash_next = _deployment(catalog, "qwen38-flash-next-iq4-nl-mtp-strix-halo")
+    flash_next = _named(catalog, "qwen38-flash-next-iq4-nl-mtp-strix-halo").deployment
     assert flash_next.llama_cpp is not None
     assert flash_next.llama_cpp.lazy_mode == "on-direct"
     # The lazily read per-layer-embedding table stays on disk, so the floor is below the download size.
@@ -293,7 +286,7 @@ def test_rejects_symbolic_linked_recipe(tmp_path: Path) -> None:
     (root / GEMMA_RECIPE).rename(target)
     (root / GEMMA_RECIPE).symlink_to(target)
 
-    with pytest.raises(ValueError, match="symbolic link"):
+    with pytest.raises(ValueError, match="must be a regular file"):
         load_model_catalog(root)
 
 
@@ -303,5 +296,5 @@ def test_rejects_oversized_recipe_before_parsing(tmp_path: Path) -> None:
     shutil.copytree(CATALOG_PATH, root)
     (root / GEMMA_RECIPE).write_bytes(b" " * (MAX_RECIPE_BYTES + 1))
 
-    with pytest.raises(ValueError, match="must not exceed"):
+    with pytest.raises(ValueError, match="outside the accepted range"):
         load_model_catalog(root)

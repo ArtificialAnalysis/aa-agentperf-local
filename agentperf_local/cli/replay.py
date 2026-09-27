@@ -283,7 +283,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
     requested_context_tokens = read_optional_integer(namespace, "context_tokens")
     require_replay_context_floor(
         load_manifest(manifest_path).required_context_tokens,
-        resolve_context_tokens(target.deployment, requested_context_tokens),
+        resolve_context_tokens(target.candidate.deployment, requested_context_tokens),
     )
     bound = read_bound_device(namespace)
     snapshot = bound.snapshot

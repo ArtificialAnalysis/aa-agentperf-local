@@ -90,11 +90,11 @@ FIXTURE_MEMORY = DeploymentMemory(
     constant_state_bytes=0,
     runtime_overhead_bytes=FIXTURE_RUNTIME_OVERHEAD_BYTES,
 )
-CATALOG_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 6_744_440_832 + FIXTURE_RUNTIME_OVERHEAD_BYTES
+FIXTURE_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 6_744_440_832 + FIXTURE_RUNTIME_OVERHEAD_BYTES
 # A card can report a few dozen MiB under its listed capacity; 48 MiB short stays inside the 64 MiB slack.
-MEMORY_WITHIN_SLACK_BYTES = CATALOG_MINIMUM_MEMORY_BYTES - 48 * 1024 * 1024
+MEMORY_WITHIN_SLACK_BYTES = FIXTURE_MINIMUM_MEMORY_BYTES - 48 * 1024 * 1024
 # A shortfall past the 64 MiB slack must fail the memory gate.
-MEMORY_BELOW_SLACK_BYTES = CATALOG_MINIMUM_MEMORY_BYTES - 128 * 1024 * 1024
+MEMORY_BELOW_SLACK_BYTES = FIXTURE_MINIMUM_MEMORY_BYTES - 128 * 1024 * 1024
 # The reduced-context minimum drops by the KV savings: 32768 tokens keep about 3.3 GiB
 # of KV instead of 6.28 GiB, so 9 GiB hardware fits between the two floors.
 REDUCED_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 3_523_215_360 + FIXTURE_RUNTIME_OVERHEAD_BYTES
@@ -164,7 +164,6 @@ def _blob_path(cache_root: Path) -> Path:
 
 
 def _snapshot_path(cache_root: Path, candidate: ModelCandidate) -> Path:
-    assert candidate.deployment is not None
     revision_dir = cache_root / HF_REPOSITORY_DIRECTORY / "snapshots" / candidate.hf_revision
     return revision_dir / candidate.deployment.artifacts[0].filename
 
@@ -392,7 +391,6 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
         for name, content in parts
     )
     base = _candidate()
-    assert base.deployment is not None
     candidate = replace(
         base,
         deployment=replace(
@@ -442,7 +440,6 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
         source_revision="b" * 40,
     )
     base = _candidate()
-    assert base.deployment is not None
     deployment = replace(
         base.deployment,
         artifact_kind="gguf-file-set",
@@ -521,7 +518,6 @@ def test_screened_recipes_keep_their_measured_launch_settings(
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     recipe = next(model for model in catalog.models if model.profile_id == profile_id)
     base = _candidate()
-    assert recipe.deployment is not None and base.deployment is not None
     candidate = replace(
         base,
         speculation_policy=recipe.speculation_policy,
@@ -571,7 +567,7 @@ def test_lazy_mode_recipe_passes_its_lazy_read_flag(tmp_path: Path) -> None:
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     recipe = next(model for model in catalog.models if model.profile_id == "qwen35-9b-q4-k-m-mtp-strix-halo")
     base = _candidate()
-    assert recipe.deployment is not None and recipe.deployment.llama_cpp is not None and base.deployment is not None
+    assert recipe.deployment.llama_cpp is not None
     candidate = replace(
         base,
         speculation_policy=recipe.speculation_policy,
@@ -1051,7 +1047,7 @@ def test_plan_rejects_a_context_outside_the_allowed_range(
 def test_derived_minimum_prices_artifacts_kv_cache_and_overhead() -> None:
     deployment = _candidate().deployment
 
-    assert derived_minimum_memory_bytes(deployment, PROFILE_CONTEXT_TOKENS) == CATALOG_MINIMUM_MEMORY_BYTES
+    assert derived_minimum_memory_bytes(deployment, PROFILE_CONTEXT_TOKENS) == FIXTURE_MINIMUM_MEMORY_BYTES
     # A non-positive token count would produce a negative KV term; refuse it outright.
     for degenerate_tokens in (0, -100):
         with pytest.raises(ValueError, match="must be positive"):
@@ -1386,7 +1382,6 @@ def _weights_candidate() -> ModelCandidate:
 
 def _cached_weights(cache_root: Path, candidate: ModelCandidate) -> Path:
     """Lay every pinned file of a weights recipe out as huggingface_hub caches it."""
-    assert candidate.deployment is not None
     snapshot_root = cache_root / "models--example--model-nvfp4" / "snapshots" / candidate.hf_revision
     snapshot_root.mkdir(parents=True, exist_ok=True)
     for filename, content in WEIGHTS_FILES:
@@ -1425,7 +1420,6 @@ def test_a_gguf_recipe_can_not_name_a_fused_expert_kernel() -> None:
     """llama.cpp has no such flag, so naming one there is a catalog mistake."""
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     gguf = next(model for model in catalog.models if model.profile_id == "gemma4-12b-it-q4-0")
-    assert gguf.deployment is not None
 
     with pytest.raises(ValueError, match="only an SGLang recipe can name a fused-expert kernel"):
         replace(gguf.deployment, moe_runner_backend="flashinfer_cutlass")
@@ -1505,7 +1499,6 @@ def _vllm_reporting(tmp_path: Path, version: str) -> CommandFinder:
 def _vllm_candidate() -> ModelCandidate:
     """Return the weights candidate with the vLLM recipe enabled alongside SGLang."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     deployment = replace(
         candidate.deployment,
         frameworks=("sglang", "vllm"),
@@ -1522,7 +1515,6 @@ def _mtp_candidate() -> ModelCandidate:
 def _recurrent_weights_candidate() -> ModelCandidate:
     """Return a hybrid weights recipe, which pins its state pool so free memory cannot size it."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     memory = replace(WEIGHTS_MEMORY, recurrent_state_slots=10, constant_state_bytes=1024)
     deployment = replace(candidate.deployment, memory=memory)
     return replace(candidate, deployment=deployment)
@@ -1531,14 +1523,12 @@ def _recurrent_weights_candidate() -> ModelCandidate:
 def _fused_expert_weights_candidate() -> ModelCandidate:
     """Return a weights recipe that names the NVFP4 kernel SGLang may not pick on its own."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     return replace(candidate, deployment=replace(candidate.deployment, moe_runner_backend="flashinfer_cutlass"))
 
 
 def _tuned_vllm_candidate() -> ModelCandidate:
     """Return the vLLM recipe with its own serve arguments and environment."""
     candidate = _vllm_candidate()
-    assert candidate.deployment is not None
     vllm = VllmLaunch(
         arguments=("--gpu-memory-utilization", "0.8", "--enable-prefix-caching"),
         environment=(("VLLM_ALLOW_LONG_MAX_MODEL_LEN", "1"),),
@@ -1709,7 +1699,6 @@ def test_vllm_launch_serves_only_the_pinned_version(
 ) -> None:
     """vLLM can pass every startup check and still emit nonsense, so the version is pinned too."""
     base = _vllm_candidate()
-    assert base.deployment is not None
     candidate = replace(base, deployment=replace(base.deployment, runtime_versions=(("vllm", pinned),)))
     _cached_weights(tmp_path, candidate)
     finder = _vllm_reporting(tmp_path, reported)
@@ -1778,7 +1767,6 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
     verified against, not a floor.
     """
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     deployment = replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),))
     candidate = replace(candidate, deployment=deployment)
     _cached_weights(tmp_path, candidate)
@@ -1805,7 +1793,6 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
 def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A slow version command is not a missing version; the refusal must say which it was."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     candidate = replace(candidate, deployment=replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),)))
     _cached_weights(tmp_path, candidate)
     executable = tmp_path / "sglang"

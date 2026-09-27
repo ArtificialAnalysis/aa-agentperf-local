@@ -93,9 +93,7 @@ def _install_fake_runtime(
     monkeypatch.setenv("PATH", f"{fake_smi.parent}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr("agentperf_local.cli.options.collect_hardware_snapshot", _two_gpu_hardware)
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
-    candidate = next(
-        model for model in catalog.models if model.deployment is not None and framework in model.deployment.frameworks
-    )
+    candidate = next(model for model in catalog.models if framework in model.deployment.frameworks)
     recipe = candidate.deployment
     assert recipe is not None
     artifact_path = tmp_path / "model.gguf"

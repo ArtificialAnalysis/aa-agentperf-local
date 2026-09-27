@@ -944,7 +944,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         device_index: int | None = None,
         context_tokens: int | None = None,
     ) -> ManagedModelAvailability | None:
-        """Return machine compatibility only for candidates with managed recipes."""
+        """Return machine compatibility for one recipe, or None when no managed controller exists."""
         if self.managed_controller is None:
             return None
         return self.managed_controller.availability(
@@ -989,7 +989,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         Setting select values here posts Changed messages that re-enter this method once
         each; those re-renders keep the already-settled values, so the chain stops there.
         """
-        managed_candidate = self._selected_candidate()
+        candidate = self._selected_candidate()
         device_row = self.query_one("#managed-device-row", Horizontal)
         row = self.query_one("#managed-framework-row", Horizontal)
         context_row = self.query_one("#managed-context-row", Horizontal)
@@ -999,39 +999,39 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         endpoint_model = self.query_one("#endpoint-model-input", Input)
         api_key_env = self.query_one("#api-key-env-input", Input)
         self.query_one("#section-server", Static).update(
-            "MODEL SERVER · started for you" if managed_candidate is not None else "YOUR SERVER"
+            "MODEL SERVER · started for you" if candidate is not None else "YOUR SERVER"
         )
         self.query_one("#config-selection", Static).update(
-            escape(managed_candidate.display_name)
-            if managed_candidate is not None
+            escape(candidate.display_name)
+            if candidate is not None
             else "Use the URL and model name shown by your server."
         )
-        self.query_one("#base-url-row", Horizontal).display = managed_candidate is None
-        self.query_one("#endpoint-model-row", Horizontal).display = managed_candidate is None
+        self.query_one("#base-url-row", Horizontal).display = candidate is None
+        self.query_one("#endpoint-model-row", Horizontal).display = candidate is None
         # One accelerator leaves nothing to choose, so that computer never sees the picker.
-        device_row.display = managed_candidate is not None and len(self.device_options) > 1
-        row.display = managed_candidate is not None
+        device_row.display = candidate is not None and len(self.device_options) > 1
+        row.display = candidate is not None
         # An attached server's context is observed, not chosen, so only managed models see this picker.
-        context_row.display = managed_candidate is not None
-        status.display = managed_candidate is not None
+        context_row.display = candidate is not None
+        status.display = candidate is not None
         # A managed server never takes a key, so the always-empty disabled row only adds noise.
-        self.query_one("#api-key-row", Horizontal).display = managed_candidate is None
+        self.query_one("#api-key-row", Horizontal).display = candidate is None
         for endpoint_input in (base_url, endpoint_model, api_key_env):
-            endpoint_input.disabled = managed_candidate is not None
-        if managed_candidate is None:
+            endpoint_input.disabled = candidate is not None
+        if candidate is None:
             base_url.value = self.attached_base_url
             endpoint_model.value = self.selection.endpoint_model
             api_key_env.value = self.attached_api_key_env
             status.update("")
             return
-        deployment = managed_candidate.deployment
+        deployment = candidate.deployment
         base_url.value = f"http://127.0.0.1:{self.defaults.deployment_port}/v1"
-        endpoint_model.value = managed_candidate.profile_id
+        endpoint_model.value = candidate.profile_id
         api_key_env.value = ""
         if rebuild_context:
             self._rebuild_context_options(deployment)
         availability = self._managed_availability(
-            managed_candidate,
+            candidate,
             self._selected_device_index(),
             self._selected_context_tokens(),
         )
@@ -1192,11 +1192,11 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             f"[b]{escape(candidate.display_name)}[/b]\n"
             f"{key_value_block(rows)}"
             f"{availability_note}"
-            f"\n\n[{AA_NEUTRAL_500}]{self._candidate_provenance(candidate)}[/]"
+            f"\n\n[{AA_NEUTRAL_500}]{self._catalog_provenance()}[/]"
         )
 
-    def _candidate_provenance(self, candidate: ModelCandidate) -> str:
-        """Say where a catalog entry comes from and that its results are not leaderboard-qualified yet."""
+    def _catalog_provenance(self) -> str:
+        """Say where the loaded recipes come from and that their results are not leaderboard-qualified yet."""
         if not self.catalog.is_bundled_snapshot:
             return EXTERNAL_CATALOG_PROVENANCE
         return AA_CATALOG_RUNTIME_PROVENANCE

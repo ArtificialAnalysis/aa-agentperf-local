@@ -1168,7 +1168,7 @@ def _managed_availability(*, installed: bool = True, memory_fit: bool | None = T
 
 def _managed_artifact_gib(app: AgentPerfLocalApp) -> float:
     """Read the canonical artifact size the managed consent line must disclose."""
-    deployment = next(model.deployment for model in app.catalog.models if model.deployment is not None)
+    deployment = app.catalog.models[0].deployment
     return deployment.artifact_size_bytes / 1024**3
 
 
@@ -2925,7 +2925,6 @@ def _installed_llama_offer(
 ) -> tuple[FrameworkOffer, ...]:
     """Offer an installed llama.cpp build sized against the single bound accelerator."""
     deployment = candidate.deployment
-    assert deployment is not None
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
     )
@@ -2952,7 +2951,6 @@ def _installed_sglang_offer(
 ) -> tuple[FrameworkOffer, ...]:
     """Offer an installed SGLang build for a weights recipe on the bound accelerator."""
     deployment = candidate.deployment
-    assert deployment is not None
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
     )
