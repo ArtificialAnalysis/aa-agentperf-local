@@ -20,12 +20,11 @@ from agentperf_local.common.argparse_fields import (
 from agentperf_local.common.json_fields import one_of
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.deployment.catalog import (
-    BUNDLED_MODEL_CATALOG_PATH,
+    BUNDLED_RECIPES_ROOT,
     DEPLOYMENT_FRAMEWORK_ORDER,
     DeploymentFramework,
     ModelCandidate,
     ModelCatalog,
-    ModelDeployment,
     load_model_catalog,
 )
 from agentperf_local.deployment.managed import (
@@ -98,7 +97,7 @@ BOUND_RESULT_FILENAMES = (
 )
 
 
-DEFAULT_MODEL_CATALOG_PATH = BUNDLED_MODEL_CATALOG_PATH
+DEFAULT_RECIPES_ROOT = BUNDLED_RECIPES_ROOT
 
 
 # Shells report an interrupted process as 128 plus the signal number, and SIGINT is signal 2.
@@ -197,19 +196,16 @@ def read_deployment_framework(namespace: argparse.Namespace) -> DeploymentFramew
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ManagedTarget:
-    """Name the catalog, candidate, and recipe one managed command targets."""
+    """Name the catalog and candidate one managed command targets."""
 
     catalog: ModelCatalog
     candidate: ModelCandidate
-    deployment: ModelDeployment
 
 
 def read_managed_target(namespace: argparse.Namespace) -> ManagedTarget:
-    catalog = load_model_catalog(read_path(namespace, "catalog"))
+    catalog = load_model_catalog(read_path(namespace, "recipes"))
     candidate = catalog_candidate(catalog, read_string(namespace, "profile_id"))
-    if candidate.deployment is None:
-        raise ValueError(f"model profile {candidate.profile_id} does not define a managed deployment")
-    return ManagedTarget(catalog=catalog, candidate=candidate, deployment=candidate.deployment)
+    return ManagedTarget(catalog=catalog, candidate=candidate)
 
 
 def read_bound_device(namespace: argparse.Namespace) -> BoundDeploymentDevice:

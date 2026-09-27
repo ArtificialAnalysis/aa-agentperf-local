@@ -194,7 +194,7 @@ same submission, so an interrupted upload is retried by running `submit` again.
 
 | Schema | Produced or consumed by |
 | --- | --- |
-| [`model-candidates-v2`](schemas/model-candidates-v2.schema.json) | The bundled unsigned candidate and managed-deployment catalog |
+| [`recipe-v1`](schemas/recipe-v1.schema.json) | One managed-run recipe in [`recipes/`](../recipes) |
 | [`private-audit-v1`](schemas/private-audit-v1.schema.json) | The AA-private audit file inside a bundle |
 | [`private-nvidia-telemetry-v2`](schemas/private-nvidia-telemetry-v2.schema.json) | The NVIDIA collector; carries the run identifier and records glitched lines as all-missing samples |
 | [`public-submission-v2`](schemas/public-submission-v2.schema.json) | `prepare-submission` and aggregate bundle validation; carries the run identifier and the observer time the run excluded |

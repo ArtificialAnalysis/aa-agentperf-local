@@ -1,0 +1,62 @@
+profile_id: gemma4-26b-a4b-nvfp4
+as_of: '2026-09-21'
+display_name: Google Gemma 4 26B A4B NVFP4, NVIDIA export
+hf_repository: nvidia/Gemma-4-26B-A4B-NVFP4
+hf_revision: a19cfe00be84568a6867111c9a68c9c44fdcffe6
+devices:
+- nvidia-cuda
+tool_call_parser: gemma4
+reasoning_parser: gemma4
+thinking_policy: disabled
+speculation_policy: disabled-target-only-baseline
+deployment:
+  artifact_kind: safetensors-repository
+  artifacts:
+  - filename: chat_template.jinja
+    sha256: 94899c0f917d93f6fe81c95744d1e8ddab2d21d39228d2e4aec1fb2a25bff413
+    size_bytes: 16934
+  - filename: config.json
+    sha256: 4e379cc809c617a49179a49140f553a2d6a5ec538ed480832b0c54f6ace43d98
+    size_bytes: 10289
+  - filename: generation_config.json
+    sha256: d4226bbe3117d2d253ba4609720ba82c6c4ce4627a9a6ae05387c78983ac03de
+    size_bytes: 208
+  - filename: hf_quant_config.json
+    sha256: fca2ea21cded31e6cff2c56ee83a162dcd5d3ff292cbf2f6083702e9fc324454
+    size_bytes: 5188
+  - filename: model-00001-of-00002.safetensors
+    sha256: b5df31122600666617b05f9be2015552cd2edff401e86b1d99b9127efdc6d819
+    size_bytes: 10001865236
+  - filename: model-00002-of-00002.safetensors
+    sha256: ff11061ebf57327af4f1993ff758b0859d7746b0c03ca1b17ded7dec30410962
+    size_bytes: 8786620352
+  - filename: model.safetensors.index.json
+    sha256: ac5e677ed9f8d9b689170bbae0c88ce163e284d02b09100e14afddaa9ec4a15c
+    size_bytes: 4977046
+  - filename: processor_config.json
+    sha256: 32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c
+    size_bytes: 1689
+  - filename: tokenizer.json
+    sha256: cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f
+    size_bytes: 32169626
+  - filename: tokenizer_config.json
+    sha256: 90c3a3ba5bf53818383a58e1a776cbcacd2a038d4812eaa373e1522f2d06f3df
+    size_bytes: 2095
+  context_tokens: 65536
+  frameworks:
+  - sglang
+  memory:
+    full_attention_layers: 5
+    full_kv_heads: 2
+    full_kv_head_dimension: 512
+    sliding_attention_layers: 25
+    sliding_kv_heads: 8
+    sliding_kv_head_dimension: 256
+    sliding_cached_tokens: 104832
+    kv_bytes_per_scalar: 1
+    recurrent_state_slots: 0
+    constant_state_bytes: 0
+    runtime_overhead_bytes: 5271719308
+  runtime_versions:
+    sglang: 0.5.18
+  moe_runner_backend: flashinfer_cutlass

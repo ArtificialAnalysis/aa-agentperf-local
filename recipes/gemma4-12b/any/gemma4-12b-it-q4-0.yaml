@@ -1,0 +1,34 @@
+profile_id: gemma4-12b-it-q4-0
+as_of: '2026-09-21'
+display_name: Google Gemma 4 12B IT QAT Q4_0 GGUF
+hf_repository: google/gemma-4-12B-it-qat-q4_0-gguf
+hf_revision: 29d097773436b69ff9feafd636ab4cf873786537
+devices:
+- nvidia-cuda
+- amd-rocm
+- apple-silicon
+tool_call_parser: gemma4
+reasoning_parser: gemma4
+thinking_policy: disabled
+speculation_policy: disabled-target-only-baseline
+deployment:
+  artifact_kind: gguf-single-file
+  artifacts:
+  - filename: gemma-4-12b-it-qat-q4_0.gguf
+    sha256: 93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b
+    size_bytes: 6975879296
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 8
+    full_kv_heads: 1
+    full_kv_head_dimension: 512
+    sliding_attention_layers: 40
+    sliding_kv_heads: 8
+    sliding_kv_head_dimension: 256
+    sliding_cached_tokens: 1536
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 0
+    constant_state_bytes: 0
+    runtime_overhead_bytes: 1468006400

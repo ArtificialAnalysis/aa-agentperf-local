@@ -46,8 +46,8 @@ from agentperf_local.deployment.context_policy import (
     MINIMUM_CONTEXT_TOKENS,
     context_fit,
     context_ladder,
-    context_memory_floor,
     default_context_tokens,
+    derived_minimum_memory_bytes,
 )
 from agentperf_local.deployment.endpoint_probes import (
     OLLAMA_RECORDED_POLICY_WARNING,
@@ -280,7 +280,6 @@ RESULT_RECORDED_POLICY_MESSAGE = (
     "e2e is reported as a normalized estimate · not directly comparable to exact-policy results"
 )
 RESULT_EYEBROW = "RESULT"
-AA_CATALOG_PROVENANCE = "Artificial Analysis catalog · not leaderboard-qualified"
 AA_CATALOG_RUNTIME_PROVENANCE = "Artificial Analysis catalog · results not leaderboard-qualified yet"
 EXTERNAL_CATALOG_PROVENANCE = "External catalog · not from Artificial Analysis"
 CUSTOM_ENDPOINT_DETAIL = (
@@ -345,13 +344,9 @@ def _closed_turn_series(samples: Sequence[RunTurnSample]) -> ClosedTurnSeries:
 
 def _context_option_label(deployment: ModelDeployment, context_tokens: int) -> str:
     """Label one context option with its honest memory need and comparability."""
-    minimum_memory_bytes = context_memory_floor(deployment, context_tokens)
+    minimum_memory_bytes = derived_minimum_memory_bytes(deployment, context_tokens)
     if context_tokens == deployment.context_tokens:
-        # The catalog pins the full-context minimum, so that label can always state it.
-        needed_bytes = deployment.minimum_memory_bytes if minimum_memory_bytes is None else minimum_memory_bytes
-        return f"{context_tokens:,} tokens · full benchmark · needs {memory_need_gib(needed_bytes)} GiB"
-    if minimum_memory_bytes is None:
-        return f"{context_tokens:,} tokens · memory need unknown · not comparable"
+        return f"{context_tokens:,} tokens · full benchmark · needs {memory_need_gib(minimum_memory_bytes)} GiB"
     return f"{context_tokens:,} tokens · needs {memory_need_gib(minimum_memory_bytes)} GiB · not comparable"
 
 
@@ -446,7 +441,7 @@ class BenchmarkSelection:
             display_name=candidate.display_name,
             endpoint_model=candidate.hf_repository,
             profile_id=candidate.profile_id,
-            catalog_digest=catalog.file_digest,
+            catalog_digest=catalog.digest,
             candidate_revision=candidate.hf_revision,
         )
 
@@ -528,7 +523,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.controller = LocalReplayController() if controller is None else controller
         self.managed_controller = (
             LocalManagedReplayController.detect(catalog.as_of)
-            if controller is None and managed_controller is None and any(model.deployment for model in catalog.models)
+            if controller is None and managed_controller is None
             else managed_controller
         )
         self.defaults = TuiDefaults() if defaults is None else defaults
@@ -949,8 +944,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         device_index: int | None = None,
         context_tokens: int | None = None,
     ) -> ManagedModelAvailability | None:
-        """Return machine compatibility only for candidates with managed recipes."""
-        if candidate.deployment is None or self.managed_controller is None:
+        """Return machine compatibility for one recipe, or None when no managed controller exists."""
+        if self.managed_controller is None:
             return None
         return self.managed_controller.availability(
             candidate,
@@ -995,7 +990,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         each; those re-renders keep the already-settled values, so the chain stops there.
         """
         candidate = self._selected_candidate()
-        managed_candidate = candidate if candidate is not None and candidate.deployment is not None else None
         device_row = self.query_one("#managed-device-row", Horizontal)
         row = self.query_one("#managed-framework-row", Horizontal)
         context_row = self.query_one("#managed-context-row", Horizontal)
@@ -1005,41 +999,39 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         endpoint_model = self.query_one("#endpoint-model-input", Input)
         api_key_env = self.query_one("#api-key-env-input", Input)
         self.query_one("#section-server", Static).update(
-            "MODEL SERVER · started for you" if managed_candidate is not None else "YOUR SERVER"
+            "MODEL SERVER · started for you" if candidate is not None else "YOUR SERVER"
         )
         self.query_one("#config-selection", Static).update(
-            escape(managed_candidate.display_name)
-            if managed_candidate is not None
+            escape(candidate.display_name)
+            if candidate is not None
             else "Use the URL and model name shown by your server."
         )
-        self.query_one("#base-url-row", Horizontal).display = managed_candidate is None
-        self.query_one("#endpoint-model-row", Horizontal).display = managed_candidate is None
+        self.query_one("#base-url-row", Horizontal).display = candidate is None
+        self.query_one("#endpoint-model-row", Horizontal).display = candidate is None
         # One accelerator leaves nothing to choose, so that computer never sees the picker.
-        device_row.display = managed_candidate is not None and len(self.device_options) > 1
-        row.display = managed_candidate is not None
+        device_row.display = candidate is not None and len(self.device_options) > 1
+        row.display = candidate is not None
         # An attached server's context is observed, not chosen, so only managed models see this picker.
-        context_row.display = managed_candidate is not None
-        status.display = managed_candidate is not None
+        context_row.display = candidate is not None
+        status.display = candidate is not None
         # A managed server never takes a key, so the always-empty disabled row only adds noise.
-        self.query_one("#api-key-row", Horizontal).display = managed_candidate is None
+        self.query_one("#api-key-row", Horizontal).display = candidate is None
         for endpoint_input in (base_url, endpoint_model, api_key_env):
-            endpoint_input.disabled = managed_candidate is not None
-        if managed_candidate is None:
+            endpoint_input.disabled = candidate is not None
+        if candidate is None:
             base_url.value = self.attached_base_url
             endpoint_model.value = self.selection.endpoint_model
             api_key_env.value = self.attached_api_key_env
             status.update("")
             return
-        deployment = managed_candidate.deployment
-        if deployment is None:
-            raise RuntimeError("managed candidate lost its deployment recipe")
+        deployment = candidate.deployment
         base_url.value = f"http://127.0.0.1:{self.defaults.deployment_port}/v1"
-        endpoint_model.value = deployment.model_alias
+        endpoint_model.value = candidate.profile_id
         api_key_env.value = ""
         if rebuild_context:
             self._rebuild_context_options(deployment)
         availability = self._managed_availability(
-            managed_candidate,
+            candidate,
             self._selected_device_index(),
             self._selected_context_tokens(),
         )
@@ -1132,7 +1124,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def _managed_deployment_choice(self) -> ManagedDeploymentChoice | None:
         """Return the validated managed choice for the selected model."""
         candidate = self._selected_candidate()
-        if candidate is None or candidate.deployment is None:
+        if candidate is None:
             return None
         if self.managed_controller is None:
             raise ValueError("managed deployment support is unavailable")
@@ -1152,7 +1144,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         return ManagedDeploymentChoice(
             candidate=candidate,
             catalog_as_of=self.catalog.as_of,
-            catalog_digest=self.catalog.file_digest,
+            catalog_digest=self.catalog.digest,
             framework=framework,
             device_index=device_index,
             context_tokens=context_tokens,
@@ -1164,31 +1156,15 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def _candidate_detail(self, candidate: ModelCandidate) -> str:
         # Detail values stay short enough for one line beside their key at the full-size
         # panel width; anything longer (a refusal reason) gets its own full-width line.
-        runtime_name = "SGLang" if candidate.runtime_family == "sglang" else candidate.runtime_family
-        if candidate.deployment is None:
-            rows = (
-                ("Hugging Face", candidate.hf_repository),
-                ("Benchmark context", f"{candidate.pilot_context_tokens:,} tokens"),
-                ("Runs with", runtime_name),
-                ("This app", "can't start this model"),
-                ("Your server", "enter its URL and model name next"),
-                ("License", candidate.license_id),
-            )
-            return f"[b]{escape(candidate.display_name)}[/b]\n{key_value_block(rows)}"
         artifact_gib = candidate.deployment.artifact_size_bytes / BYTES_PER_GIB
         selected_context_tokens = self._chosen_context_tokens(candidate.deployment)
-        memory_floor_bytes = context_memory_floor(candidate.deployment, selected_context_tokens)
-        memory_note = ""
-        if memory_floor_bytes is None:
-            # The formula disagrees with this catalog's pinned minimum, so the pinned
-            # full-context figure stands in and reduced estimates are declared unknown.
-            memory_floor_bytes = candidate.deployment.minimum_memory_bytes
-            memory_note = "\nMemory estimate unavailable at reduced contexts."
-        minimum_memory_need = memory_need_gib(memory_floor_bytes)
+        minimum_memory_need = memory_need_gib(
+            derived_minimum_memory_bytes(candidate.deployment, selected_context_tokens)
+        )
         context_value = (
             f"{selected_context_tokens:,} of {candidate.deployment.context_tokens:,} tokens · reduced"
             if selected_context_tokens < candidate.deployment.context_tokens
-            else f"{candidate.pilot_context_tokens:,} tokens"
+            else f"{candidate.deployment.context_tokens:,} tokens"
         )
         frameworks = " / ".join(candidate.deployment.frameworks)
         availability = self._managed_availability(candidate, self._selected_device_index(), selected_context_tokens)
@@ -1208,27 +1184,22 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             ("Benchmark context", context_value),
             (
                 "Download",
-                f"{candidate.deployment.quantization} {artifact_kind_text(candidate.deployment.artifact_kind)}"
-                f" · {artifact_gib:.1f} GiB · SHA-256 checked",
+                f"{artifact_kind_text(candidate.deployment.artifact_kind)} · {artifact_gib:.1f} GiB · SHA-256 checked",
             ),
             ("Hugging Face", candidate.hf_repository),
-            ("License", candidate.license_id),
         )
         return (
             f"[b]{escape(candidate.display_name)}[/b]\n"
             f"{key_value_block(rows)}"
-            f"{memory_note}"
             f"{availability_note}"
-            f"\n\n[{AA_NEUTRAL_500}]{self._candidate_provenance(candidate)}[/]"
+            f"\n\n[{AA_NEUTRAL_500}]{self._catalog_provenance()}[/]"
         )
 
-    def _candidate_provenance(self, candidate: ModelCandidate) -> str:
-        """Say where a catalog entry comes from and that its results are not leaderboard-qualified yet."""
+    def _catalog_provenance(self) -> str:
+        """Say where the loaded recipes come from and that their results are not leaderboard-qualified yet."""
         if not self.catalog.is_bundled_snapshot:
             return EXTERNAL_CATALOG_PROVENANCE
-        if candidate.deployment is not None:
-            return AA_CATALOG_RUNTIME_PROVENANCE
-        return AA_CATALOG_PROVENANCE
+        return AA_CATALOG_RUNTIME_PROVENANCE
 
     def _show(self, step: TuiStep) -> None:
         information_steps = {TuiStep.PRIVACY, TuiStep.METHODOLOGY}
@@ -1531,7 +1502,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def _custom_endpoint_model(self) -> str:
         """Return the model name that follows the user into the custom endpoint field."""
         previous_candidate = self._selected_candidate()
-        if previous_candidate is not None and previous_candidate.deployment is not None:
+        if previous_candidate is not None:
             # The managed alias only names the server this app launches, so no attached server serves it.
             return self.defaults.endpoint_model or ""
         configured_model = self.query_one("#endpoint-model-input", Input).value.strip()
@@ -1617,7 +1588,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if uses_custom_manifest and self.step is TuiStep.CONFIG:
             self.query_one("#manifest-input", Input).focus()
         candidate = self._selected_candidate()
-        if candidate is not None and candidate.deployment is not None:
+        if candidate is not None:
             # The replay can raise the context floor, so its ladder is rebuilt with the replay.
             self._sync_managed_deployment_controls()
 
@@ -1717,11 +1688,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             availability = (
                 None if candidate is None else self._managed_availability(candidate, self._selected_device_index())
             )
-            if (
-                candidate is not None
-                and candidate.deployment is not None
-                and (availability is None or not availability.can_deploy)
-            ):
+            if candidate is not None and (availability is None or not availability.can_deploy):
                 reason = (
                     "This app cannot start models on this computer."
                     if availability is None or availability.reason is None
@@ -1779,8 +1746,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if managed_deployment is None:
             return CONSENT_ATTACHED_LABEL
         deployment = managed_deployment.candidate.deployment
-        if deployment is None:
-            raise RuntimeError("managed deployment choice lost its model recipe")
         artifact_gib = deployment.artifact_size_bytes / BYTES_PER_GIB
         cache_root = home_relative_path_text(managed_deployment.cache_root)
         return (

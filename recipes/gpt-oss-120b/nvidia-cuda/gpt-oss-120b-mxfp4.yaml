@@ -1,0 +1,97 @@
+profile_id: gpt-oss-120b-mxfp4
+as_of: '2026-09-21'
+display_name: OpenAI gpt-oss-120b MXFP4
+hf_repository: openai/gpt-oss-120b
+hf_revision: b5c939de8f754692c1647ca79fbf85e8c1e70f8a
+devices:
+- nvidia-cuda
+tool_call_parser: gpt-oss
+reasoning_parser: gpt-oss
+thinking_policy: enabled
+speculation_policy: disabled-target-only-baseline
+deployment:
+  artifact_kind: safetensors-repository
+  artifacts:
+  - filename: chat_template.jinja
+    sha256: a4c9919cbbd4acdd51ccffe22da049264b1b73e59055fa58811a99efbd7c8146
+    size_bytes: 16738
+  - filename: config.json
+    sha256: 933aeb666a3fd851133ddd7686414f369bc564c4185fb5704416550879f10566
+    size_bytes: 2089
+  - filename: generation_config.json
+    sha256: f9970ada892d2d1f72e3ed0a6535ccebadd11897318794ca671d8c7014c957da
+    size_bytes: 177
+  - filename: model-00000-of-00014.safetensors
+    sha256: 695218884684c611fe08a74751ee443f971e9bd9bc062edba822da3fe45969b7
+    size_bytes: 4625017896
+  - filename: model-00001-of-00014.safetensors
+    sha256: a881aa5f561b26a22b14a8262aa61849ace349ffd73d74769e030ac90a1fcf8a
+    size_bytes: 4115586736
+  - filename: model-00002-of-00014.safetensors
+    sha256: 022478dd04398c5bdb545a5be0a6437ecc2eb53d1dbd29edafcfff4b3ddf0a41
+    size_bytes: 4625017888
+  - filename: model-00003-of-00014.safetensors
+    sha256: 47aee9e7b9d5bedb215042c01ccededd9bd9c30b0dddea862dc2506b9d6c74de
+    size_bytes: 4115586752
+  - filename: model-00004-of-00014.safetensors
+    sha256: f6c2752acda607b1d5ca52df9e75c1b9b2761e6875ff10c9bd6ddac473c0262e
+    size_bytes: 4625017896
+  - filename: model-00005-of-00014.safetensors
+    sha256: 0c8dd401544c31cb93b8459eee7da20ea2a07626a59455d7d92b85257df9b46c
+    size_bytes: 4115586696
+  - filename: model-00006-of-00014.safetensors
+    sha256: 28d839f2e027985a8b14e45f2323798862eddb7770ee9800ea6b7c803abee489
+    size_bytes: 4625017856
+  - filename: model-00007-of-00014.safetensors
+    sha256: c8958c5f183c04f6ea959cfd90562b5128124154b2bbf979b8a22b9405b30ed8
+    size_bytes: 4060267176
+  - filename: model-00008-of-00014.safetensors
+    sha256: bf1f2a88868ffc37d520dcf77d26f0e823710b5e682d473ff10f6974fa3b7517
+    size_bytes: 4625017896
+  - filename: model-00009-of-00014.safetensors
+    sha256: f72d34a4004241b45c332b61f8ffa124e9a913bc1ab442b66e717d3e94e741ce
+    size_bytes: 4170906304
+  - filename: model-00010-of-00014.safetensors
+    sha256: f48c867c2cb0a44bfc2f8768cb98e4aec9a350946fceacfebdcad5d32ad4a471
+    size_bytes: 4625017896
+  - filename: model-00011-of-00014.safetensors
+    sha256: a06851b2cfd35f48722f823bc1ab8f7bcb4a878a5b8e975f4d3544f230454eeb
+    size_bytes: 4115586752
+  - filename: model-00012-of-00014.safetensors
+    sha256: 3af33667c307e20ae2a7648ea52653de46dd0171601ec5c696e47a2f5d5bf1e4
+    size_bytes: 4064660808
+  - filename: model-00013-of-00014.safetensors
+    sha256: bcbcb74b043e071d1e05471d500d74dcf661175e00878ed302ccdf1801a75aef
+    size_bytes: 4625017896
+  - filename: model-00014-of-00014.safetensors
+    sha256: 54b1be1609696c307cc5ca117b1fa54feaddebffa04e9c2db117652a01964230
+    size_bytes: 4115586736
+  - filename: model.safetensors.index.json
+    sha256: ede2655fdc05008561983b6e0829c600727c28d591e071077377059f03a6c00e
+    size_bytes: 54511
+  - filename: special_tokens_map.json
+    sha256: dd5e191d20c12d2fee1da5bae14ca1db0f5f4215300af691f23cdee97120a293
+    size_bytes: 98
+  - filename: tokenizer.json
+    sha256: 0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3
+    size_bytes: 27868174
+  - filename: tokenizer_config.json
+    sha256: 9279e942392b742d633c7adbb89ebe002c98399db8926a7af5125c726f404070
+    size_bytes: 4200
+  context_tokens: 65536
+  frameworks:
+  - sglang
+  memory:
+    full_attention_layers: 18
+    full_kv_heads: 8
+    full_kv_head_dimension: 64
+    sliding_attention_layers: 18
+    sliding_kv_heads: 8
+    sliding_kv_head_dimension: 64
+    sliding_cached_tokens: 104832
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 0
+    constant_state_bytes: 0
+    runtime_overhead_bytes: 11732868165
+  runtime_versions:
+    sglang: 0.5.18

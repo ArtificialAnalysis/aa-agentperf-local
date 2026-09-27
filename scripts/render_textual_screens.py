@@ -11,7 +11,7 @@ from pathlib import Path
 from textual.widgets import Button, Checkbox, OptionList
 
 from agentperf_local.common.units import BYTES_PER_GIB
-from agentperf_local.deployment.catalog import BUNDLED_MODEL_CATALOG_PATH, load_model_catalog
+from agentperf_local.deployment.catalog import BUNDLED_RECIPES_ROOT, load_model_catalog
 from agentperf_local.deployment.endpoint_probes import ContextProbeResult
 from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
 from agentperf_local.provenance.context import ContextObservationReason
@@ -213,7 +213,7 @@ async def _render(output_dir: Path, size: tuple[int, int]) -> tuple[Path, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
     controller = PreviewReplayController()
     app = AgentPerfLocalApp(
-        load_model_catalog(BUNDLED_MODEL_CATALOG_PATH),
+        load_model_catalog(BUNDLED_RECIPES_ROOT),
         controller=controller,
         defaults=TuiDefaults(
             output_dir=Path("results/aa-agentic-pilot"),

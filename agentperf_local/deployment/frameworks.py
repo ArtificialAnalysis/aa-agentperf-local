@@ -23,9 +23,9 @@ from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.deployment.catalog import (
     DeploymentFramework,
+    DeviceId,
     ModelCandidate,
     ModelDeployment,
-    PortableDeviceId,
     is_development_build,
     release_version,
 )
@@ -97,7 +97,7 @@ def framework_supported(framework: DeploymentFramework, platform: AcceleratorPla
     return platform == "nvidia-cuda"
 
 
-def platform_device_id(platform: AcceleratorPlatform) -> PortableDeviceId:
+def platform_device_id(platform: AcceleratorPlatform) -> DeviceId:
     if platform == "nvidia-cuda":
         return "nvidia-cuda"
     if platform == "amd-rocm":
@@ -228,18 +228,16 @@ def framework_offers(
     """Return compatible frameworks in the model's canonical order.
 
     The memory requirement scales with the requested context; the default is the
-    recipe's full benchmark context and reproduces the catalog minimum exactly.
+    recipe's full benchmark context.
     """
     deployment = candidate.deployment
-    if deployment is None:
-        return ()
     platform = accelerator_platform(snapshot)
     minimum_memory_bytes = derived_minimum_memory_bytes(deployment, resolve_context_tokens(deployment, context_tokens))
     platform_device = platform_device_id(platform)
     available_memory_bytes = available_accelerator_memory(snapshot, platform)
     memory_fit = None if available_memory_bytes is None else memory_fits(available_memory_bytes, minimum_memory_bytes)
     offers: list[FrameworkOffer] = []
-    candidate_devices = frozenset(evidence.device_id for evidence in candidate.device_evidence)
+    candidate_devices = frozenset(candidate.devices)
     for framework in deployment.frameworks:
         if platform_device not in candidate_devices:
             continue

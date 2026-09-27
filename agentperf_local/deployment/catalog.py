@@ -1,20 +1,26 @@
-"""Load the closed pilot model catalog into typed records."""
+"""Load the recipe folder into typed catalog records."""
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Literal
 
+import yaml
+
+from agentperf_local.common.durable_files import read_bounded_file
 from agentperf_local.common.identity import sha256_bytes, validate_identifier
 from agentperf_local.common.json_fields import (
-    decode_json_object,
     one_of,
+    optional_boolean,
     optional_integer,
+    optional_non_negative_integer,
     optional_object,
     optional_string,
+    require_allowed_keys,
     require_exact_keys,
     required_boolean,
     required_integer,
@@ -22,21 +28,16 @@ from agentperf_local.common.json_fields import (
     required_non_negative_integer,
     required_object,
     required_string,
+    required_strings,
 )
-from agentperf_local.common.json_records import json_field_names
-from agentperf_local.common.json_types import JsonObject
-from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT
+from agentperf_local.common.json_records import json_field_names, required_json_field_names
+from agentperf_local.common.json_types import JsonObject, normalize_json_object
+from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
 
-MODEL_CATALOG_VERSION = 2
-MODEL_CATALOG_KIND = "consumer_gpu_model_candidates"
-MODEL_CATALOG_STATUS = "pilot-candidates-not-release"
-EXPECTED_MODEL_COUNT = 29
-LEGACY_DEVICE_IDS: tuple[DeviceId, ...] = ("rtx-5090", "rtx-pro-6000", "dgx-spark")
-PORTABLE_DEVICE_IDS: tuple[PortableDeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MAX_DISPLAY_NAME_CHARACTERS = 160
-MAX_URL_CHARACTERS = 2_048
-MAX_MODEL_CATALOG_BYTES = 1_048_576
+MAX_RECIPE_BYTES = 262_144
+MAX_RECIPES = 512
 MAX_DEPLOYMENT_ARTIFACTS = 512
 MAX_ARTIFACT_PATH_CHARACTERS = 255
 HF_REVISION_HEX_DIGITS = 40
@@ -47,13 +48,17 @@ RELEASE_VERSION_PARTS = 3
 # a base version, a commit count, and the abbreviated commit it was built from.
 DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+\.dev\d+\+g[0-9a-f]{7,40}$")
 ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-Za-z0-9_])?$")
-BUNDLED_MODEL_CATALOG_PATH = PACKAGE_DATA_ROOT / "model-candidates-v2.json"
-BUNDLED_MODEL_CATALOG_DIGEST = "sha256:3eb44c124946317fd05b285bb44427dfd43ce302574d8e28bf420e69e2122afd"
+# Recipes live at recipes/<model>/<hardware>/<profile_id>.yaml.
+# libyaml's loader parses the recipes about four times faster; the pure-Python one is the fallback.
+_YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+RECIPE_SUFFIX = ".yaml"
+RECIPES_README = "README.md"
+# A wheel carries a copy of the repository's recipes/ folder inside the package. A
+# source checkout has no copy, so it reads the folder at the repository root.
+_PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
+BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
+BUNDLED_RECIPES_DIGEST = "sha256:edd958214902431d7f6ffdadc003b2ab4db46b79fc1dee428e3d6cede2cb7ae7"
 
-type CatalogKind = Literal["consumer_gpu_model_candidates"]
-type CatalogStatus = Literal["pilot-candidates-not-release"]
-type ModelLicense = Literal["Apache-2.0", "OpenMDW-1.1", "NVIDIA-Nemotron-Open-Model-License", "Qwen-Community-1.0"]
-type RuntimeFamily = Literal["llama-cpp", "sglang", "vllm"]
 type ToolCallParser = Literal["gemma4", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
 type ThinkingPolicy = Literal["disabled", "enabled", "enabled-medium-candidate"]
@@ -66,34 +71,9 @@ type SpeculationPolicy = Literal[
     "enabled-dspark-draft",
     "enabled-vllm-external-draft",
 ]
-type StoredCheckpointKind = Literal["gguf-q4-0", "gguf-q4-k-m", "gguf-iq4-nl", "modelopt-nvfp4-mixed", "mxfp4-native"]
-type ComputePathPolicy = Literal["record-resolved-path"]
-type ArtifactManifestStatus = Literal["pending-complete-file-manifest", "complete-file-sha256-pinned"]
-type DeviceId = Literal[
-    "rtx-5090",
-    "rtx-pro-6000",
-    "dgx-spark",
-    "nvidia-cuda",
-    "amd-rocm",
-    "apple-silicon",
-]
-type PortableDeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
-type DeviceArchitecture = Literal["sm120", "sm121", "cuda", "rocm", "metal"]
-type DeviceEvidenceLevel = Literal[
-    "official-gguf-backend",
-    "upstream-gguf-conversion",
-    "vendor-hardware-listed-recipe-confirm",
-    "vendor-local-surface-aa-recipe-needed",
-    "vendor-sglang-recipe",
-    "upstream-end-to-end",
-    "upstream-boot-and-serve",
-    "local-end-to-end",
-    "local-inference-screen",
-]
-type AaAdmissionState = Literal["unqualified"]
+type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
 type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
 type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
-type Quantization = Literal["Q4_0", "Q4_K_M", "IQ4_NL", "NVFP4", "MXFP4"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
 type LlamaCppLoadMode = Literal["none", "mmap"]
 # How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
@@ -108,25 +88,7 @@ LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on-direct",)
 type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
 DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm")
-DEVICE_IDS: tuple[DeviceId, ...] = (*LEGACY_DEVICE_IDS, *PORTABLE_DEVICE_IDS)
-DEVICE_ARCHITECTURES: tuple[DeviceArchitecture, ...] = ("sm120", "sm121", "cuda", "rocm", "metal")
-DEVICE_EVIDENCE_LEVELS: tuple[DeviceEvidenceLevel, ...] = (
-    "official-gguf-backend",
-    "upstream-gguf-conversion",
-    "vendor-hardware-listed-recipe-confirm",
-    "vendor-local-surface-aa-recipe-needed",
-    "vendor-sglang-recipe",
-    "upstream-end-to-end",
-    "upstream-boot-and-serve",
-    "local-end-to-end",
-    "local-inference-screen",
-)
-MODEL_LICENSES: tuple[ModelLicense, ...] = (
-    "Apache-2.0",
-    "OpenMDW-1.1",
-    "NVIDIA-Nemotron-Open-Model-License",
-    "Qwen-Community-1.0",
-)
+DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
 THINKING_POLICIES: tuple[ThinkingPolicy, ...] = ("disabled", "enabled", "enabled-medium-candidate")
@@ -139,51 +101,11 @@ SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "enabled-dspark-draft",
     "enabled-vllm-external-draft",
 )
-RUNTIME_FAMILIES: tuple[RuntimeFamily, ...] = ("llama-cpp", "sglang", "vllm")
 TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "gpt-oss", "qwen3_coder", "qwen3_xml")
-STORED_CHECKPOINT_KINDS: tuple[StoredCheckpointKind, ...] = (
-    "gguf-q4-0",
-    "gguf-q4-k-m",
-    "gguf-iq4-nl",
-    "modelopt-nvfp4-mixed",
-    "mxfp4-native",
-)
 ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set", "safetensors-repository")
-QUANTIZATIONS: tuple[Quantization, ...] = ("Q4_0", "Q4_K_M", "IQ4_NL", "NVFP4", "MXFP4")
-ARTIFACT_MANIFEST_STATUSES: tuple[ArtifactManifestStatus, ...] = (
-    "pending-complete-file-manifest",
-    "complete-file-sha256-pinned",
-)
-# Each stored checkpoint kind can only be served from the artifact layout it was
-# published in, so the catalog cannot describe a GGUF checkpoint as a weights
-# repository or the reverse.
-_CHECKPOINT_ARTIFACT_KINDS: dict[StoredCheckpointKind, tuple[ArtifactKind, ...]] = {
-    "gguf-q4-0": ("gguf-single-file",),
-    "gguf-q4-k-m": ("gguf-single-file", "gguf-file-set"),
-    "gguf-iq4-nl": ("gguf-single-file", "gguf-file-set"),
-    "modelopt-nvfp4-mixed": ("safetensors-repository",),
-    "mxfp4-native": ("safetensors-repository",),
-}
-_CHECKPOINT_QUANTIZATIONS: dict[StoredCheckpointKind, Quantization] = {
-    "gguf-q4-0": "Q4_0",
-    "gguf-q4-k-m": "Q4_K_M",
-    "gguf-iq4-nl": "IQ4_NL",
-    "modelopt-nvfp4-mixed": "NVFP4",
-    "mxfp4-native": "MXFP4",
-}
 # A weights repository is only servable when the runtime can read the model shape
 # and the tokenizer beside the tensors.
 REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
-
-_CATALOG_FIELDS = frozenset({"version", "kind", "status", "as_of", "models"})
-_DEVICE_ARCHITECTURES: dict[DeviceId, DeviceArchitecture] = {
-    "rtx-5090": "sm120",
-    "rtx-pro-6000": "sm120",
-    "dgx-spark": "sm121",
-    "nvidia-cuda": "cuda",
-    "amd-rocm": "rocm",
-    "apple-silicon": "metal",
-}
 
 
 def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int | None:
@@ -195,10 +117,9 @@ def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int |
     return value
 
 
-def _literal[LiteralValue: str](value: str, expected: LiteralValue, field: str) -> LiteralValue:
-    if value != expected:
-        raise ValueError(f"{field} must be {expected}")
-    return expected
+def _require_recipe_fields(data: JsonObject, cls: type, source: str) -> None:
+    """Require every field of one record that has no default; a recipe may leave out the rest."""
+    require_allowed_keys(data, required_json_field_names(cls), json_field_names(cls), source)
 
 
 def _revision(value: str, field: str) -> str:
@@ -214,12 +135,6 @@ def _sha256(value: str, field: str) -> str:
         raise ValueError(f"{field} must be 64 lowercase hexadecimal digits")
     if any(character not in "0123456789abcdef" for character in value):
         raise ValueError(f"{field} must be 64 lowercase hexadecimal digits")
-    return value
-
-
-def _https_url(value: str, field: str) -> str:
-    if len(value) > MAX_URL_CHARACTERS or not value.startswith("https://"):
-        raise ValueError(f"{field} must be a short HTTPS URL")
     return value
 
 
@@ -275,7 +190,7 @@ class DeploymentArtifact:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentArtifact:
         """Read one pinned artifact record."""
-        require_exact_keys(data, json_field_names(cls), source)
+        _require_recipe_fields(data, cls, source)
         return cls(
             filename=validate_artifact_path(required_string(data, "filename", source), f"{source}.filename"),
             sha256=_sha256(required_string(data, "sha256", source), f"{source}.sha256"),
@@ -292,7 +207,7 @@ class LlamaCppLaunch:
     batch_size: int
     ubatch_size: int
     speculative_tokens: int
-    draft_model_filename: str | None
+    draft_model_filename: str | None = None
     target_backend_sampling: bool
     draft_backend_sampling: bool
     backend: LlamaCppBackend | None = None
@@ -336,7 +251,7 @@ class LlamaCppLaunch:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> LlamaCppLaunch:
         """Read one pinned llama.cpp launch configuration."""
-        require_exact_keys(data, json_field_names(cls), source)
+        _require_recipe_fields(data, cls, source)
         draft_model_filename = optional_string(data, "draft_model_filename", source)
         backend = optional_string(data, "backend", source)
         load_mode = optional_string(data, "load_mode", source)
@@ -356,8 +271,8 @@ class LlamaCppLaunch:
             load_mode=one_of(load_mode, LLAMA_CPP_LOAD_MODES, f"{source}.load_mode") if load_mode is not None else None,
             lazy_mode=one_of(lazy_mode, LLAMA_CPP_LAZY_MODES, f"{source}.lazy_mode") if lazy_mode is not None else None,
             threads=_optional_positive_integer(data, "threads", source),
-            flash_attention=required_boolean(data, "flash_attention", source),
-            disable_fit=required_boolean(data, "disable_fit", source),
+            flash_attention=optional_boolean(data, "flash_attention", source) or False,
+            disable_fit=optional_boolean(data, "disable_fit", source) or False,
             cache_ram_mib=optional_integer(data, "cache_ram_mib", source),
         )
 
@@ -367,7 +282,7 @@ class VllmLaunch:
     """Pin extra vLLM arguments and environment variables for one recipe."""
 
     arguments: tuple[str, ...]
-    environment: tuple[tuple[str, str], ...]
+    environment: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         """Require stable arguments and a unique sorted environment."""
@@ -383,16 +298,14 @@ class VllmLaunch:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> VllmLaunch:
         """Read one pinned vLLM launch configuration."""
-        require_exact_keys(data, json_field_names(cls), source)
+        _require_recipe_fields(data, cls, source)
         raw_arguments = required_list(data, "arguments", source)
         arguments: list[str] = []
         for index, value in enumerate(raw_arguments):
             if not isinstance(value, str) or not value:
                 raise ValueError(f"{source}.arguments[{index}] must be non-empty text")
             arguments.append(value)
-        raw_environment = data.get("environment")
-        if not isinstance(raw_environment, dict):
-            raise ValueError(f"{source}.environment must be an object")
+        raw_environment = optional_object(data, "environment", source) or {}
         environment: list[tuple[str, str]] = []
         for name, value in raw_environment.items():
             if not isinstance(value, str) or not value:
@@ -406,9 +319,8 @@ class VllmLaunch:
 class DeploymentMemory:
     """Describe how one model's resident memory grows with the served context.
 
-    The catalog stores the attention shape rather than a single opaque number so the
-    memory floor can be recomputed for a reduced context and checked against the
-    pinned full-context minimum on every use.
+    A recipe stores the attention shape rather than a single opaque number, so the
+    memory floor can be computed for any context.
     """
 
     # Full and sliding layers can hold different head shapes: a Gemma 4 global layer
@@ -465,7 +377,7 @@ class DeploymentMemory:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> DeploymentMemory:
         """Read one memory-shape record."""
-        require_exact_keys(data, json_field_names(cls), source)
+        _require_recipe_fields(data, cls, source)
         return cls(
             full_attention_layers=required_non_negative_integer(data, "full_attention_layers", source),
             full_kv_heads=required_non_negative_integer(data, "full_kv_heads", source),
@@ -478,7 +390,7 @@ class DeploymentMemory:
             recurrent_state_slots=required_non_negative_integer(data, "recurrent_state_slots", source),
             constant_state_bytes=required_non_negative_integer(data, "constant_state_bytes", source),
             runtime_overhead_bytes=required_integer(data, "runtime_overhead_bytes", source),
-            lazy_read_bytes=required_non_negative_integer(data, "lazy_read_bytes", source),
+            lazy_read_bytes=optional_non_negative_integer(data, "lazy_read_bytes", source) or 0,
         )
 
 
@@ -492,9 +404,7 @@ def _optional_moe_runner_backend(data: JsonObject, source: str) -> MoeRunnerBack
 
 def _runtime_versions_from_json(data: JsonObject, source: str) -> tuple[tuple[DeploymentFramework, str], ...]:
     """Read the per-framework runtime pins as canonical-ordered (framework, version) pairs."""
-    raw = data.get("runtime_versions")
-    if not isinstance(raw, dict):
-        raise ValueError(f"{source}.runtime_versions must be an object")
+    raw = optional_object(data, "runtime_versions", source) or {}
     pairs: list[tuple[DeploymentFramework, str]] = []
     for key, value in raw.items():
         framework = one_of(key, DEPLOYMENT_FRAMEWORK_ORDER, f"{source}.runtime_versions key '{key}'")
@@ -514,18 +424,15 @@ class ModelDeployment:
     context_tokens: int
     frameworks: tuple[DeploymentFramework, ...]
     memory: DeploymentMemory
-    minimum_memory_bytes: int
     # The release each framework is verified against, keyed by framework in canonical
     # order. A runtime can load a checkpoint, pass every startup check, and still emit
     # nonsense, and nothing downstream reads generated text, so the launcher serves the
     # named version and refuses every other. A framework with no comparable release
     # (llama.cpp) is simply absent from the map.
-    runtime_versions: tuple[tuple[DeploymentFramework, str], ...]
+    runtime_versions: tuple[tuple[DeploymentFramework, str], ...] = ()
     # The fused-expert kernel this recipe is served with, or None when it has no
     # mixture-of-experts layers or the runtime's own choice is known to serve it.
-    moe_runner_backend: MoeRunnerBackend | None
-    model_alias: str
-    quantization: Quantization
+    moe_runner_backend: MoeRunnerBackend | None = None
     model_filename: str | None = None
     llama_cpp: LlamaCppLaunch | None = None
     vllm: VllmLaunch | None = None
@@ -560,14 +467,12 @@ class ModelDeployment:
                 raise ValueError("llama.cpp does not serve a safetensors weights repository")
             if self.model_filename is not None or self.llama_cpp is not None:
                 raise ValueError("a weights recipe must not carry llama.cpp file or launch settings")
-        if self.context_tokens <= 0:
-            raise ValueError("context_tokens must be positive")
+        if self.context_tokens != BENCHMARK_CONTEXT_TOKENS:
+            raise ValueError(f"context_tokens must be {BENCHMARK_CONTEXT_TOKENS}")
         if self.memory.lazy_read_bytes > self.artifact_size_bytes:
             raise ValueError("lazy_read_bytes must not exceed the model artifacts")
         if self.memory.lazy_read_bytes and (self.llama_cpp is None or self.llama_cpp.lazy_mode is None):
             raise ValueError("only a llama.cpp recipe with a lazy_mode can read artifact bytes on demand")
-        if self.minimum_memory_bytes < self.resident_artifact_bytes:
-            raise ValueError("minimum_memory_bytes must cover the resident model artifacts")
         if not self.frameworks:
             raise ValueError("a managed recipe must name at least one framework")
         expected_order = tuple(framework for framework in DEPLOYMENT_FRAMEWORK_ORDER if framework in self.frameworks)
@@ -593,7 +498,6 @@ class ModelDeployment:
                 raise ValueError("llama.cpp draft_model_filename must name a pinned artifact")
         if self.vllm is not None and "vllm" not in self.frameworks:
             raise ValueError("only a vLLM recipe can name vLLM launch settings")
-        validate_identifier(self.model_alias, "model_alias")
 
     @property
     def artifact_size_bytes(self) -> int:
@@ -624,7 +528,7 @@ class ModelDeployment:
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> ModelDeployment:
         """Read one exact managed-deployment record."""
-        require_exact_keys(data, json_field_names(cls), source)
+        _require_recipe_fields(data, cls, source)
         raw_frameworks = data.get("frameworks")
         if not isinstance(raw_frameworks, list):
             raise ValueError(f"{source}.frameworks must be an array")
@@ -653,15 +557,8 @@ class ModelDeployment:
             context_tokens=required_integer(data, "context_tokens", source),
             frameworks=tuple(frameworks),
             memory=DeploymentMemory.from_json(required_object(data, "memory", source), f"{source}.memory"),
-            minimum_memory_bytes=required_integer(data, "minimum_memory_bytes", source),
             runtime_versions=_runtime_versions_from_json(data, source),
             moe_runner_backend=_optional_moe_runner_backend(data, source),
-            model_alias=required_string(data, "model_alias", source),
-            quantization=one_of(
-                required_string(data, "quantization", source),
-                QUANTIZATIONS,
-                f"{source}.quantization",
-            ),
             model_filename=optional_string(data, "model_filename", source),
             llama_cpp=(
                 LlamaCppLaunch.from_json(raw_llama_cpp, f"{source}.llama_cpp") if raw_llama_cpp is not None else None
@@ -671,120 +568,39 @@ class ModelDeployment:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DeviceEvidence:
-    """Describe upstream evidence for one candidate device."""
-
-    device_id: DeviceId
-    architecture: DeviceArchitecture
-    evidence_level: DeviceEvidenceLevel
-    source_url: str
-    tested_input_tokens: int | None
-    tested_output_tokens: int | None
-    tested_concurrency: int | None
-    aa_admission_state: AaAdmissionState
-
-    def __post_init__(self) -> None:
-        """Require consistent device and evidence fields."""
-        if self.architecture != _DEVICE_ARCHITECTURES[self.device_id]:
-            raise ValueError("device architecture does not match the catalog device")
-        _https_url(self.source_url, "source_url")
-        tested = (self.tested_input_tokens, self.tested_output_tokens, self.tested_concurrency)
-        if any(value is not None and value <= 0 for value in tested):
-            raise ValueError("tested token and concurrency values must be positive or null")
-        if any(value is None for value in tested) and any(value is not None for value in tested):
-            raise ValueError("tested token and concurrency values must be all present or all null")
-        if self.aa_admission_state != "unqualified":
-            raise ValueError("pilot device evidence must remain unqualified")
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> DeviceEvidence:
-        """Read one closed device-evidence record."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            device_id=one_of(required_string(data, "device_id", source), DEVICE_IDS, f"{source}.device_id"),
-            architecture=one_of(
-                required_string(data, "architecture", source),
-                DEVICE_ARCHITECTURES,
-                f"{source}.architecture",
-            ),
-            evidence_level=one_of(
-                required_string(data, "evidence_level", source),
-                DEVICE_EVIDENCE_LEVELS,
-                f"{source}.evidence_level",
-            ),
-            source_url=_https_url(required_string(data, "source_url", source), f"{source}.source_url"),
-            tested_input_tokens=_optional_positive_integer(data, "tested_input_tokens", source),
-            tested_output_tokens=_optional_positive_integer(data, "tested_output_tokens", source),
-            tested_concurrency=_optional_positive_integer(data, "tested_concurrency", source),
-            aa_admission_state=_literal(
-                required_string(data, "aa_admission_state", source),
-                "unqualified",
-                f"{source}.aa_admission_state",
-            ),
-        )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
 class ModelCandidate:
-    """Describe one pinned but unqualified pilot model."""
+    """Describe one recipe: what to download, where it runs, and how to launch it."""
 
     profile_id: str
+    as_of: str
     display_name: str
     hf_repository: str
     hf_revision: str
-    source_url: str
-    license_id: ModelLicense
-    native_context_tokens: int
-    pilot_context_tokens: int
-    runtime_family: RuntimeFamily
+    # The accelerator platforms this recipe may launch on, in canonical order.
+    devices: tuple[DeviceId, ...]
     tool_call_parser: ToolCallParser
     reasoning_parser: ReasoningParser
     thinking_policy: ThinkingPolicy
     speculation_policy: SpeculationPolicy
-    stored_checkpoint_kind: StoredCheckpointKind
-    compute_path_policy: ComputePathPolicy
-    artifact_manifest_status: ArtifactManifestStatus
-    deployment: ModelDeployment | None
-    device_evidence: tuple[DeviceEvidence, ...]
+    deployment: ModelDeployment
 
     def __post_init__(self) -> None:
-        """Require portable identity and fixed pilot semantics."""
+        """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
+        _iso_date(self.as_of, "as_of")
         if len(self.display_name) > MAX_DISPLAY_NAME_CHARACTERS or not self.display_name.isprintable():
             raise ValueError("display_name must be short printable text")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")
         _revision(self.hf_revision, "hf_revision")
-        expected_source_url = f"https://huggingface.co/{self.hf_repository}"
-        if self.source_url != expected_source_url:
-            raise ValueError("source_url must match hf_repository")
-        if self.pilot_context_tokens != BENCHMARK_CONTEXT_TOKENS:
-            raise ValueError(f"pilot_context_tokens must be {BENCHMARK_CONTEXT_TOKENS}")
-        if self.native_context_tokens < self.pilot_context_tokens:
-            raise ValueError("native_context_tokens must cover the benchmark context")
-        device_ids = tuple(evidence.device_id for evidence in self.device_evidence)
-        if self.deployment is None:
-            if device_ids != LEGACY_DEVICE_IDS:
-                raise ValueError("device_evidence must cover the pilot devices in catalog order")
-            if self.artifact_manifest_status != "pending-complete-file-manifest":
-                raise ValueError("unmanaged candidates must retain a pending artifact manifest")
-            return
-        if self.pilot_context_tokens != self.deployment.context_tokens:
-            raise ValueError("pilot_context_tokens must match the managed deployment context")
-        expected_device_order = tuple(device_id for device_id in PORTABLE_DEVICE_IDS if device_id in device_ids)
-        if not device_ids or len(set(device_ids)) != len(device_ids) or device_ids != expected_device_order:
-            raise ValueError("managed device_evidence must be a canonical subset of CUDA, ROCm, and Apple Silicon")
-        if self.artifact_manifest_status != "complete-file-sha256-pinned":
-            raise ValueError("managed candidates require a complete pinned file manifest")
-        if self.deployment.artifact_kind not in _CHECKPOINT_ARTIFACT_KINDS[self.stored_checkpoint_kind]:
-            raise ValueError("managed artifact_kind does not match the stored checkpoint kind")
-        if _CHECKPOINT_QUANTIZATIONS[self.stored_checkpoint_kind] != self.deployment.quantization:
-            raise ValueError("managed quantization does not match the stored checkpoint kind")
+        expected_device_order = tuple(device_id for device_id in DEVICE_IDS if device_id in self.devices)
+        if not self.devices or len(set(self.devices)) != len(self.devices) or self.devices != expected_device_order:
+            raise ValueError("devices must be a canonical subset of nvidia-cuda, amd-rocm, and apple-silicon")
         llama_cpp = self.deployment.llama_cpp
         if llama_cpp is not None and llama_cpp.backend is not None:
             expected_devices = ("apple-silicon",) if llama_cpp.backend == "metal" else ("amd-rocm",)
-            if device_ids != expected_devices:
-                raise ValueError("llama.cpp backend must match the recipe's device evidence")
+            if self.devices != expected_devices:
+                raise ValueError("llama.cpp backend must match the recipe's devices")
         if self.speculation_policy in ("enabled-mtp-external-draft", "enabled-dflash-external-draft"):
             if llama_cpp is None or llama_cpp.draft_model_filename is None:
                 raise ValueError("an external-draft policy requires a pinned llama.cpp draft model")
@@ -794,38 +610,19 @@ class ModelCandidate:
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> ModelCandidate:
-        """Read one closed pilot model record."""
+        """Read one closed recipe record."""
         require_exact_keys(data, json_field_names(cls), source)
-        raw_evidence = data.get("device_evidence")
-        if not isinstance(raw_evidence, list):
-            raise ValueError(f"{source}.device_evidence must be an array")
-        evidence: list[DeviceEvidence] = []
-        for index, raw_entry in enumerate(raw_evidence):
-            if not isinstance(raw_entry, dict):
-                raise ValueError(f"{source}.device_evidence[{index}] must be an object")
-            evidence.append(DeviceEvidence.from_json(raw_entry, f"{source}.device_evidence[{index}]"))
-        raw_deployment = data.get("deployment")
-        if raw_deployment is not None and not isinstance(raw_deployment, dict):
-            raise ValueError(f"{source}.deployment must be an object or null")
-        deployment = (
-            ModelDeployment.from_json(raw_deployment, f"{source}.deployment")
-            if isinstance(raw_deployment, dict)
-            else None
+        devices = tuple(
+            one_of(value, DEVICE_IDS, f"{source}.devices[{index}]")
+            for index, value in enumerate(required_strings(data, "devices", source))
         )
         return cls(
             profile_id=required_string(data, "profile_id", source),
+            as_of=required_string(data, "as_of", source),
             display_name=required_string(data, "display_name", source),
             hf_repository=required_string(data, "hf_repository", source),
             hf_revision=_revision(required_string(data, "hf_revision", source), f"{source}.hf_revision"),
-            source_url=_https_url(required_string(data, "source_url", source), f"{source}.source_url"),
-            license_id=one_of(required_string(data, "license_id", source), MODEL_LICENSES, f"{source}.license_id"),
-            native_context_tokens=required_integer(data, "native_context_tokens", source),
-            pilot_context_tokens=required_integer(data, "pilot_context_tokens", source),
-            runtime_family=one_of(
-                required_string(data, "runtime_family", source),
-                RUNTIME_FAMILIES,
-                f"{source}.runtime_family",
-            ),
+            devices=devices,
             tool_call_parser=one_of(
                 required_string(data, "tool_call_parser", source),
                 TOOL_CALL_PARSERS,
@@ -846,106 +643,100 @@ class ModelCandidate:
                 SPECULATION_POLICIES,
                 f"{source}.speculation_policy",
             ),
-            stored_checkpoint_kind=one_of(
-                required_string(data, "stored_checkpoint_kind", source),
-                STORED_CHECKPOINT_KINDS,
-                f"{source}.stored_checkpoint_kind",
-            ),
-            compute_path_policy=_literal(
-                required_string(data, "compute_path_policy", source),
-                "record-resolved-path",
-                f"{source}.compute_path_policy",
-            ),
-            artifact_manifest_status=one_of(
-                required_string(data, "artifact_manifest_status", source),
-                ARTIFACT_MANIFEST_STATUSES,
-                f"{source}.artifact_manifest_status",
-            ),
-            deployment=deployment,
-            device_evidence=tuple(evidence),
+            deployment=ModelDeployment.from_json(required_object(data, "deployment", source), f"{source}.deployment"),
         )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ModelCatalog:
-    """Store one closed pilot catalog and its source identity."""
+    """Store every recipe of one folder and the folder's identity."""
 
-    kind: CatalogKind
-    status: CatalogStatus
-    as_of: str
     models: tuple[ModelCandidate, ...]
-    file_digest: str
-    byte_size: int
-    version: int = MODEL_CATALOG_VERSION
+    digest: str
 
     def __post_init__(self) -> None:
-        """Require the exact pilot envelope and unique ordered models."""
-        if self.version != MODEL_CATALOG_VERSION:
-            raise ValueError(f"catalog version must be {MODEL_CATALOG_VERSION}")
-        if self.kind != MODEL_CATALOG_KIND:
-            raise ValueError(f"catalog kind must be {MODEL_CATALOG_KIND}")
-        if self.status != MODEL_CATALOG_STATUS:
-            raise ValueError(f"catalog status must be {MODEL_CATALOG_STATUS}")
-        try:
-            parsed_date = date.fromisoformat(self.as_of)
-        except ValueError as error:
-            raise ValueError("catalog as_of must be an ISO date") from error
-        if parsed_date.isoformat() != self.as_of:
-            raise ValueError("catalog as_of must be an ISO date")
-        if len(self.models) != EXPECTED_MODEL_COUNT:
-            raise ValueError(f"catalog must contain exactly {EXPECTED_MODEL_COUNT} models")
+        """Require at least one recipe and unique names."""
+        if not self.models:
+            raise ValueError("recipe folder must contain at least one recipe")
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
-            raise ValueError("catalog profile_id values must be unique")
-        aliases = tuple(model.deployment.model_alias for model in self.models if model.deployment is not None)
-        if len(set(aliases)) != len(aliases):
-            raise ValueError("catalog model_alias values must be unique")
-        if self.byte_size <= 0:
-            raise ValueError("catalog byte_size must be positive")
+            raise ValueError("recipe profile_id values must be unique")
+
+    @property
+    def as_of(self) -> str:
+        """Return the newest recipe date, which names this catalog's epoch."""
+        return max(model.as_of for model in self.models)
 
     @property
     def is_bundled_snapshot(self) -> bool:
-        """Return whether the bytes match the catalog embedded in this release."""
-        return self.file_digest == BUNDLED_MODEL_CATALOG_DIGEST
+        """Return whether the recipes match the ones shipped with this release."""
+        return self.digest == BUNDLED_RECIPES_DIGEST
 
 
-def load_model_catalog(path: Path) -> ModelCatalog:
-    """Load a regular pilot catalog file and preserve model order."""
-    if path.is_symlink() or not path.is_file():
-        raise ValueError("model catalog must be a regular file, not a symbolic link")
-    with path.open("rb") as source:
-        encoded = source.read(MAX_MODEL_CATALOG_BYTES + 1)
-    if len(encoded) > MAX_MODEL_CATALOG_BYTES:
-        raise ValueError(f"model catalog must not exceed {MAX_MODEL_CATALOG_BYTES} bytes")
-    data = decode_json_object(encoded, f"invalid model catalog JSON: {path}")
-    require_exact_keys(data, _CATALOG_FIELDS, "catalog")
-    version = required_integer(data, "version", "catalog")
-    if version != MODEL_CATALOG_VERSION:
-        raise ValueError(f"catalog.version must be {MODEL_CATALOG_VERSION}")
-    kind = _literal(
-        required_string(data, "kind", "catalog"),
-        "consumer_gpu_model_candidates",
-        "catalog.kind",
-    )
-    status = _literal(
-        required_string(data, "status", "catalog"),
-        "pilot-candidates-not-release",
-        "catalog.status",
-    )
-    raw_models = data.get("models")
-    if not isinstance(raw_models, list):
-        raise ValueError("catalog.models must be an array")
+def _iso_date(value: str, field: str) -> None:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{field} must be an ISO date") from error
+    if parsed.isoformat() != value:
+        raise ValueError(f"{field} must be an ISO date")
+
+
+def _parse_recipe(encoded: bytes, name: str) -> JsonObject:
+    try:
+        decoded = yaml.load(encoded, Loader=_YAML_SAFE_LOADER)
+    except yaml.YAMLError as error:
+        raise ValueError(f"invalid recipe YAML: {name}") from error
+    try:
+        return normalize_json_object(decoded)
+    except ValueError as error:
+        raise ValueError(f"recipe {name} must be a mapping of JSON values; quote dates") from error
+
+
+def _subfolders(folder: Path, skip: str | None = None) -> tuple[Path, ...]:
+    """Return the named subfolders of one recipe folder level, in name order, ignoring one named file."""
+    folders: list[Path] = []
+    # Sort on the name: WindowsPath ignores case when it sorts, and the digest needs byte order.
+    for path in sorted(folder.iterdir(), key=lambda entry: entry.name):
+        if path.name == skip:
+            continue
+        if path.is_symlink() or not path.is_dir():
+            raise ValueError(f"recipe folder {folder.name} may only hold folders, but holds {path.name}")
+        validate_identifier(path.name, f"recipe folder {path.name}")
+        folders.append(path)
+    return tuple(folders)
+
+
+def _recipe_paths(root: Path) -> tuple[Path, ...]:
+    """Return every recipe file under root/<model>/<hardware>/, in path order."""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("recipe folder must be a directory, not a symbolic link")
+    paths: list[Path] = []
+    for model_folder in _subfolders(root, skip=RECIPES_README):
+        for hardware_folder in _subfolders(model_folder):
+            for path in sorted(hardware_folder.iterdir(), key=lambda entry: entry.name):
+                if path.suffix != RECIPE_SUFFIX:
+                    raise ValueError(f"recipe folder holds {path.name}; recipes must be {RECIPE_SUFFIX} files")
+                paths.append(path)
+    if len(paths) > MAX_RECIPES:
+        raise ValueError(f"recipe folder must not hold more than {MAX_RECIPES} recipes")
+    return tuple(paths)
+
+
+def load_model_catalog(root: Path) -> ModelCatalog:
+    """Load every recipe under root/<model>/<hardware>/<profile_id>.yaml, in path order.
+
+    The digest is the SHA-256 of the `sha256sum */*/*.yaml` listing, so running
+    `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
+    """
     models: list[ModelCandidate] = []
-    for index, raw_model in enumerate(raw_models):
-        if not isinstance(raw_model, dict):
-            raise ValueError(f"catalog.models[{index}] must be an object")
-        models.append(ModelCandidate.from_json(raw_model, f"catalog.models[{index}]"))
-    return ModelCatalog(
-        kind=kind,
-        status=status,
-        as_of=required_string(data, "as_of", "catalog"),
-        models=tuple(models),
-        file_digest=sha256_bytes(encoded),
-        byte_size=len(encoded),
-        version=version,
-    )
+    listing = bytearray()
+    for path in _recipe_paths(root):
+        relative = path.relative_to(root).as_posix()
+        encoded = read_bounded_file(path, MAX_RECIPE_BYTES, label="recipe")
+        model = ModelCandidate.from_json(_parse_recipe(encoded, relative), relative)
+        if model.profile_id != path.stem:
+            raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
+        models.append(model)
+        listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
+    return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))

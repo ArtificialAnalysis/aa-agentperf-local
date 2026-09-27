@@ -42,7 +42,7 @@ uv run agentperf-local tui \
 | `--model NAME` | Set the model name sent to the server. |
 | `--api-key-env NAME` | Name an environment variable containing the API key. |
 | `--client python\|rust` | Select the recorded streaming client. Default `python`; `rust` is an experimental client for high-concurrency benchmarking and needs the `rust` extra. |
-| `--catalog PATH` | Load another structurally valid model-candidate catalog. |
+| `--recipes PATH` | Load recipes from another folder with the same layout. |
 | `--cache-root PATH` | Set the model cache used by managed models. Defaults to the standard Hugging Face hub cache, honoring `HF_HUB_CACHE` and `HF_HOME`. |
 | `--port PORT` | Set the owned localhost port used by a managed server. |
 | `--startup-timeout-seconds N` | Bound managed server startup. |
@@ -107,10 +107,8 @@ repeating the focused button. Help contains the less frequent privacy shortcut.
 
 ## Included choices
 
-The model screen lists every profile in the bundled catalog, in catalog order,
-plus an `Other model or server` entry. [MODELS.md](MODELS.md) lists the
-profiles. The portable GGUF profiles come first because they run on any
-supported accelerator.
+The model screen lists every recipe in [`recipes/`](../recipes), in folder
+order, plus an `Other model or server` entry.
 
 Every catalog candidate is evaluated through the same selection surface. A
 candidate with a complete deployment recipe is intersected with the detected

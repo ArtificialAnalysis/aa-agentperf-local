@@ -1,0 +1,49 @@
+profile_id: muse-glimmer-30b-q4-k-m-dflash-strix-halo
+as_of: '2026-09-21'
+display_name: Muse Glimmer 30B Q4_K_M DFlash (RTX 5090), Strix Halo ROCm
+hf_repository: meta-models/Muse-Glimmer-30B-GGUF
+hf_revision: 70bf1b61ac09f91b24d39038091b41c582bc5d7a
+devices:
+- amd-rocm
+tool_call_parser: qwen3_xml
+reasoning_parser: qwen3
+thinking_policy: enabled
+speculation_policy: enabled-dflash-external-draft
+deployment:
+  artifact_kind: gguf-file-set
+  artifacts:
+  - filename: Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf
+    sha256: 4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e
+    size_bytes: 16756683904
+  - filename: dflash-Muse-Glimmer-30B-Q4_K_M.gguf
+    sha256: b2e808bf656086fe86bd0d0bd990f01d33e377537a07c02d45371517c8b264ef
+    size_bytes: 1631208128
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 13
+    full_kv_heads: 2
+    full_kv_head_dimension: 128
+    sliding_attention_layers: 39
+    sliding_kv_heads: 2
+    sliding_kv_head_dimension: 128
+    sliding_cached_tokens: 3072
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 0
+    constant_state_bytes: 0
+    runtime_overhead_bytes: 2366572736
+  model_filename: Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 2048
+    speculative_tokens: 15
+    draft_model_filename: dflash-Muse-Glimmer-30B-Q4_K_M.gguf
+    target_backend_sampling: false
+    draft_backend_sampling: true
+    backend: rocm
+    load_mode: none
+    threads: 16
+    flash_attention: true
+    disable_fit: true
+    cache_ram_mib: 0

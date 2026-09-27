@@ -12,8 +12,8 @@ import pytest
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.deployment.catalog import (
-    BUNDLED_MODEL_CATALOG_DIGEST,
-    BUNDLED_MODEL_CATALOG_PATH,
+    BUNDLED_RECIPES_DIGEST,
+    BUNDLED_RECIPES_ROOT,
     ModelCandidate,
     ModelCatalog,
     load_model_catalog,
@@ -214,7 +214,6 @@ def _installed_llama_offer(
     candidate: ModelCandidate,
     context_tokens: int | None = None,
 ) -> tuple[FrameworkOffer, ...]:
-    assert candidate.deployment is not None
     deployment = candidate.deployment
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
@@ -352,13 +351,13 @@ def test_managed_choice_names_launch_settings_no_setup_field_can_fix(
     port: int,
     startup_timeout_seconds: float,
 ) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
 
     with pytest.raises(ManagedLaunchSettingsProblem):
         ManagedDeploymentChoice(
             candidate=_named(catalog, "gemma4-12b-it-q4-0"),
             catalog_as_of=catalog.as_of,
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             framework="llama-cpp",
             port=port,
             startup_timeout_seconds=startup_timeout_seconds,
@@ -546,39 +545,6 @@ def test_next_run_directory_names_collision_safe_run_folders(tmp_path: Path) -> 
     assert not missing_root.exists()
 
 
-def test_managed_availability_distinguishes_missing_recipes_from_deployable_models() -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
-    controller = LocalManagedReplayController(
-        catalog_as_of=catalog.as_of,
-        hardware=_hardware(),
-        offer_collector=_installed_llama_offer,
-    )
-
-    gemma = _named(catalog, "gemma4-12b-it-q4-0")
-    # Every bundled model now ships a recipe, so the no-recipe case is built here.
-    without_recipe = replace(
-        gemma,
-        deployment=None,
-        artifact_manifest_status="pending-complete-file-manifest",
-        device_evidence=tuple(
-            replace(evidence, device_id=device_id, architecture=architecture)
-            for evidence, (device_id, architecture) in zip(
-                gemma.device_evidence,
-                (("rtx-5090", "sm120"), ("rtx-pro-6000", "sm120"), ("dgx-spark", "sm121")),
-                strict=True,
-            )
-        ),
-    )
-    unavailable = controller.availability(without_recipe)
-    available = controller.availability(gemma)
-
-    assert not unavailable.can_deploy
-    assert unavailable.reason is not None
-    assert "cannot start this model" in unavailable.reason
-    assert available.can_deploy
-    assert tuple(offer.framework for offer in available.deployable_offers) == ("llama-cpp",)
-
-
 @pytest.mark.parametrize(
     ("accelerator_memory_gib", "context_tokens", "replay_floor_tokens", "can_deploy", "expected_reason"),
     (
@@ -628,7 +594,7 @@ def test_managed_availability_points_small_devices_at_a_context_that_fits(
     can_deploy: bool,
     expected_reason: str | None,
 ) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     controller = LocalManagedReplayController(
         catalog_as_of=catalog.as_of,
         hardware=_hardware(round(accelerator_memory_gib * 1024**3)),
@@ -655,11 +621,11 @@ def test_managed_choice_resolves_its_context_and_binds_reduced_evidence(
     resolved: int,
     reduced: bool,
 ) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     choice = ManagedDeploymentChoice(
         candidate=_named(catalog, "gemma4-12b-it-q4-0"),
         catalog_as_of=catalog.as_of,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         context_tokens=context_tokens,
         cache_root=tmp_path / "cache",
@@ -674,27 +640,25 @@ def test_managed_choice_resolves_its_context_and_binds_reduced_evidence(
 
 @pytest.mark.parametrize("context_tokens", (2_048, 262_144))
 def test_managed_choice_rejects_a_context_outside_the_recipe(context_tokens: int) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
 
     with pytest.raises(ValueError, match="context"):
         ManagedDeploymentChoice(
             candidate=_named(catalog, "gemma4-12b-it-q4-0"),
             catalog_as_of=catalog.as_of,
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             framework="llama-cpp",
             context_tokens=context_tokens,
         )
 
 
 def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
-    deployment = candidate.deployment
-    assert deployment is not None
     choice = ManagedDeploymentChoice(
         candidate=candidate,
         catalog_as_of=catalog.as_of,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         cache_root=tmp_path / "cache",
     )
@@ -702,11 +666,11 @@ def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> 
         manifest_path=_manifest(tmp_path),
         output_dir=tmp_path / "results",
         base_url="http://127.0.0.1:8080/v1",
-        endpoint_model=deployment.model_alias,
+        endpoint_model=candidate.profile_id,
         client_backend="python",
         selection_kind=SelectionKind.BUNDLED_CATALOG_CANDIDATE,
         catalog_profile_id=candidate.profile_id,
-        catalog_digest=catalog.file_digest,
+        catalog_digest=catalog.digest,
         candidate_revision=candidate.hf_revision,
         managed_deployment=choice,
     )
@@ -725,14 +689,12 @@ def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> 
 
 
 async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_path: Path) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
-    deployment = candidate.deployment
-    assert deployment is not None
     choice = ManagedDeploymentChoice(
         candidate=candidate,
         catalog_as_of=catalog.as_of,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         context_tokens=32_768,
         cache_root=tmp_path / "cache",
@@ -746,11 +708,11 @@ async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_pat
         ),
         output_dir=tmp_path / "results",
         base_url="http://127.0.0.1:8080/v1",
-        endpoint_model=deployment.model_alias,
+        endpoint_model=candidate.profile_id,
         client_backend="python",
         selection_kind=SelectionKind.BUNDLED_CATALOG_CANDIDATE,
         catalog_profile_id=candidate.profile_id,
-        catalog_digest=catalog.file_digest,
+        catalog_digest=catalog.digest,
         candidate_revision=candidate.hf_revision,
         managed_deployment=choice,
     )
@@ -775,24 +737,22 @@ async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_pat
 
 def _managed_request(tmp_path: Path, catalog: ModelCatalog, choice: ManagedDeploymentChoice) -> ReplayRequest:
     """Build the managed replay request the TUI would submit for one deployment choice."""
-    deployment = choice.candidate.deployment
-    assert deployment is not None
     return ReplayRequest(
         manifest_path=_runnable_manifest(tmp_path / "workload"),
         output_dir=tmp_path / "results",
         base_url="http://127.0.0.1:8080/v1",
-        endpoint_model=deployment.model_alias,
+        endpoint_model=choice.candidate.profile_id,
         client_backend="python",
         selection_kind=SelectionKind.BUNDLED_CATALOG_CANDIDATE,
         catalog_profile_id=choice.candidate.profile_id,
-        catalog_digest=catalog.file_digest,
+        catalog_digest=catalog.digest,
         candidate_revision=choice.candidate.hf_revision,
         managed_deployment=choice,
     )
 
 
 def test_managed_availability_asks_for_a_device_before_reporting_frameworks() -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
     controller = LocalManagedReplayController(
         catalog_as_of=catalog.as_of,
@@ -818,11 +778,11 @@ def test_managed_availability_asks_for_a_device_before_reporting_frameworks() ->
 
 
 async def test_managed_launch_stops_before_planning_while_no_device_is_chosen(tmp_path: Path) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     choice = ManagedDeploymentChoice(
         candidate=_named(catalog, "gemma4-12b-it-q4-0"),
         catalog_as_of=catalog.as_of,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         cache_root=tmp_path / "cache",
     )

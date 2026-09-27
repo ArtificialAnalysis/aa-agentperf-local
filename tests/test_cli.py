@@ -7,7 +7,7 @@ import orjson
 import pytest
 
 from agentperf_local.cli import main
-from agentperf_local.cli.options import DEFAULT_MODEL_CATALOG_PATH
+from agentperf_local.cli.options import DEFAULT_RECIPES_ROOT
 from agentperf_local.deployment.catalog import load_model_catalog
 from agentperf_local.provenance.benchmark import (
     MEASUREMENT_BINDING_FILENAME,
@@ -433,7 +433,7 @@ def test_deployment_options_fails_when_no_offer_can_deploy_now(
 
 
 def test_unknown_catalog_profile_lists_the_available_profiles(capsys: pytest.CaptureFixture[str]) -> None:
-    available = ", ".join(sorted(model.profile_id for model in load_model_catalog(DEFAULT_MODEL_CATALOG_PATH).models))
+    available = ", ".join(sorted(model.profile_id for model in load_model_catalog(DEFAULT_RECIPES_ROOT).models))
 
     status = main(["deployment-options", "--profile-id", "no-such-profile"])
 
