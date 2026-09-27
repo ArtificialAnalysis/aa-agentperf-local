@@ -191,6 +191,19 @@ async def test_bundled_replay_is_the_default_without_showing_its_package_path(tm
         await pilot.click("#model-continue")
         await pilot.pause()
 
+        await _settle_until(
+            pilot,
+            lambda: all(
+                text in app.export_screenshot()
+                for text in (
+                    "AgentPerf&#160;default&#160;replay&#160;v1",
+                    "Replay",
+                    "YOUR&#160;SERVER",
+                    "Results&#160;folder",
+                    "Advanced&#160;options",
+                )
+            ),
+        )
         rendered = app.export_screenshot()
         assert "AgentPerf&#160;default&#160;replay&#160;v1" in rendered
         assert str(DEFAULT_BUNDLED_REPLAY.manifest_path) not in rendered
@@ -1923,6 +1936,16 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         assert app.query_one("#welcome-start", Button).region.height == 2
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#model-list", OptionList))
+        await _settle_until(
+            pilot,
+            lambda: all(
+                text in app.export_screenshot()
+                for text in (
+                    "STEP&#160;1&#160;OF&#160;4",
+                    "Choose&#160;a&#160;model",
+                )
+            ),
+        )
         rendered = app.export_screenshot()
         assert "STEP&#160;1&#160;OF&#160;4" in rendered
         assert "Choose&#160;a&#160;model" in rendered
@@ -1937,6 +1960,16 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
         assert app.query_one("#config-continue", Button).region.bottom <= 24
+        await _settle_until(
+            pilot,
+            lambda: all(
+                text in app.export_screenshot()
+                for text in (
+                    "STEP&#160;2&#160;OF&#160;4",
+                    "Set&#160;up&#160;the&#160;run",
+                )
+            ),
+        )
         rendered = app.export_screenshot()
         assert "STEP&#160;2&#160;OF&#160;4" in rendered
         assert "Set&#160;up&#160;the&#160;run" in rendered
@@ -2389,6 +2422,16 @@ async def test_report_finalization_failure_is_uncommitted_and_requires_fresh_out
         metrics = str(app.query_one("#result-metrics", Static).content)
         assert "4/4 turns · 4.0s elapsed" in metrics
         assert "first token 100.0 ms · total 300.0 ms" in metrics
+        await _settle_until(
+            pilot,
+            lambda: all(
+                text in app.export_screenshot()
+                for text in (
+                    "New&#160;run",
+                    "Quit",
+                )
+            ),
+        )
         rendered = app.export_screenshot()
         assert "private report finalization detail" not in rendered
         assert "New&#160;run" in rendered
