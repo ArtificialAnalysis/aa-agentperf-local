@@ -23,6 +23,7 @@ from agentperf_local.reports.reporting import (
     write_run_artifacts,
 )
 from agentperf_local.workload.schema import RecordedToolCall, parse_json_object
+from tests.file_modes import has_mode
 
 RUN_ID = "8f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
 FULL_RUN_CONTEXT = RunContextFacts(
@@ -148,7 +149,7 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
     assert first_contents == {path: path.read_bytes() for path in _paths(paths)}
     assert b"never-serialize-this-key" not in b"".join(first_contents.values())
     assert not (tmp_path / "tasks.csv").exists()
-    assert all(path.stat().st_mode & 0o777 == 0o600 for path in _paths(paths))
+    assert all(has_mode(path, 0o600) for path in _paths(paths))
 
     turn_rows = [parse_json_object(line, paths.turns) for line in paths.turns.read_bytes().splitlines() if line.strip()]
     assert [row["version"] for row in turn_rows] == [REPORT_VERSION, REPORT_VERSION]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ import httpx
 import orjson
 
 from agentperf_local.common.durable_files import (
+    NEW_FILE_OPEN_FLAGS,
     PRIVATE_FILE_PERMISSIONS,
     WrittenFile,
     read_bounded_file,
@@ -92,6 +94,8 @@ READINESS_POLL_SECONDS = 0.25
 PROCESS_STOP_TIMEOUT_SECONDS = 10.0
 PROCESS_STOP_POLL_SECONDS = 0.05
 PROCESS_GROUP_PROBE_SIGNAL = 0
+# /T ends every process the server started, and /F does not wait for them to agree.
+WINDOWS_TREE_KILL_COMMAND = ("taskkill", "/T", "/F", "/PID")
 MAX_GPU_VERIFICATION_LOG_BYTES = 8 * 1024 * 1024
 DEPLOYMENT_ALIAS_NONCE_BYTES = 8
 FULL_OFFLOAD_PATTERN = re.compile(r"offloaded\s+([0-9]+)/([0-9]+)\s+layers\s+to\s+gpu", re.IGNORECASE)
@@ -270,6 +274,7 @@ def bind_snapshot_to_device(snapshot: HardwareSnapshot, device_index: int | None
 
 def _signal_process_group(process_group_id: int, signal_number: int) -> bool:
     """Signal the group and report whether it still belongs to this process."""
+    assert sys.platform != "win32", "Windows stops the tree in _stop_windows_process_group"
     try:
         os.killpg(process_group_id, signal_number)
     except (ProcessLookupError, PermissionError):
@@ -285,6 +290,7 @@ def _leader_exited(process: subprocess.Popen[bytes]) -> bool:
     """
     if process.returncode is not None:
         return True
+    assert sys.platform != "win32", "only the POSIX process-group stop peeks at the leader"
     if sys.platform == "darwin":
         return False
     try:
@@ -314,12 +320,41 @@ def _wait_for_process_group_exit(process: subprocess.Popen[bytes], process_group
         time.sleep(PROCESS_STOP_POLL_SECONDS)
 
 
+def _stop_windows_process_group(process: subprocess.Popen[bytes], break_event: int) -> None:
+    """Ask the owned Windows process group to exit, then end whatever is left of its tree.
+
+    The break event reaches every process in the group that shares this console. It
+    fails when this process has no console, and taskkill then does all the work.
+    """
+    if process.poll() is None:
+        with contextlib.suppress(OSError):
+            process.send_signal(break_event)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    if process.poll() is None:
+        subprocess.run(
+            (*WINDOWS_TREE_KILL_COMMAND, str(process.pid)),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=PROCESS_STOP_TIMEOUT_SECONDS,
+            check=False,
+        )
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("managed deployment process group did not stop") from error
+
+
 def _stop_process_group(process: subprocess.Popen[bytes], process_group_id: int) -> None:
     """Stop the owned group and reap the leader only after the last signal it may need.
 
     The unreaped leader holds the group identifier, so no signal here can reach a
     recycled group.
     """
+    if sys.platform == "win32":
+        _stop_windows_process_group(process, signal.CTRL_BREAK_EVENT)
+        return
     if _signal_process_group(process_group_id, signal.SIGTERM):
         deadline = time.monotonic() + PROCESS_STOP_TIMEOUT_SECONDS
         if not _wait_for_process_group_exit(process, process_group_id, deadline):
@@ -693,8 +728,7 @@ def start_managed_deployment(plan: DeploymentPlan, log_path: Path) -> ManagedDep
     validate_new_file_paths((log_path,))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     validate_new_file_paths((log_path,))
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
-    descriptor = os.open(log_path, flags, PRIVATE_FILE_PERMISSIONS)
+    descriptor = os.open(log_path, NEW_FILE_OPEN_FLAGS, PRIVATE_FILE_PERMISSIONS)
     log_stream = os.fdopen(descriptor, "wb")
     environment = {**os.environ, **dict(plan.device_environment)}
     try:
@@ -704,11 +738,21 @@ def start_managed_deployment(plan: DeploymentPlan, log_path: Path) -> ManagedDep
             stdout=log_stream,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
             env=environment,
         )
     except OSError:
         _discard_unwritten_log(log_stream, log_path)
         raise
+    if sys.platform == "win32":
+        # CREATE_NEW_PROCESS_GROUP makes the child the leader of a group named by its pid.
+        return ManagedDeployment(
+            plan=plan,
+            process=process,
+            process_group_id=process.pid,
+            log_stream=log_stream,
+            log_path=log_path,
+        )
     try:
         process_group_id = os.getpgid(process.pid)
     except ProcessLookupError as exception:

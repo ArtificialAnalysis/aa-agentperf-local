@@ -47,7 +47,7 @@ def required_json_field_names(record: type) -> frozenset[str]:
 def json_value(value: object) -> JsonValue:
     """Encode one field value as JSON data.
 
-    A string enum becomes its value, a path its text, a nested record its own
+    A string enum becomes its value, a path its "/"-separated text, a nested record its own
     object, and a sequence a list of the same. Everything else is already a
     JSON value and passes through.
     """
@@ -57,7 +57,8 @@ def json_value(value: object) -> JsonValue:
             raise TypeError(f"enum {type(value).__name__} does not hold a JSON scalar")
         return member
     if isinstance(value, Path):
-        return str(value)
+        # "/" keeps records identical across platforms, and Windows accepts it as a separator.
+        return value.as_posix()
     if isinstance(value, JsonRecord) and is_dataclass(value):
         return value.to_json()
     if isinstance(value, tuple | list | frozenset | set):

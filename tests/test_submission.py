@@ -49,6 +49,7 @@ from agentperf_local.submission.evidence import (
 from agentperf_local.submission.private_audit import PRIVATE_AUDIT_FILENAME, PrivateAudit
 from agentperf_local.workload.recording import convert_one_recording_to_dir
 from agentperf_local.workload.schema import load_manifest, load_trace
+from tests.file_modes import lacks_mode_bits
 
 RECORDING = Path(__file__).parent / "fixtures" / "recording" / "recordings" / "demo.json"
 PUBLIC_SUBMISSION_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "public-submission-v2.schema.json"
@@ -410,7 +411,7 @@ def test_submission_bundle_binds_exact_four_file_bytes(tmp_path: Path) -> None:
     assert audit_record["file_digest"] == f"sha256:{hashlib.sha256(audit_bytes).hexdigest()}"
     assert audit_record["privacy_profile"] == "aa-private-audit-v1"
     assert written.manifest_digest == f"sha256:{hashlib.sha256(manifest_bytes).hexdigest()}"
-    assert all(path.stat().st_mode & 0o133 == 0 for path in output_dir.iterdir())
+    assert all(lacks_mode_bits(path, 0o133) for path in output_dir.iterdir())
     with pytest.raises(FileExistsError):
         write_submission_bundle(output_dir, bundle)
     assert (output_dir / AGGREGATE_FILENAME).read_bytes() == aggregate_bytes

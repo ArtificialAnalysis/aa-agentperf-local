@@ -2,6 +2,7 @@
 
 import os
 import platform
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -120,6 +121,7 @@ def _nvidia_probe(stdout: bytes, addressing: bytes | None = None) -> FakeSystemP
 
 # A GB10 reports no framebuffer at all and names its coherent addressing mode instead.
 GB10_ROW = b"NVIDIA GB10, [N/A], 580.126.09\n"
+POSIX_MEMORY_PROBE = pytest.mark.skipif(sys.platform == "win32", reason="Windows reads memory without os.sysconf")
 DISCRETE_ROW = b"NVIDIA RTX PRO 6000 Blackwell, 97887, 590.42\n"
 COHERENT_ADDRESSING = b"    Product Name : NVIDIA GB10\n    Addressing Mode : ATS\n"
 DISCRETE_ADDRESSING = b"    Product Name : NVIDIA RTX PRO 6000\n    Addressing Mode : None\n"
@@ -513,12 +515,14 @@ def test_local_probe_reads_the_linux_cpu_model_without_its_frequency(
     assert LocalSystemProbe().cpu_model() == "Intel(R) Core(TM) i7-9700K CPU"
 
 
+@POSIX_MEMORY_PROBE
 def test_local_probe_handles_platform_without_sysconf(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delattr(os, "sysconf")
 
     assert LocalSystemProbe().total_memory_bytes() is None
 
 
+@POSIX_MEMORY_PROBE
 def test_local_probe_ignores_the_posix_sysconf_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(os, "sysconf", lambda name: -1)
 

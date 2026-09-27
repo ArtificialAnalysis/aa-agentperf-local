@@ -6,12 +6,14 @@ reports a warning code, never a guess.
 
 from __future__ import annotations
 
+import ctypes
 import math
 import os
 import platform
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -129,6 +131,55 @@ def _linux_cpu_model() -> str | None:
     return None if raw is None else _public_cpu_model(raw)
 
 
+WINDOWS_CPU_REGISTRY_KEY = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+
+
+WINDOWS_CPU_MODEL_VALUE = "ProcessorNameString"
+
+
+def _windows_cpu_model() -> str | None:
+    """Read the CPU model from the registry; platform.processor() gives only a family code on Windows."""
+    if sys.platform != "win32":
+        return None
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, WINDOWS_CPU_REGISTRY_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, WINDOWS_CPU_MODEL_VALUE)
+    except OSError:
+        return None
+    return _public_cpu_model(value) if isinstance(value, str) else None
+
+
+class _WindowsMemoryStatus(ctypes.Structure):
+    """Mirror MEMORYSTATUSEX, the only argument GlobalMemoryStatusEx takes."""
+
+    _fields_ = [
+        ("dwLength", ctypes.c_uint32),
+        ("dwMemoryLoad", ctypes.c_uint32),
+        ("ullTotalPhys", ctypes.c_uint64),
+        ("ullAvailPhys", ctypes.c_uint64),
+        ("ullTotalPageFile", ctypes.c_uint64),
+        ("ullAvailPageFile", ctypes.c_uint64),
+        ("ullTotalVirtual", ctypes.c_uint64),
+        ("ullAvailVirtual", ctypes.c_uint64),
+        ("ullAvailExtendedVirtual", ctypes.c_uint64),
+    ]
+
+
+def _windows_total_memory_bytes() -> int | None:
+    """Read installed memory from GlobalMemoryStatusEx, since Windows has no os.sysconf."""
+    if sys.platform != "win32":
+        return None
+    status = _WindowsMemoryStatus()
+    # The call reads dwLength to learn which structure version the caller passed.
+    status.dwLength = ctypes.sizeof(_WindowsMemoryStatus)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None
+    total = status.ullTotalPhys
+    return total if isinstance(total, int) and total > 0 else None
+
+
 def _linux_cpu_base_frequency_mhz() -> int | None:
     """Read the CPU base frequency from sysfs, or from the model name when sysfs has none."""
     try:
@@ -216,6 +267,9 @@ class LocalSystemProbe:
             except OSError:
                 return platform.release()
             return release.get("VERSION_ID") or platform.release()
+        if system_name == "Windows":
+            # release() is only "10" or "11"; version() carries the build, as "10.0.26100".
+            return platform.version()
         return platform.release()
 
     def kernel_version(self) -> str:
@@ -232,6 +286,10 @@ class LocalSystemProbe:
             model = _linux_cpu_model()
             if model is not None:
                 return model
+        if platform.system() == "Windows":
+            model = _windows_cpu_model()
+            if model is not None:
+                return model
         return platform.processor() or platform.machine()
 
     def logical_cpu_count(self) -> int | None:
@@ -240,6 +298,8 @@ class LocalSystemProbe:
 
     def total_memory_bytes(self) -> int | None:
         """Return installed memory in bytes."""
+        if sys.platform == "win32":
+            return _windows_total_memory_bytes()
         try:
             page_size = os.sysconf("SC_PAGE_SIZE")
             physical_pages = os.sysconf("SC_PHYS_PAGES")

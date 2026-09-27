@@ -696,7 +696,8 @@ def _parse_recipe(encoded: bytes, name: str) -> JsonObject:
 def _subfolders(folder: Path, skip: str | None = None) -> tuple[Path, ...]:
     """Return the named subfolders of one recipe folder level, in name order, ignoring one named file."""
     folders: list[Path] = []
-    for path in sorted(folder.iterdir()):
+    # Sort on the name: WindowsPath ignores case when it sorts, and the digest needs byte order.
+    for path in sorted(folder.iterdir(), key=lambda entry: entry.name):
         if path.name == skip:
             continue
         if path.is_symlink() or not path.is_dir():
@@ -713,7 +714,7 @@ def _recipe_paths(root: Path) -> tuple[Path, ...]:
     paths: list[Path] = []
     for model_folder in _subfolders(root, skip=RECIPES_README):
         for hardware_folder in _subfolders(model_folder):
-            for path in sorted(hardware_folder.iterdir()):
+            for path in sorted(hardware_folder.iterdir(), key=lambda entry: entry.name):
                 if path.suffix != RECIPE_SUFFIX:
                     raise ValueError(f"recipe folder holds {path.name}; recipes must be {RECIPE_SUFFIX} files")
                 paths.append(path)

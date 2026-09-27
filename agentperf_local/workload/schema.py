@@ -190,7 +190,7 @@ class TraceSource:
         """Return trace provenance as JSON data."""
         return {
             "format": self.format,
-            "recording": str(self.recording),
+            "recording": self.recording.as_posix(),
             "family": self.family,
             "adapter": self.adapter,
             "model_call_index": self.model_call_index,
@@ -379,8 +379,8 @@ class ManifestTask:
         """Return the manifest task as JSON data."""
         data: JsonObject = {
             "task_id": self.task_id,
-            "trace": str(self.trace),
-            "source_recording": str(self.source_recording),
+            "trace": self.trace.as_posix(),
+            "source_recording": self.source_recording.as_posix(),
             "model_calls": self.model_calls,
             "tool_calls": self.tool_calls,
             "total_recorded_tool_delay_ms": self.total_recorded_tool_delay_ms,

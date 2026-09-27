@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,17 @@ PRIVATE_FILE_PERMISSIONS = 0o600
 PUBLIC_FILE_PERMISSIONS = 0o644
 PUBLIC_DIRECTORY_PERMISSIONS = 0o755
 COMMIT_MARKER_TEMP_NONCE_BYTES = 8
+
+# Every descriptor this package opens for writing stays private to this process and never
+# follows a final-component link. Windows spells both differently: O_NOINHERIT keeps the
+# descriptor from child processes, and O_BINARY stops the C runtime from rewriting "\n" as
+# "\r\n", which would change every file digest. Windows has no O_NOFOLLOW; O_EXCL still
+# refuses an existing link there, and callers that append check with lstat first.
+if sys.platform == "win32":
+    PRIVATE_OPEN_FLAGS = os.O_BINARY | os.O_NOINHERIT
+else:
+    PRIVATE_OPEN_FLAGS = os.O_CLOEXEC | os.O_NOFOLLOW
+NEW_FILE_OPEN_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | PRIVATE_OPEN_FLAGS
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,8 +83,7 @@ def write_all(descriptor: int, data: bytes) -> None:
 
 
 def _write_new_file(file: NewFile, permissions: int) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
-    descriptor = os.open(file.path, flags, permissions)
+    descriptor = os.open(file.path, NEW_FILE_OPEN_FLAGS, permissions)
     try:
         write_all(descriptor, file.data)
         os.fsync(descriptor)
@@ -89,12 +100,13 @@ def _write_commit_marker(file: NewFile, permissions: int) -> None:
     """Publish a fully written commit marker with one atomic rename."""
     # A marker written in place can survive a crash half-written, which both lies and blocks the directory.
     temp_path = _commit_marker_temp_path(file.path)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
-    descriptor = os.open(temp_path, flags, PRIVATE_FILE_PERMISSIONS)
+    descriptor = os.open(temp_path, NEW_FILE_OPEN_FLAGS, PRIVATE_FILE_PERMISSIONS)
     try:
         try:
             write_all(descriptor, file.data)
-            os.fchmod(descriptor, permissions)
+            # Windows keeps only a read-only bit, which no permission used here sets.
+            if sys.platform != "win32":
+                os.fchmod(descriptor, permissions)
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
@@ -105,7 +117,13 @@ def _write_commit_marker(file: NewFile, permissions: int) -> None:
 
 
 def fsync_directory(path: Path) -> None:
-    """Sync a directory so its entries survive a crash."""
+    """Sync a directory so its entries survive a crash.
+
+    Windows cannot open a directory as a descriptor. NTFS journals directory entries
+    itself, so there is nothing to sync there.
+    """
+    if sys.platform == "win32":
+        return
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
     try:
         os.fsync(descriptor)

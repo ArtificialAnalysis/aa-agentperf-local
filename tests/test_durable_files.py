@@ -13,6 +13,7 @@ from agentperf_local.common.durable_files import (
     commit_new_file_set,
     validate_new_file_paths,
 )
+from tests.file_modes import has_mode
 
 DATA_PAYLOAD = b'{"kind": "turns"}\n'
 MARKER_PAYLOAD = b'{"kind": "run_summary"}\n'
@@ -50,8 +51,8 @@ def test_commit_marker_only_appears_as_one_complete_rename(
     assert renames == [(marker_file.path, MARKER_PAYLOAD)]
     assert _names(tmp_path) == ("summary.json", "turns.jsonl")
     assert marker_file.path.read_bytes() == MARKER_PAYLOAD
-    assert marker_file.path.stat().st_mode & 0o777 == permissions
-    assert data_file.path.stat().st_mode & 0o777 == permissions
+    assert has_mode(marker_file.path, permissions)
+    assert has_mode(data_file.path, permissions)
 
 
 def test_a_failed_marker_write_leaves_no_marker_and_no_staging_file(

@@ -15,7 +15,7 @@ import stat
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import httpx
 import orjson
@@ -24,6 +24,7 @@ from huggingface_hub.file_download import repo_folder_name
 
 from agentperf_local.common.durable_files import (
     PRIVATE_FILE_PERMISSIONS,
+    PRIVATE_OPEN_FLAGS,
     nearest_existing_ancestor,
 )
 from agentperf_local.common.identity import sha256_bytes
@@ -397,7 +398,7 @@ def _download_model_artifact(
         write=MODEL_DOWNLOAD_WRITE_TIMEOUT_SECONDS,
         pool=MODEL_DOWNLOAD_POOL_TIMEOUT_SECONDS,
     )
-    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | PRIVATE_OPEN_FLAGS
     descriptor = os.open(partial_path, flags, PRIVATE_FILE_PERMISSIONS)
     with os.fdopen(descriptor, "ab") as destination:
         with httpx.Client(follow_redirects=True, timeout=timeout) as client:
@@ -640,14 +641,15 @@ def _gguf_model_path(
     parts by the first part's file name and a content-addressed blob has no such name.
     Every part's snapshot entry must be the same file as its verified blob.
     """
-    split = SPLIT_GGUF_FIRST_PART.match(Path(model_artifact.filename).name)
+    # Catalog file names are repository paths, which use "/" on every platform.
+    split = SPLIT_GGUF_FIRST_PART.match(PurePosixPath(model_artifact.filename).name)
     if split is None:
         return model_artifact.path
     snapshot_root = _hf_snapshot_root(cache_root, candidate.hf_repository, candidate.hf_revision)
-    folder = Path(model_artifact.filename).parent
+    folder = PurePosixPath(model_artifact.filename).parent
     part_count = int(split.group("count"))
     for index in range(1, part_count + 1):
-        filename = str(folder / f"{split.group('prefix')}-{index:05d}-of-{split.group('count')}.gguf")
+        filename = (folder / f"{split.group('prefix')}-{index:05d}-of-{split.group('count')}.gguf").as_posix()
         part = next((artifact for artifact in verified if artifact.filename == filename), None)
         if part is None:
             raise ValueError(f"split GGUF recipe does not pin part {filename}")

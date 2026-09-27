@@ -27,6 +27,7 @@ uv sync --locked
 uv run ruff check .
 uv run ruff format --check .
 uv run ty check
+uv run ty check --python-platform win32
 uv run pytest
 cargo test --locked -p agentperf-local-rustcore --no-default-features
 uv sync --locked --extra rust
