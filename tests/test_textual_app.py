@@ -127,26 +127,36 @@ async def _settle_until(pilot: Pilot[TuiOutcome], condition: Callable[[], bool])
     assert condition()
 
 
-async def _check_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
-    """Press Continue and wait until its setup check has answered.
+async def _settle_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Wait until the setup check that Continue started has answered.
 
-    The check runs on a worker thread that Continue starts only once its press is handled,
+    The check runs on a worker thread that starts only once the Continue press is handled,
     so waiting for workers alone can return first. The answer resets the consent checkbox,
     so a test that ticks it earlier loses the tick.
     """
-    app.query_one("#config-continue", Button).press()
     await _settle_until(pilot, lambda: app.step is TuiStep.PREFLIGHT and app.pending_preflight is None)
     await app.workers.wait_for_complete()
     await pilot.pause()
 
 
-async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
-    """Tick consent, wait until Run is offered, press it, and wait until the run page shows.
+async def _check_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Press Continue and wait until its setup check has answered."""
+    app.query_one("#config-continue", Button).press()
+    await _settle_setup(app, pilot)
+
+
+async def _tick_consent(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Tick consent and wait until Run is offered.
 
     An attached run offers Run only after its server check answers on a worker thread.
     """
     app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
     await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+
+
+async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Tick consent, press Run once it is offered, and wait until the run page shows."""
+    await _tick_consent(app, pilot)
     app.query_one("#run-start", Button).press()
     await _settle_until(pilot, lambda: app.step is not TuiStep.PREFLIGHT)
 
@@ -189,8 +199,7 @@ async def test_bundled_replay_is_the_default_without_showing_its_package_path(tm
         assert "Results&#160;folder" in rendered
         assert "Advanced&#160;options" in rendered
 
-        app.query_one("#config-continue", Button).press()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.pending_preflight is None
         assert app.request is not None
@@ -219,7 +228,7 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
 
         app.query_one("#endpoint-model-input", Input).focus()
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
+        await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         assert app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox)
 
@@ -277,8 +286,7 @@ async def test_small_terminal_completes_mini_run_with_arrow_navigation(size: tup
         await pilot.press("down")
         assert app.focused is app.query_one("#base-url-input", Input)
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
         assert app.focused is consent
@@ -405,8 +413,7 @@ async def test_setup_actions_stay_visible_and_help_returns_to_the_edit(size: tup
         await pilot.press("f1", "f1")
         assert app.focused is output
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         run = app.query_one("#run-start", Button)
         assert run.region.height == 1
@@ -429,8 +436,7 @@ async def test_existing_server_shortcut_and_detail_views_keep_the_run_flow_clear
         output = app.query_one("#output-input", Input)
         assert output.region.y == app.query_one("#output-row Label").region.y
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         await _confirm_and_run(app, pilot)
         assert not app.submit_requested
         await _settle_until(pilot, lambda: app.progress_state.progress is not None)
@@ -511,8 +517,7 @@ async def test_a_second_run_starts_with_the_default_run_view(tmp_path: Path) -> 
         await pilot.press("escape")
         await pilot.pause()
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         await _confirm_and_run(app, pilot)
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         await pilot.pause()
@@ -531,8 +536,7 @@ async def test_help_during_the_server_check_hands_focus_to_run_on_return(tmp_pat
     async with app.run_test(size=(96, 30)) as pilot:
         await pilot.click("#welcome-existing")
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         await pilot.press("space")
         await pilot.pause()
         run = app.query_one("#run-start", Button)
@@ -1203,7 +1207,7 @@ async def _advance_to_preflight(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]
     await pilot.pause()
     app.query_one("#config-continue", Button).focus()
     await pilot.press("enter")
-    await app.workers.wait_for_complete()
+    await _settle_setup(app, pilot)
 
 
 async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
@@ -1213,9 +1217,8 @@ async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
     await pilot.press("enter")
     app.query_one("#config-continue", Button).focus()
     await pilot.press("enter")
-    await app.workers.wait_for_complete()
-    app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-    await pilot.pause()
+    await _settle_setup(app, pilot)
+    await _tick_consent(app, pilot)
     app.query_one("#run-start", Button).focus()
     await pilot.press("enter")
 
@@ -1233,7 +1236,7 @@ async def _start_run_by_click(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) 
     await pilot.click("#model-continue")
     await pilot.pause()
     await pilot.press("enter")
-    await app.workers.wait_for_complete()
+    await _settle_setup(app, pilot)
     await _confirm_and_run(app, pilot)
 
 
@@ -1241,8 +1244,7 @@ async def _start_existing_server_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOut
     """Take the welcome shortcut for an existing server through setup to a started replay."""
     await pilot.click("#welcome-existing")
     await pilot.press("enter")
-    await app.workers.wait_for_complete()
-    await pilot.pause()
+    await _settle_setup(app, pilot)
     await _confirm_and_run(app, pilot)
 
 
@@ -1502,8 +1504,7 @@ async def test_managed_candidate_flags_incompatible_hardware_before_preflight(tm
             app.query_one("#managed-deployment-status", Static).content
         )
         assert "does not have enough memory" in str(app.query_one("#managed-deployment-status", Static).content)
-        app.query_one("#config-continue", Button).press()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -1546,8 +1547,7 @@ async def test_cancelling_a_managed_run_waits_for_owned_server_cleanup(
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
         await _check_setup(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
+        await _tick_consent(app, pilot)
         app.query_one("#run-start", Button).press()
         async with asyncio.timeout(WORKER_EVENT_TIMEOUT_SECONDS):
             await started_event.wait()
@@ -1628,13 +1628,10 @@ async def test_managed_failure_names_its_safe_cause_instead_of_attached_advice(
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
         await _check_setup(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
+        await _tick_consent(app, pilot)
         app.query_one("#run-start", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
-        assert app.step is TuiStep.RESULT
         assert app.outcome is TuiOutcome.FAILED
         assert "The run stopped early." in str(app.query_one("#result-title", Static).content)
         status = str(app.query_one("#result-status", Static).content)
@@ -1732,8 +1729,7 @@ async def test_rejected_setup_names_its_cause_before_any_probe(
         await pilot.pause()
         app.query_one("#base-url-input", Input).value = base_url
         app.query_one("#endpoint-model-input", Input).value = endpoint_model
-        app.query_one("#config-continue", Button).press()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -1785,8 +1781,7 @@ async def test_blocked_preflight_names_its_cause(
         await pilot.click("#model-continue")
         await pilot.pause()
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
 
         assert app.request is None
         assert app.query_one("#run-start", Button).disabled
@@ -1931,8 +1926,7 @@ async def test_preflight_back_revokes_the_ready_request_and_consent(tmp_path: Pa
 
     async with app.run_test(size=(96, 30)) as pilot:
         await _advance_to_preflight(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
+        await _tick_consent(app, pilot)
         assert app.request is not None
         assert not app.query_one("#run-start", Button).disabled
 
@@ -1979,7 +1973,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         await pilot.press("down")
         assert app.focused is app.query_one("#config-continue", Button)
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
+        await _settle_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         endpoint_consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
@@ -2100,8 +2094,7 @@ async def test_run_timeline_matches_the_latest_closed_boundary(tmp_path: Path) -
     async with app.run_test(size=(96, 30)) as pilot:
         await _advance_to_preflight(app, pilot)
         await pilot.pause()
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
+        await _tick_consent(app, pilot)
         run_start = app.query_one("#run-start", Button)
         assert not run_start.disabled
         run_start.focus()
@@ -2798,8 +2791,7 @@ async def test_out_of_range_managed_port_names_the_launch_settings(tmp_path: Pat
         await pilot.click("#welcome-start")
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
-        app.query_one("#config-continue", Button).press()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -2888,8 +2880,7 @@ async def test_attached_preflight_reuses_the_launch_hardware_snapshot(tmp_path: 
         await pilot.click("#model-continue")
         await pilot.pause()
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
 
         status = str(app.query_one("#preflight-status", Static).content)
         assert "This computer: Apple M5 Pro · 24 GiB · Python client" in status
@@ -3474,8 +3465,7 @@ async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> No
         await pilot.pause()
 
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         confirm_bindings = app.screen.active_bindings
         assert confirm_bindings["space"].binding.description == "Agree"
@@ -3536,8 +3526,7 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
         await _check_setup(app, pilot)
-        app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await pilot.pause()
+        await _tick_consent(app, pilot)
         app.query_one("#run-start", Button).press()
         await _settle_until(pilot, lambda: str(app.query_one("#run-hero", Static).content) == RUN_HERO_RUNNING)
 
@@ -3552,7 +3541,7 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         gauge = app.query_one("#run-context", ContextGauge)
         assert gauge.plain_text == "Next request · about 48,120 tokens ▕███████████████░░░░░▏ 73% of 65,536"
         await _settle_until(pilot, lambda: app.focused is app.query_one("#activity-lines", RichLog))
-        assert "Server&#160;log" in app.export_screenshot()
+        await _settle_until(pilot, lambda: "Server&#160;log" in app.export_screenshot())
 
         # The owned server's own log is one key away and swaps back the same way.
         switcher = app.query_one("#run-left-switcher", ContentSwitcher)
@@ -3669,9 +3658,7 @@ async def test_consent_checks_the_server_before_run_is_offered(
         await pilot.click("#model-continue")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
         await pilot.press("enter")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        assert app.step is TuiStep.PREFLIGHT
+        await _settle_until(pilot, lambda: app.step is TuiStep.PREFLIGHT and app.pending_preflight is None)
         run = app.query_one("#run-start", Button)
         server_check = app.query_one("#preflight-server-check", SpinnerLine)
         assert run.disabled
@@ -3690,9 +3677,7 @@ async def test_consent_checks_the_server_before_run_is_offered(
             assert app.focused is app.query_one("#run-start", Button)
 
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = False
-        await pilot.pause()
-        assert run.disabled
-        assert not server_check.display
+        await _settle_until(pilot, lambda: run.disabled and not server_check.display)
 
 
 def _bound_results_writer(tmp_path: Path, *, failed_qualification: bool = False) -> Callable[[Path], None]:
@@ -3724,12 +3709,12 @@ async def _start_managed_run_with_submit(
     await pilot.press("down", "down", "enter")
     await pilot.pause()
     await _check_setup(app, pilot)
-    app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
+    await _tick_consent(app, pilot)
     if submit:
         app.query_one("#submit-checkbox", Checkbox).value = True
     await pilot.pause()
     app.query_one("#run-start", Button).press()
-    await pilot.pause()
+    await _settle_until(pilot, lambda: app.step is not TuiStep.PREFLIGHT)
     await app.workers.wait_for_complete()
     await pilot.pause()
     if submit:
