@@ -22,18 +22,25 @@ jobs:
       - name: Tag matches every version string
         run: uv run --no-project python scripts/check_release_version.py "$GITHUB_REF_NAME"
       - name: Build agentperf-local wheel and sdist
-        run: uv build --no-sources --out-dir dist
+        run: uv build --no-sources --out-dir dist/agentperf-local
       # The Rust extension ships as an sdist only; `agentperf-local[rust]` compiles it on install.
       - name: Build agentperf-local-rustcore sdist
-        run: uv build rustcore --sdist --no-sources --out-dir dist
+        run: uv build rustcore --sdist --no-sources --out-dir dist/rustcore
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
+          name: dist-agentperf-local
+          path: dist/agentperf-local/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-rustcore
+          path: dist/rustcore/
           if-no-files-found: error
 
+  # PyPI allows one pending trusted publisher per (repository, workflow, environment),
+  # so each project publishes from its own environment.
   publish:
-    name: publish to PyPI
+    name: publish agentperf-local to PyPI
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -44,21 +51,38 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: dist-agentperf-local
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-rustcore:
+    name: publish agentperf-local-rustcore to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-rustcore
+      url: https://pypi.org/p/agentperf-local-rustcore
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-rustcore
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
     name: GitHub release
-    needs: publish
+    needs: [publish, publish-rustcore]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          pattern: dist-*
           path: dist/
+          merge-multiple: true
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
