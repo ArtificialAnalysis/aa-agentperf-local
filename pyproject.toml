@@ -11,6 +11,7 @@ dependencies = [
     "httpx>=0.27.0",
     "huggingface-hub>=1.29.0",
     "orjson>=3.10.0",
+    "pyyaml>=6.0.0",
     "textual>=8.2.8,<9.0.0",
     "tiktoken>=0.7.0",
 ]
@@ -28,16 +29,24 @@ Issues = "https://github.com/ArtificialAnalysis/aa-agentperf-local/issues"
 Source = "https://github.com/ArtificialAnalysis/aa-agentperf-local"
 
 [build-system]
-requires = ["uv_build>=0.12.0,<0.13.0"]
-build-backend = "uv_build"
+requires = ["hatchling>=1.27.0,<2.0.0"]
+build-backend = "hatchling.build"
 
 [tool.uv.sources]
 agentperf-local-rustcore = { path = "rustcore" }
 
-[tool.uv.build-backend]
-module-name = "agentperf_local"
-module-root = ""
-source-include = [
+[tool.hatch.build.targets.wheel]
+packages = ["agentperf_local"]
+
+# The recipes live at the repository root so they are easy to find and add to.
+# The wheel carries a copy inside the package.
+[tool.hatch.build.targets.wheel.force-include]
+"recipes" = "agentperf_local/data/recipes"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "agentperf_local/**",
+    "recipes/**",
     "docs/**",
     "docker/**",
     "scripts/**",
@@ -47,6 +56,8 @@ source-include = [
     "Cargo.toml",
     "Makefile",
     "uv.lock",
+    "README.md",
+    "LICENSE",
 ]
 
 [tool.ruff]
@@ -67,4 +78,5 @@ dev = [
     "pytest-asyncio>=1.3.0,<2.0.0",
     "ruff>=0.14.0,<0.16.0",
     "ty>=0.0.75,<0.1.0",
+    "types-pyyaml>=6.0.12",
 ]

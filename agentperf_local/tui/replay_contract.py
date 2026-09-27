@@ -20,7 +20,7 @@ from agentperf_local.client.endpoint import normalize_base_url, url_names_loopba
 from agentperf_local.client.rust_client import validate_rustcore_available
 from agentperf_local.common.durable_files import nearest_existing_ancestor, validate_new_file_paths
 from agentperf_local.common.identity import validate_digest
-from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate, ModelDeployment
+from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate
 from agentperf_local.deployment.context_policy import (
     ContextBelowReplayFloor,
     require_replay_context_floor,
@@ -215,7 +215,7 @@ class ManagedDeploymentChoice:
     def __post_init__(self) -> None:
         """Reject choices that are not present in the model recipe."""
         validate_digest(self.catalog_digest, "catalog_digest")
-        deployment = self._deployment()
+        deployment = self.candidate.deployment
         if self.framework not in deployment.frameworks:
             raise ValueError("managed framework is not available for the selected model")
         resolve_context_tokens(deployment, self.context_tokens)
@@ -226,16 +226,10 @@ class ManagedDeploymentChoice:
         if self.startup_timeout_seconds <= 0:
             raise ManagedLaunchSettingsProblem("the --startup-timeout-seconds value must be positive")
 
-    def _deployment(self) -> ModelDeployment:
-        deployment = self.candidate.deployment
-        if deployment is None:
-            raise ValueError("managed framework is not available for the selected model")
-        return deployment
-
     @property
     def resolved_context_tokens(self) -> int:
         """Return the context this choice launches at, defaulting to the full benchmark context."""
-        return resolve_context_tokens(self._deployment(), self.context_tokens)
+        return resolve_context_tokens(self.candidate.deployment, self.context_tokens)
 
     @property
     def reduced_context(self) -> bool:
@@ -282,9 +276,6 @@ class ReplayRequest:
             )
         if self.managed_deployment is not None:
             candidate = self.managed_deployment.candidate
-            deployment = candidate.deployment
-            if deployment is None:
-                raise ValueError("managed deployment choice requires a model deployment recipe")
             if self.api_key_env is not None:
                 raise ValueError("managed localhost deployments do not accept an API key")
             if self.catalog_profile_id != candidate.profile_id or self.candidate_revision != candidate.hf_revision:
@@ -292,8 +283,8 @@ class ReplayRequest:
             expected_base_url = f"http://127.0.0.1:{self.managed_deployment.port}/v1"
             if self.normalized_base_url != expected_base_url:
                 raise ValueError("managed deployment URL must match its owned localhost port")
-            if self.endpoint_model != deployment.model_alias:
-                raise ValueError("managed deployment model must use its stable catalog alias before launch")
+            if self.endpoint_model != candidate.profile_id:
+                raise ValueError("managed deployment model must use its recipe profile_id before launch")
 
     @property
     def endpoint_is_loopback(self) -> bool:

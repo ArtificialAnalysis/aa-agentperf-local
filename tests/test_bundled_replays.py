@@ -8,7 +8,7 @@ import pytest
 
 from agentperf_local.cli.options import DEFAULT_MANAGED_PROFILE_ID
 from agentperf_local.client.request import DEFAULT_MAX_OUTPUT_TOKENS
-from agentperf_local.deployment.catalog import BUNDLED_MODEL_CATALOG_PATH, load_model_catalog
+from agentperf_local.deployment.catalog import BUNDLED_RECIPES_ROOT, load_model_catalog
 from agentperf_local.deployment.context_policy import REDUCED_CONTEXT_LADDER, reduced_context_rungs
 from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
@@ -145,10 +145,9 @@ def test_default_replay_declares_the_smallest_rung_that_holds_its_largest_turn()
 
     deployment = next(
         model.deployment
-        for model in load_model_catalog(BUNDLED_MODEL_CATALOG_PATH).models
+        for model in load_model_catalog(BUNDLED_RECIPES_ROOT).models
         if model.profile_id == DEFAULT_MANAGED_PROFILE_ID
     )
-    assert deployment is not None
     assert manifest.required_context_tokens == BENCHMARK_CONTEXT_TOKENS
     assert reduced_context_rungs(deployment, manifest.required_context_tokens) == ()
 

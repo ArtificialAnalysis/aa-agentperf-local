@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -17,7 +18,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Checkbox, ContentSwitcher, Digits, Input, OptionList, ProgressBar, RichLog, Static
 
 from agentperf_local.deployment.catalog import (
-    BUNDLED_MODEL_CATALOG_PATH,
+    BUNDLED_RECIPES_ROOT,
     ModelCandidate,
     load_model_catalog,
 )
@@ -111,7 +112,7 @@ from agentperf_local.workload.schema import parse_json_object
 from tests.localhost_sse import SSE_OK_RESPONSE, LocalSseServer
 from tests.replay_workload import write_replay_workload
 
-CATALOG_PATH = BUNDLED_MODEL_CATALOG_PATH
+CATALOG_PATH = BUNDLED_RECIPES_ROOT
 WORKER_EVENT_TIMEOUT_SECONDS = 2.0
 UI_SETTLE_TIMEOUT_SECONDS = 10.0
 # Naming a served model opens the model page on the custom-endpoint entry.
@@ -1167,7 +1168,7 @@ def _managed_availability(*, installed: bool = True, memory_fit: bool | None = T
 
 def _managed_artifact_gib(app: AgentPerfLocalApp) -> float:
     """Read the canonical artifact size the managed consent line must disclose."""
-    deployment = next(model.deployment for model in app.catalog.models if model.deployment is not None)
+    deployment = app.catalog.models[0].deployment
     return deployment.artifact_size_bytes / 1024**3
 
 
@@ -1288,10 +1289,22 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         await _settle_until(pilot, lambda: app.query_one("#result-throughput", Digits).value == "1,234")
 
 
+def _external_recipes(tmp_path: Path, old: bytes, new: bytes) -> Path:
+    """Copy the bundled recipes and edit the Gemma 4 12B recipe."""
+    root = tmp_path / "external-recipes"
+    shutil.copytree(CATALOG_PATH, root)
+    recipe = root / "gemma4-12b" / "any" / "gemma4-12b-it-q4-0.yaml"
+    encoded = recipe.read_bytes()
+    assert old in encoded
+    recipe.write_bytes(encoded.replace(old, new))
+    return root
+
+
 async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path: Path) -> None:
-    external_path = tmp_path / "external-catalog.json"
-    external_path.write_bytes(
-        CATALOG_PATH.read_bytes().replace(b"Google Gemma 4 12B IT QAT", b"[red]User catalog spoof[/red]")
+    external_path = _external_recipes(
+        tmp_path,
+        b"display_name: Google Gemma 4 12B IT QAT Q4_0 GGUF",
+        b"display_name: '[red]User catalog spoof[/red] Q4_0 GGUF'",
     )
     catalog = load_model_catalog(external_path)
     app = AgentPerfLocalApp(catalog, controller=FakeReplayController())
@@ -1306,49 +1319,6 @@ async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path:
         assert "Hugging Face" in detail
         assert "ARTIFICIAL ANALYSIS CATALOG" not in detail
         assert "QUALIFIED" not in detail
-
-
-async def test_external_catalog_with_a_drifted_memory_pin_degrades_instead_of_crashing(tmp_path: Path) -> None:
-    # An external catalog may pin a minimum the KV formula does not reproduce; every
-    # render path must degrade to the pinned figure rather than crash the app.
-    external_path = tmp_path / "external-catalog.json"
-    external_path.write_bytes(
-        CATALOG_PATH.read_bytes().replace(
-            b'"minimum_memory_bytes": 10020944000', b'"minimum_memory_bytes": 11020944000'
-        )
-    )
-    catalog = load_model_catalog(external_path)
-    app = AgentPerfLocalApp(
-        catalog,
-        controller=FakeReplayController(),
-        managed_controller=LocalManagedReplayController(
-            catalog_as_of=catalog.as_of,
-            hardware=_single_device_hardware(),
-            offer_collector=_installed_llama_offer,
-        ),
-        defaults=TuiDefaults(
-            output_dir=tmp_path / "results",
-            client_backend="python",
-            endpoint_model=ATTACHED_ENDPOINT_MODEL,
-        ),
-    )
-
-    async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.click("#welcome-start")
-        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
-
-        detail = str(app.query_one("#model-detail", Static).content)
-        # The detail card survives, states the pinned figure, and admits the estimate gap.
-        assert "needs 10.3 GiB" in detail
-        assert "Memory estimate unavailable at reduced contexts." in detail
-
-        await pilot.press("enter")
-        await pilot.pause()
-        context = app.query_one("#managed-context-select", ManagedContextSelect)
-        # Without a per-context estimate no reduced rung is offered, only the pinned full context.
-        assert context.value == "65536"
-        assert len(context._options) == 1
-        assert "full benchmark" in str(context.query_one("#label", Static).content)
 
 
 async def test_gemma_profile_exposes_its_canonical_managed_artifact(tmp_path: Path) -> None:
@@ -1366,7 +1336,7 @@ async def test_gemma_profile_exposes_its_canonical_managed_artifact(tmp_path: Pa
         assert "Runs with" in detail
         assert "llama-cpp" in detail
         assert "needs 9.4 GiB" in detail
-        assert "Q4_0 GGUF · 6.5 GiB · SHA-256 checked" in detail
+        assert "GGUF · 6.5 GiB · SHA-256 checked" in detail
 
 
 async def test_managed_candidate_selects_a_compatible_framework_and_saves_evidence(
@@ -2955,7 +2925,6 @@ def _installed_llama_offer(
 ) -> tuple[FrameworkOffer, ...]:
     """Offer an installed llama.cpp build sized against the single bound accelerator."""
     deployment = candidate.deployment
-    assert deployment is not None
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
     )
@@ -2982,7 +2951,6 @@ def _installed_sglang_offer(
 ) -> tuple[FrameworkOffer, ...]:
     """Offer an installed SGLang build for a weights recipe on the bound accelerator."""
     deployment = candidate.deployment
-    assert deployment is not None
     minimum_memory_bytes = derived_minimum_memory_bytes(
         deployment, deployment.context_tokens if context_tokens is None else context_tokens
     )
@@ -3732,7 +3700,8 @@ async def _start_managed_run_with_submit(
 ) -> None:
     await pilot.click("#welcome-start")
     app.query_one("#model-list", OptionList).focus()
-    await pilot.press("down", "down", "enter")
+    # The second recipe, gemma4-26b-a4b-q4-0, is a portable GGUF recipe the fake offer serves.
+    await pilot.press("down", "enter")
     await pilot.pause()
     app.query_one("#config-continue", Button).press()
     await app.workers.wait_for_complete()
@@ -3976,7 +3945,7 @@ async def test_weights_profile_is_selectable_and_launchable_from_the_model_scree
 
         detail = str(app.query_one("#model-detail", Static).content)
         assert "sglang" in detail
-        assert "NVFP4 weights" in detail
+        assert "weights · " in detail
 
         await pilot.press("enter")
         await pilot.pause()

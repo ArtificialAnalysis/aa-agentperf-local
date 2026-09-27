@@ -27,12 +27,11 @@ from huggingface_hub.file_download import repo_folder_name
 
 from agentperf_local.common.durable_files import PRIVATE_FILE_PERMISSIONS
 from agentperf_local.deployment.catalog import (
-    BUNDLED_MODEL_CATALOG_DIGEST,
-    BUNDLED_MODEL_CATALOG_PATH,
+    BUNDLED_RECIPES_DIGEST,
+    BUNDLED_RECIPES_ROOT,
     DeploymentArtifact,
     DeploymentFramework,
     DeploymentMemory,
-    DeviceEvidence,
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
@@ -91,11 +90,11 @@ FIXTURE_MEMORY = DeploymentMemory(
     constant_state_bytes=0,
     runtime_overhead_bytes=FIXTURE_RUNTIME_OVERHEAD_BYTES,
 )
-CATALOG_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 6_744_440_832 + FIXTURE_RUNTIME_OVERHEAD_BYTES
+FIXTURE_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 6_744_440_832 + FIXTURE_RUNTIME_OVERHEAD_BYTES
 # A card can report a few dozen MiB under its listed capacity; 48 MiB short stays inside the 64 MiB slack.
-MEMORY_WITHIN_SLACK_BYTES = CATALOG_MINIMUM_MEMORY_BYTES - 48 * 1024 * 1024
+MEMORY_WITHIN_SLACK_BYTES = FIXTURE_MINIMUM_MEMORY_BYTES - 48 * 1024 * 1024
 # A shortfall past the 64 MiB slack must fail the memory gate.
-MEMORY_BELOW_SLACK_BYTES = CATALOG_MINIMUM_MEMORY_BYTES - 128 * 1024 * 1024
+MEMORY_BELOW_SLACK_BYTES = FIXTURE_MINIMUM_MEMORY_BYTES - 128 * 1024 * 1024
 # The reduced-context minimum drops by the KV savings: 32768 tokens keep about 3.3 GiB
 # of KV instead of 6.28 GiB, so 9 GiB hardware fits between the two floors.
 REDUCED_MINIMUM_MEMORY_BYTES = len(MODEL_BYTES) + 3_523_215_360 + FIXTURE_RUNTIME_OVERHEAD_BYTES
@@ -109,63 +108,21 @@ def _candidate() -> ModelCandidate:
         context_tokens=PROFILE_CONTEXT_TOKENS,
         frameworks=("llama-cpp",),
         memory=FIXTURE_MEMORY,
-        minimum_memory_bytes=CATALOG_MINIMUM_MEMORY_BYTES,
         runtime_versions=(),
         moe_runner_backend=None,
-        model_alias="fixture-q4-0",
-        quantization="Q4_0",
-    )
-    evidence = (
-        DeviceEvidence(
-            device_id="nvidia-cuda",
-            architecture="cuda",
-            evidence_level="official-gguf-backend",
-            source_url="https://github.com/ggml-org/llama.cpp",
-            tested_input_tokens=None,
-            tested_output_tokens=None,
-            tested_concurrency=None,
-            aa_admission_state="unqualified",
-        ),
-        DeviceEvidence(
-            device_id="amd-rocm",
-            architecture="rocm",
-            evidence_level="official-gguf-backend",
-            source_url="https://github.com/ggml-org/llama.cpp",
-            tested_input_tokens=None,
-            tested_output_tokens=None,
-            tested_concurrency=None,
-            aa_admission_state="unqualified",
-        ),
-        DeviceEvidence(
-            device_id="apple-silicon",
-            architecture="metal",
-            evidence_level="official-gguf-backend",
-            source_url="https://github.com/ggml-org/llama.cpp",
-            tested_input_tokens=None,
-            tested_output_tokens=None,
-            tested_concurrency=None,
-            aa_admission_state="unqualified",
-        ),
     )
     return ModelCandidate(
         profile_id="fixture-q4-0",
+        as_of="2026-09-21",
         display_name="Fixture Q4_0",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
-        source_url="https://huggingface.co/example/model-gguf",
-        license_id="Apache-2.0",
-        native_context_tokens=262144,
-        pilot_context_tokens=PROFILE_CONTEXT_TOKENS,
-        runtime_family="llama-cpp",
+        devices=("nvidia-cuda", "amd-rocm", "apple-silicon"),
         tool_call_parser="gemma4",
         reasoning_parser="gemma4",
         thinking_policy="disabled",
         speculation_policy="disabled-target-only-baseline",
-        stored_checkpoint_kind="gguf-q4-0",
-        compute_path_policy="record-resolved-path",
-        artifact_manifest_status="complete-file-sha256-pinned",
         deployment=deployment,
-        device_evidence=evidence,
     )
 
 
@@ -207,7 +164,6 @@ def _blob_path(cache_root: Path) -> Path:
 
 
 def _snapshot_path(cache_root: Path, candidate: ModelCandidate) -> Path:
-    assert candidate.deployment is not None
     revision_dir = cache_root / HF_REPOSITORY_DIRECTORY / "snapshots" / candidate.hf_revision
     return revision_dir / candidate.deployment.artifacts[0].filename
 
@@ -383,7 +339,7 @@ def test_offers_only_compatible_frameworks_for_the_detected_gpu(
 
 def test_offers_reject_a_gpu_family_absent_from_the_model_recipe() -> None:
     candidate = _candidate()
-    nvidia_only = replace(candidate, device_evidence=(candidate.device_evidence[0],))
+    nvidia_only = replace(candidate, devices=("nvidia-cuda",))
 
     offers = framework_offers(_hardware("Apple", "Metal"), nvidia_only, command_finder=_installed_command)
 
@@ -412,7 +368,7 @@ def test_cached_artifact_builds_a_pinned_framework_launch_plan(
         candidate,
         "llama-cpp",
         cached,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -435,22 +391,14 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
         for name, content in parts
     )
     base = _candidate()
-    assert base.deployment is not None
     candidate = replace(
         base,
         deployment=replace(
             base.deployment,
             artifact_kind="gguf-file-set",
             artifacts=artifacts,
-            minimum_memory_bytes=(
-                base.deployment.minimum_memory_bytes
-                - base.deployment.artifact_size_bytes
-                + sum(artifact.size_bytes for artifact in artifacts)
-            ),
             model_filename=artifacts[0].filename,
-            quantization="Q4_K_M",
         ),
-        stored_checkpoint_kind="gguf-q4-k-m",
     )
     repository_root = tmp_path / repo_folder_name(repo_id=candidate.hf_repository, repo_type="model")
     snapshot_root = repository_root / "snapshots" / candidate.hf_revision
@@ -467,7 +415,7 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
         candidate,
         "llama-cpp",
         ensure_model_artifacts(tmp_path, candidate),
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -492,17 +440,10 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
         source_revision="b" * 40,
     )
     base = _candidate()
-    assert base.deployment is not None
     deployment = replace(
         base.deployment,
         artifact_kind="gguf-file-set",
         artifacts=(draft, target),
-        minimum_memory_bytes=(
-            base.deployment.minimum_memory_bytes
-            - base.deployment.artifact_size_bytes
-            + draft.size_bytes
-            + target.size_bytes
-        ),
         model_filename=target.filename,
         llama_cpp=LlamaCppLaunch(
             batch_size=2048,
@@ -512,12 +453,10 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
             target_backend_sampling=True,
             draft_backend_sampling=True,
         ),
-        quantization="Q4_K_M",
     )
     candidate = replace(
         base,
         speculation_policy="enabled-dflash-external-draft",
-        stored_checkpoint_kind="gguf-q4-k-m",
         deployment=deployment,
     )
 
@@ -542,7 +481,7 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
         candidate,
         "llama-cpp",
         verified,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -576,14 +515,13 @@ def test_screened_recipes_keep_their_measured_launch_settings(
     depth: str,
     ubatch: str,
 ) -> None:
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     recipe = next(model for model in catalog.models if model.profile_id == profile_id)
     base = _candidate()
-    assert recipe.deployment is not None and base.deployment is not None
     candidate = replace(
         base,
         speculation_policy=recipe.speculation_policy,
-        device_evidence=recipe.device_evidence,
+        devices=recipe.devices,
         deployment=replace(base.deployment, llama_cpp=recipe.deployment.llama_cpp),
     )
     _cached_artifact(tmp_path, candidate)
@@ -594,7 +532,7 @@ def test_screened_recipes_keep_their_measured_launch_settings(
         candidate,
         "llama-cpp",
         verified,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -611,7 +549,6 @@ def test_screened_recipes_keep_their_measured_launch_settings(
     ):
         assert plan.command[plan.command.index(flag) + 1] == expected
     assert "--spec-draft-backend-sampling" in plan.command
-    assert all(evidence.aa_admission_state == "unqualified" for evidence in recipe.device_evidence)
     if device == "Vulkan0":
         with pytest.raises(ValueError, match="unpinned single-accelerator"):
             create_deployment_plan(
@@ -619,7 +556,7 @@ def test_screened_recipes_keep_their_measured_launch_settings(
                 candidate,
                 "llama-cpp",
                 verified,
-                catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+                catalog_digest=BUNDLED_RECIPES_DIGEST,
                 command_finder=_installed_command,
                 device_environment=(("HIP_VISIBLE_DEVICES", "1"),),
             )
@@ -627,14 +564,14 @@ def test_screened_recipes_keep_their_measured_launch_settings(
 
 def test_lazy_mode_recipe_passes_its_lazy_read_flag(tmp_path: Path) -> None:
     """A recipe that reads tensors on demand launches llama.cpp with that lazy mode."""
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     recipe = next(model for model in catalog.models if model.profile_id == "qwen35-9b-q4-k-m-mtp-strix-halo")
     base = _candidate()
-    assert recipe.deployment is not None and recipe.deployment.llama_cpp is not None and base.deployment is not None
+    assert recipe.deployment.llama_cpp is not None
     candidate = replace(
         base,
         speculation_policy=recipe.speculation_policy,
-        device_evidence=recipe.device_evidence,
+        devices=recipe.devices,
         deployment=replace(base.deployment, llama_cpp=replace(recipe.deployment.llama_cpp, lazy_mode="on-direct")),
     )
     _cached_artifact(tmp_path, candidate)
@@ -643,7 +580,7 @@ def test_lazy_mode_recipe_passes_its_lazy_read_flag(tmp_path: Path) -> None:
         candidate,
         "llama-cpp",
         ensure_model_artifacts(tmp_path, candidate),
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -662,7 +599,7 @@ def test_launch_plan_rejects_a_framework_the_recipe_does_not_name(tmp_path: Path
             candidate,
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=_installed_command,
             alias_nonce="test",
         )
@@ -765,7 +702,7 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
         profile_id="fixture-q4-0",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         accelerator_platform="apple-metal",
         model_path=artifact,
@@ -1017,7 +954,7 @@ def test_memory_gate_allows_only_a_small_reporting_shortfall(
                 candidate,
                 "llama-cpp",
                 cached,
-                catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+                catalog_digest=BUNDLED_RECIPES_DIGEST,
                 command_finder=_installed_command,
                 alias_nonce="test",
             )
@@ -1027,7 +964,7 @@ def test_memory_gate_allows_only_a_small_reporting_shortfall(
         candidate,
         "llama-cpp",
         cached,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -1058,7 +995,7 @@ def test_reduced_context_launch_fits_small_hardware_and_lands_ctx_size(tmp_path:
             candidate,
             "llama-cpp",
             cached,
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=_installed_command,
             alias_nonce="test",
         )
@@ -1067,7 +1004,7 @@ def test_reduced_context_launch_fits_small_hardware_and_lands_ctx_size(tmp_path:
         candidate,
         "llama-cpp",
         cached,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
         context_tokens=REDUCED_CONTEXT_TOKENS,
@@ -1100,29 +1037,17 @@ def test_plan_rejects_a_context_outside_the_allowed_range(
             candidate,
             "llama-cpp",
             cached,
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=_installed_command,
             alias_nonce="test",
             context_tokens=context_tokens,
         )
 
 
-def test_derived_minimum_reproduces_pinned_minimums_and_rejects_drift() -> None:
-    candidate = _candidate()
-    deployment = candidate.deployment
-    assert deployment is not None
-    bundled = next(model for model in load_model_catalog(BUNDLED_MODEL_CATALOG_PATH).models if model.deployment)
-    bundled_deployment = bundled.deployment
-    assert bundled_deployment is not None
+def test_derived_minimum_prices_artifacts_kv_cache_and_overhead() -> None:
+    deployment = _candidate().deployment
 
-    assert derived_minimum_memory_bytes(deployment, PROFILE_CONTEXT_TOKENS) == deployment.minimum_memory_bytes
-    assert (
-        derived_minimum_memory_bytes(bundled_deployment, bundled_deployment.context_tokens)
-        == bundled_deployment.minimum_memory_bytes
-    )
-    drifted = replace(deployment, minimum_memory_bytes=deployment.minimum_memory_bytes + 1)
-    with pytest.raises(ValueError, match="does not equal the KV-cache formula"):
-        derived_minimum_memory_bytes(drifted, PROFILE_CONTEXT_TOKENS)
+    assert derived_minimum_memory_bytes(deployment, PROFILE_CONTEXT_TOKENS) == FIXTURE_MINIMUM_MEMORY_BYTES
     # A non-positive token count would produce a negative KV term; refuse it outright.
     for degenerate_tokens in (0, -100):
         with pytest.raises(ValueError, match="must be positive"):
@@ -1420,7 +1345,6 @@ WEIGHTS_MEMORY = DeploymentMemory(
     constant_state_bytes=0,
     runtime_overhead_bytes=FIXTURE_RUNTIME_OVERHEAD_BYTES,
 )
-WEIGHTS_KV_CACHE_BYTES = 2 * 2 * 64 * 1 * 2 * PROFILE_CONTEXT_TOKENS
 WEIGHTS_ARTIFACT_BYTES = sum(len(content) for _, content in WEIGHTS_FILES)
 
 
@@ -1440,31 +1364,24 @@ def _weights_candidate() -> ModelCandidate:
         context_tokens=PROFILE_CONTEXT_TOKENS,
         frameworks=("sglang",),
         memory=WEIGHTS_MEMORY,
-        minimum_memory_bytes=WEIGHTS_ARTIFACT_BYTES + WEIGHTS_KV_CACHE_BYTES + FIXTURE_RUNTIME_OVERHEAD_BYTES,
         runtime_versions=(),
         moe_runner_backend=None,
-        model_alias="fixture-nvfp4",
-        quantization="NVFP4",
     )
     return replace(
         _candidate(),
         profile_id="fixture-nvfp4",
         display_name="Fixture NVFP4",
         hf_repository="example/model-nvfp4",
-        source_url="https://huggingface.co/example/model-nvfp4",
-        runtime_family="sglang",
         tool_call_parser="qwen3_coder",
         reasoning_parser="qwen3",
         thinking_policy="enabled",
-        stored_checkpoint_kind="modelopt-nvfp4-mixed",
         deployment=deployment,
-        device_evidence=(_candidate().device_evidence[0],),
+        devices=("nvidia-cuda",),
     )
 
 
 def _cached_weights(cache_root: Path, candidate: ModelCandidate) -> Path:
     """Lay every pinned file of a weights recipe out as huggingface_hub caches it."""
-    assert candidate.deployment is not None
     snapshot_root = cache_root / "models--example--model-nvfp4" / "snapshots" / candidate.hf_revision
     snapshot_root.mkdir(parents=True, exist_ok=True)
     for filename, content in WEIGHTS_FILES:
@@ -1487,7 +1404,7 @@ def test_cached_weights_repository_is_served_from_its_snapshot_directory(tmp_pat
         candidate,
         "sglang",
         cached,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -1501,9 +1418,8 @@ def test_cached_weights_repository_is_served_from_its_snapshot_directory(tmp_pat
 
 def test_a_gguf_recipe_can_not_name_a_fused_expert_kernel() -> None:
     """llama.cpp has no such flag, so naming one there is a catalog mistake."""
-    catalog = load_model_catalog(BUNDLED_MODEL_CATALOG_PATH)
+    catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     gguf = next(model for model in catalog.models if model.profile_id == "gemma4-12b-it-q4-0")
-    assert gguf.deployment is not None
 
     with pytest.raises(ValueError, match="only an SGLang recipe can name a fused-expert kernel"):
         replace(gguf.deployment, moe_runner_backend="flashinfer_cutlass")
@@ -1583,7 +1499,6 @@ def _vllm_reporting(tmp_path: Path, version: str) -> CommandFinder:
 def _vllm_candidate() -> ModelCandidate:
     """Return the weights candidate with the vLLM recipe enabled alongside SGLang."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     deployment = replace(
         candidate.deployment,
         frameworks=("sglang", "vllm"),
@@ -1600,27 +1515,20 @@ def _mtp_candidate() -> ModelCandidate:
 def _recurrent_weights_candidate() -> ModelCandidate:
     """Return a hybrid weights recipe, which pins its state pool so free memory cannot size it."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     memory = replace(WEIGHTS_MEMORY, recurrent_state_slots=10, constant_state_bytes=1024)
-    deployment = replace(
-        candidate.deployment,
-        memory=memory,
-        minimum_memory_bytes=candidate.deployment.minimum_memory_bytes + 1024,
-    )
+    deployment = replace(candidate.deployment, memory=memory)
     return replace(candidate, deployment=deployment)
 
 
 def _fused_expert_weights_candidate() -> ModelCandidate:
     """Return a weights recipe that names the NVFP4 kernel SGLang may not pick on its own."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     return replace(candidate, deployment=replace(candidate.deployment, moe_runner_backend="flashinfer_cutlass"))
 
 
 def _tuned_vllm_candidate() -> ModelCandidate:
     """Return the vLLM recipe with its own serve arguments and environment."""
     candidate = _vllm_candidate()
-    assert candidate.deployment is not None
     vllm = VllmLaunch(
         arguments=("--gpu-memory-utilization", "0.8", "--enable-prefix-caching"),
         environment=(("VLLM_ALLOW_LONG_MAX_MODEL_LEN", "1"),),
@@ -1752,7 +1660,7 @@ def test_recipe_launch_command_carries_its_pinned_flags(
         candidate,
         framework,
         cached,
-        catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
         command_finder=finder,
         alias_nonce="test",
     )
@@ -1791,7 +1699,6 @@ def test_vllm_launch_serves_only_the_pinned_version(
 ) -> None:
     """vLLM can pass every startup check and still emit nonsense, so the version is pinned too."""
     base = _vllm_candidate()
-    assert base.deployment is not None
     candidate = replace(base, deployment=replace(base.deployment, runtime_versions=(("vllm", pinned),)))
     _cached_weights(tmp_path, candidate)
     finder = _vllm_reporting(tmp_path, reported)
@@ -1802,7 +1709,7 @@ def test_vllm_launch_serves_only_the_pinned_version(
             candidate,
             "vllm",
             ensure_model_artifacts(tmp_path, candidate),
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=finder,
             alias_nonce="test",
         )
@@ -1860,7 +1767,6 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
     verified against, not a floor.
     """
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     deployment = replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),))
     candidate = replace(candidate, deployment=deployment)
     _cached_weights(tmp_path, candidate)
@@ -1872,7 +1778,7 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
             candidate,
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=finder,
             alias_nonce="test",
         )
@@ -1887,7 +1793,6 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
 def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A slow version command is not a missing version; the refusal must say which it was."""
     candidate = _weights_candidate()
-    assert candidate.deployment is not None
     candidate = replace(candidate, deployment=replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),)))
     _cached_weights(tmp_path, candidate)
     executable = tmp_path / "sglang"
@@ -1901,7 +1806,7 @@ def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch
             candidate,
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
-            catalog_digest=BUNDLED_MODEL_CATALOG_DIGEST,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
             command_finder=lambda command: str(executable),
             alias_nonce="test",
         )

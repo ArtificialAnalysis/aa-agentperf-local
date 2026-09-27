@@ -17,7 +17,6 @@ from agentperf_local.common.json_types import JsonObject
 from agentperf_local.deployment.catalog import (
     DeploymentArtifact,
     DeploymentMemory,
-    DeviceEvidence,
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
@@ -43,13 +42,12 @@ SCHEMA_ROOT = pathlib.Path(__file__).parents[1] / "docs" / "schemas"
 
 # (schema file, pointer to the object, the class whose fields it describes).
 SCHEMA_OBJECTS: tuple[tuple[str, str, type], ...] = (
-    ("model-candidates-v2.schema.json", "$defs/artifact", DeploymentArtifact),
-    ("model-candidates-v2.schema.json", "$defs/memory", DeploymentMemory),
-    ("model-candidates-v2.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
-    ("model-candidates-v2.schema.json", "$defs/vllm", VllmLaunch),
-    ("model-candidates-v2.schema.json", "$defs/deployment", ModelDeployment),
-    ("model-candidates-v2.schema.json", "$defs/device_evidence", DeviceEvidence),
-    ("model-candidates-v2.schema.json", "$defs/model", ModelCandidate),
+    ("recipe-v1.schema.json", "$defs/artifact", DeploymentArtifact),
+    ("recipe-v1.schema.json", "$defs/memory", DeploymentMemory),
+    ("recipe-v1.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
+    ("recipe-v1.schema.json", "$defs/vllm", VllmLaunch),
+    ("recipe-v1.schema.json", "$defs/deployment", ModelDeployment),
+    ("recipe-v1.schema.json", "$defs/model", ModelCandidate),
     ("private-audit-v1.schema.json", "$defs/accelerator", AcceleratorSnapshot),
     ("private-audit-v1.schema.json", "$defs/outcome", ProbeOutcome),
     ("private-audit-v1.schema.json", "$defs/phase", PowerPhaseSummary),

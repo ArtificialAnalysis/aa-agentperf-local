@@ -7,7 +7,7 @@ import argparse
 from agentperf_local import __version__
 from agentperf_local.cli.options import (
     DEFAULT_MANAGED_PROFILE_ID,
-    DEFAULT_MODEL_CATALOG_PATH,
+    DEFAULT_RECIPES_ROOT,
     MESSAGE_SOURCES,
     OUTPUT_TOKEN_POLICIES,
     SAMPLING_PRESETS,
@@ -85,10 +85,10 @@ def _add_cache_root_flag(parser: argparse.ArgumentParser) -> None:
 
 def _add_managed_target_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--catalog",
+        "--recipes",
         type=nonempty_path,
-        default=DEFAULT_MODEL_CATALOG_PATH,
-        help="load a structurally validated model catalog",
+        default=DEFAULT_RECIPES_ROOT,
+        help="folder of recipe YAML files (default: the bundled recipes)",
     )
     parser.add_argument("--profile-id", default=DEFAULT_MANAGED_PROFILE_ID, help="managed catalog model profile")
     parser.add_argument(
@@ -224,10 +224,10 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 def _add_tui_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(DEFAULT_COMMAND, help="open the guided full-screen benchmark app")
     parser.add_argument(
-        "--catalog",
+        "--recipes",
         type=nonempty_path,
-        default=DEFAULT_MODEL_CATALOG_PATH,
-        help="path to a model catalog JSON (default: the bundled catalog)",
+        default=DEFAULT_RECIPES_ROOT,
+        help="folder of recipe YAML files (default: the bundled recipes)",
     )
     replay = parser.add_mutually_exclusive_group()
     replay.add_argument(

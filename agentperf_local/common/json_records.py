@@ -11,7 +11,7 @@ renames a field, or nests a sub-object — writes its own `to_json` instead.
 
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
+from dataclasses import MISSING, fields, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -33,6 +33,15 @@ def json_field_names(record: type) -> frozenset[str]:
     if not is_dataclass(record):
         raise TypeError(f"{record.__name__} is not a dataclass")
     return frozenset(field.name for field in fields(record))
+
+
+def required_json_field_names(record: type) -> frozenset[str]:
+    """Return the fields of one dataclass that have no default, so a reader must see them."""
+    if not is_dataclass(record):
+        raise TypeError(f"{record.__name__} is not a dataclass")
+    return frozenset(
+        field.name for field in fields(record) if field.default is MISSING and field.default_factory is MISSING
+    )
 
 
 def json_value(value: object) -> JsonValue:

@@ -61,7 +61,8 @@ Each package imports only from packages above it in this table.
 
 A package `__init__` exports nothing. Every name is imported from the module
 that defines it. Bundled data lives under `data/`, and `common.package_paths`
-is the one place that locates it.
+is the one place that locates it. The recipes live in `recipes/` at the
+repository root; a wheel carries a copy under `data/recipes/`.
 
 ## Measurement invariants
 
@@ -106,7 +107,7 @@ Custom datasets use the manifest and JSONL trace format in
 
 ## Models and recipes
 
-[MODELS.md](MODELS.md) lists the catalog. A recipe has one of two shapes:
+[`recipes/`](../recipes) holds one YAML file per recipe. A recipe has one of two shapes:
 
 - A **GGUF recipe** pins one or more files by size and SHA-256. llama.cpp serves
   it on CUDA, ROCm, or Metal.
@@ -125,8 +126,7 @@ space. On a unified device the floor is necessary but not sufficient. The GPU
 backend is verified from startup evidence after launch.
 
 Each recipe stores its attention shape and measured fixed reserves, not one
-opaque number. That lets the floor be recomputed for a reduced context and
-checked against the pinned full-context minimum. A weights recipe also pins
+opaque number. The floor is computed from that shape for any context. A weights recipe also pins
 sizes the runtime would otherwise choose from free memory, such as the SGLang
 token pool. It can pin the fused-expert kernel too, so the served configuration
 is the same on every card.
@@ -134,8 +134,7 @@ is the same on every card.
 ### Context classification
 
 `managed-run --context-tokens N` serves a smaller context. The memory floor is
-derived from the same formula that reproduces the catalog minimum at 65,536
-tokens. Readiness still requires the server to report exactly the requested
+computed from the recipe's memory shape at that context. Readiness still requires the server to report exactly the requested
 context.
 
 A reduced run stays distinct. The served context joins the benchmark identity

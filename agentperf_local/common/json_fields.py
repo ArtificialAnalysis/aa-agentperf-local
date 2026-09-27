@@ -106,6 +106,15 @@ def required_boolean(data: JsonObject, key: str, source: str) -> bool:
     return value
 
 
+def optional_boolean(data: JsonObject, key: str, source: str) -> bool | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"{source}.{key} must be a boolean or null")
+    return value
+
+
 def required_integer(data: JsonObject, key: str, source: str) -> int:
     value = data.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
