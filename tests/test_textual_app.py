@@ -236,7 +236,7 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
         await pilot.press("space")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
         assert app.step is TuiStep.RESULT
         assert app.outcome is TuiOutcome.SUCCESS
 
@@ -1270,8 +1270,9 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         assert "Other model or server" in str(app.query_one("#model-detail", Static).content)
         await pilot.click("#model-continue")
         assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         await pilot.press("enter")
+        await _settle_setup(app, pilot)
 
         preflight = app.query_one("#preflight-status", Static)
         assert app.request is not None
@@ -1282,9 +1283,8 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         # says so in a muted line.
         assert ATTACHED_CONTEXT_UNVERIFIED_MESSAGE in preflight_evidence
         assert EligibilityReason.REDUCED_CONTEXT in app.evidence.ineligibility_reasons
-        rendered = app.export_screenshot()
-        assert "Ready" in rendered
-        assert "NVIDIA&#160;GeForce&#160;RTX&#160;5090" in rendered
+        await _settle_until(pilot, lambda: "Ready" in app.export_screenshot())
+        assert "NVIDIA&#160;GeForce&#160;RTX&#160;5090" in app.export_screenshot()
         consent = app.query_one("#endpoint-consent-checkbox", Checkbox)
         assert not consent.value
         assert str(consent.label) == CONSENT_ATTACHED_LABEL
@@ -1292,7 +1292,7 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
         assert not app.query_one("#run-start", Button).disabled
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
         assert app.step is TuiStep.RESULT
         assert app.selection.profile_id is None
@@ -1658,7 +1658,7 @@ async def test_cleartext_remote_endpoint_only_blocks_runs_that_send_a_key(tmp_pa
         app.query_one("#api-key-env-input", Input).value = "PRIVATE_TOKEN"
         await pilot.pause()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -1796,7 +1796,7 @@ async def test_blank_required_path_never_resolves_to_the_working_directory(
         app.query_one(selector, Input).value = "   "
         app.query_one("#config-continue", Button).focus()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -1873,7 +1873,7 @@ async def test_preflight_completion_while_privacy_is_open_preserves_visible_focu
 
         app.query_one("#privacy-back", Button).focus()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_setup(app, pilot)
         assert app.step is TuiStep.PREFLIGHT
         assert app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox)
         assert app.request is not None
@@ -1905,7 +1905,7 @@ async def test_preflight_back_revokes_the_ready_request_and_consent(tmp_path: Pa
 
         app.query_one("#preflight-back", Button).focus()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
 
         assert app.step is TuiStep.CONFIG
         assert app.request is None
@@ -1921,8 +1921,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         assert app.focused is app.query_one("#welcome-start", Button)
         assert app.focused.region.height == 2
         await pilot.press("enter")
-        await pilot.pause()
-        assert app.focused is app.query_one("#model-list", OptionList)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#model-list", OptionList))
         rendered = app.export_screenshot()
         assert "STEP&#160;1&#160;OF&#160;4" in rendered
         assert "Choose&#160;a&#160;model" in rendered
@@ -1935,8 +1934,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         await pilot.press("right")
         assert app.focused is model_continue
         await pilot.press("enter")
-        await pilot.pause()
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
         assert app.focused.region.bottom <= 24
         rendered = app.export_screenshot()
         assert "STEP&#160;2&#160;OF&#160;4" in rendered
@@ -2222,7 +2220,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
             await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
             assert app.step is TuiStep.CONFIG
             await pilot.press("enter")
-            await pilot.pause()
+            await _settle_setup(app, pilot)
             assert app.step is TuiStep.PREFLIGHT
             await app.workers.wait_for_complete()
             app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
@@ -2366,7 +2364,7 @@ async def test_finalization_while_privacy_is_open_preserves_visible_keyboard_foc
 
         app.query_one("#privacy-back", Button).focus()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         assert app.step is TuiStep.RUN
         assert app.focused is app.query_one("#activity-lines", RichLog)
 
@@ -2517,7 +2515,7 @@ async def test_enter_pressed_twice_from_ready_never_cancels_the_run_it_started(t
     async with app.run_test(size=(96, 30)) as pilot:
         await _start_run_by_click(app, pilot)
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
 
         assert app.step is TuiStep.RUN
         assert app.replay_active
@@ -2874,7 +2872,7 @@ async def test_help_page_and_footer_name_the_overlay_shortcuts(tmp_path: Path) -
         assert "open the privacy page" in help_text
         app.query_one("#help-privacy", Button).focus()
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.PRIVACY)
         assert app.step is TuiStep.PRIVACY
 
 
@@ -3400,15 +3398,14 @@ async def test_setup_focuses_continue_unless_a_custom_manifest_needs_a_path(tmp_
         assert app.query_one("#manifest-row").display
         await pilot.press("escape")
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
         assert app.step is TuiStep.CONFIG
         assert app.focused is app.query_one("#manifest-input", Input)
 
         app.query_one("#manifest-input", Input).value = str(tmp_path / "replay.json")
         await pilot.press("escape")
         await pilot.press("enter")
-        await pilot.pause()
-        assert app.focused is app.query_one("#config-continue", Button)
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#config-continue", Button))
 
 
 async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> None:
@@ -3451,7 +3448,7 @@ async def test_footer_names_the_keys_of_the_visible_screen(tmp_path: Path) -> No
         assert not app.screen.active_bindings["enter"].binding.show
 
         await pilot.press("enter")
-        await pilot.pause()
+        await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         assert app.step is TuiStep.RUN
         run_bindings = app.screen.active_bindings
         assert run_bindings["escape"].binding.description == "Cancel"
