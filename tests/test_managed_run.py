@@ -334,7 +334,7 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     # vLLM otherwise picks tools automatically and stops at the first parsed call; the rule lives in one place.
     expected_tool_choice = "none" if framework == "vllm" else None
     assert summary["config"]["sampling"]["extra_body"].get("tool_choice") == expected_tool_choice
-    assert power["phases"][0]["sampled_power_energy_valid"] is True
+    assert power["phases"][0]["sampled_power_energy_valid"] is True, power["phases"][0]
     assert _port_is_free(runtime.port)
 
     bundle_dir = tmp_path / "bundle"

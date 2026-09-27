@@ -59,7 +59,7 @@ def test_record_encodes_every_field_kind_in_declaration_order() -> None:
     assert encoded == {
         "name": "one",
         "colour": "red",
-        "where": str(Path("results/x")),
+        "where": "results/x",
         "inner": {"depth": 2},
         "tags": ["a", "b"],
         "missing": None,
@@ -95,7 +95,7 @@ def _classes_with_derived_keys() -> list[tuple[str, str, bool, bool]]:
     """Return every class whose reader derives its key set, and how its writer is spelled."""
     found: list[tuple[str, str, bool, bool]] = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.ClassDef):
                 continue
             body = ast.unparse(node)

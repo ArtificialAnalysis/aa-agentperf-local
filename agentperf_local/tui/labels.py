@@ -7,6 +7,8 @@ module holds no formatting rules and the wording can be reviewed in one place.
 from __future__ import annotations
 
 import math
+import os
+import sys
 from pathlib import Path
 
 from rich.markup import escape
@@ -66,14 +68,18 @@ def count(quantity: int, noun: str) -> str:
 
 
 def result_path_text(path: Path) -> str:
-    """Render one result path: home shortens to ~, and wrapping breaks only after "/"."""
-    return home_relative_path_text(path.absolute()).replace("/", f"/{PATH_WRAP_BREAK}")
+    """Render one result path: home shortens to ~, and wrapping breaks only after a separator."""
+    return home_relative_path_text(path.absolute()).replace(os.sep, f"{os.sep}{PATH_WRAP_BREAK}")
 
 
 def home_relative_path_text(path: Path) -> str:
-    """Name a cache location without spelling out the home directory."""
+    """Name a cache location without spelling out the home directory.
+
+    Windows keeps the full path: neither cmd nor PowerShell expands ~ for a native
+    command, so a shortened path would break the commands the app tells users to run.
+    """
     home = Path.home()
-    if not path.is_relative_to(home):
+    if sys.platform == "win32" or not path.is_relative_to(home):
         return escape(str(path))
     # The home directory itself is relative to itself as ".", which joins back to a plain "~".
     return escape(str(Path("~") / path.relative_to(home)))

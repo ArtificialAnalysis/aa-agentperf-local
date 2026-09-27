@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -124,6 +125,19 @@ async def _settle_until(pilot: Pilot[TuiOutcome], condition: Callable[[], bool])
     while not condition() and time.monotonic() < deadline:
         await pilot.pause()
     assert condition()
+
+
+async def _check_setup(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Press Continue and wait until its setup check has answered.
+
+    The check runs on a worker thread that Continue starts only once its press is handled,
+    so waiting for workers alone can return first. The answer resets the consent checkbox,
+    so a test that ticks it earlier loses the tick.
+    """
+    app.query_one("#config-continue", Button).press()
+    await _settle_until(pilot, lambda: app.step is TuiStep.PREFLIGHT and app.pending_preflight is None)
+    await app.workers.wait_for_complete()
+    await pilot.pause()
 
 
 async def test_prefilled_model_stays_custom_after_mount() -> None:
@@ -1409,9 +1423,7 @@ async def test_managed_candidate_selects_a_compatible_framework_and_saves_eviden
             app.query_one("#managed-deployment-status", Static).content
         )
 
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         assert "1 task · 1 turn" in str(app.query_one("#preflight-status", Static).content)
         assert str(app.query_one("#preflight-hero", Static).content) == PREFLIGHT_READY_HERO
         assert not app.query_one("#preflight-reduced", Static).display
@@ -1522,9 +1534,7 @@ async def test_cancelling_a_managed_run_waits_for_owned_server_cleanup(
         await pilot.click("#welcome-start")
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
         await pilot.pause()
         app.query_one("#run-start", Button).press()
@@ -1541,7 +1551,7 @@ async def test_cancelling_a_managed_run_waits_for_owned_server_cleanup(
         expected_evidence = (
             "Model server stopped and cleaned up · no benchmark result saved"
             if expected_outcome is TuiOutcome.CANCELLED
-            else f"The model server run failed · check {run_dir}/deployment.log"
+            else f"The model server run failed · check {run_dir / 'deployment.log'}"
         )
         assert app.outcome is expected_outcome
         assert app.execution is None
@@ -1606,9 +1616,7 @@ async def test_managed_failure_names_its_safe_cause_instead_of_attached_advice(
         await pilot.click("#welcome-start")
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
         await pilot.pause()
         app.query_one("#run-start", Button).press()
@@ -1626,7 +1634,7 @@ async def test_managed_failure_names_its_safe_cause_instead_of_attached_advice(
         run_dir = managed_controller.requests[0].output_dir
         evidence = str(app.query_one("#result-evidence", Static).content).replace(PATH_WRAP_BREAK, "")
         expected_evidence = (
-            f"The model server run failed · check {run_dir}/deployment.log"
+            f"The model server run failed · check {run_dir / 'deployment.log'}"
             if writes_log
             else "The model server run failed"
         )
@@ -1681,9 +1689,7 @@ async def test_cleartext_remote_endpoint_only_blocks_runs_that_send_a_key(tmp_pa
         assert "Nothing was sent" in str(app.query_one("#preflight-evidence", Static).content)
 
         app.query_one("#api-key-env-input", Input).value = ""
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.request is not None
         assert not app.request.endpoint_is_loopback
@@ -2506,9 +2512,7 @@ async def test_a_second_run_with_unchanged_settings_starts_clean_in_a_fresh_run_
         await pilot.press("enter")
         await pilot.pause()
         assert app.query_one("#output-input", Input).value == str(tmp_path / "private" / "results")
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
         await pilot.pause()
         app.query_one("#run-start", Button).press()
@@ -2725,9 +2729,7 @@ async def test_typed_results_folder_expands_home_and_names_the_saved_run_folder(
         await pilot.click("#model-continue")
         await pilot.pause()
         app.query_one("#output-input", Input).value = typed_output
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.request is not None
         run_dir = app.request.output_dir
@@ -2741,16 +2743,15 @@ async def test_typed_results_folder_expands_home_and_names_the_saved_run_folder(
         await pilot.pause()
 
         assert app.step is TuiStep.RESULT
-        # The saved-to path shortens home to ~ and wraps only at directory boundaries.
+        # The saved-to path shortens home to ~, except on Windows, and wraps only at directory boundaries.
         absolute_run_dir = run_dir.absolute()
+        shortened = sys.platform != "win32" and absolute_run_dir.is_relative_to(Path.home())
         expected_display = (
-            str(Path("~") / absolute_run_dir.relative_to(Path.home()))
-            if absolute_run_dir.is_relative_to(Path.home())
-            else str(absolute_run_dir)
+            str(Path("~") / absolute_run_dir.relative_to(Path.home())) if shortened else str(absolute_run_dir)
         )
         displayed = str(app.query_one("#result-status", Static).content).replace(PATH_WRAP_BREAK, "")
         assert expected_display in displayed
-        assert str(Path.home()) not in displayed
+        assert not shortened or str(Path.home()) not in displayed
 
 
 async def test_copied_result_path_contains_no_wrap_break_characters(tmp_path: Path) -> None:
@@ -2839,9 +2840,7 @@ async def test_managed_download_progress_replaces_the_activity_spinner(
         await pilot.click("#welcome-start")
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
         await pilot.pause()
         app.query_one("#run-start", Button).press()
@@ -3099,9 +3098,7 @@ async def test_managed_launch_is_pinned_to_the_device_this_computer_offers(
         )
         assert status.startswith(expected_status)
 
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         preflight_status = str(app.query_one("#preflight-status", Static).content)
@@ -3184,9 +3181,7 @@ async def test_custom_replay_floor_blocks_a_smaller_managed_context_before_launc
         # A custom manifest is only read at preflight, so the picker cannot filter for it.
         app.query_one("#managed-context-select", ManagedContextSelect).value = "32768"
         await pilot.pause()
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.step is TuiStep.PREFLIGHT
         assert app.request is None
@@ -3288,9 +3283,7 @@ async def test_reduced_context_run_carries_the_warning_from_preflight_to_result(
         await pilot.pause()
         assert app.query_one("#managed-context-select", ManagedContextSelect).value == "32768"
 
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         reduced_notice = app.query_one("#preflight-reduced", Static)
         assert reduced_notice.display
         assert str(reduced_notice.content) == (
@@ -3346,9 +3339,7 @@ async def test_failed_preflight_hides_the_reduced_context_notice_under_its_error
         await pilot.pause()
         app.query_one("#managed-context-select", ManagedContextSelect).value = "32768"
         await pilot.pause()
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert app.request is None
         assert "Setup check failed." in str(app.query_one("#preflight-status", Static).content)
@@ -3544,9 +3535,7 @@ async def test_run_page_logs_each_step_and_toggles_the_owned_server_log(tmp_path
         await pilot.click("#welcome-start")
         await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         await pilot.press("enter")
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
         await pilot.pause()
         app.query_one("#run-start", Button).press()
@@ -3734,9 +3723,7 @@ async def _start_managed_run_with_submit(
     app.query_one("#model-list", OptionList).focus()
     await pilot.press("down", "down", "enter")
     await pilot.pause()
-    app.query_one("#config-continue", Button).press()
-    await app.workers.wait_for_complete()
-    await pilot.pause()
+    await _check_setup(app, pilot)
     app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
     if submit:
         app.query_one("#submit-checkbox", Checkbox).value = True
@@ -3898,9 +3885,7 @@ async def test_submission_stays_busy_until_server_responds(
             await pilot.click("#welcome-start")
             await pilot.click("#model-continue")
             await pilot.pause()
-            app.query_one("#config-continue", Button).press()
-            await app.workers.wait_for_complete()
-            await pilot.pause()
+            await _check_setup(app, pilot)
             assert app.step is TuiStep.PREFLIGHT
             app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
             await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
@@ -3984,9 +3969,7 @@ async def test_weights_profile_is_selectable_and_launchable_from_the_model_scree
         assert framework.value == "sglang"
         assert app.query_one("#managed-context-select", ManagedContextSelect).value == "65536"
 
-        app.query_one("#config-continue", Button).press()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
+        await _check_setup(app, pilot)
 
         assert str(app.query_one("#preflight-hero", Static).content) == PREFLIGHT_READY_HERO
         assert "starts the server with SGLang" in str(app.query_one("#preflight-evidence", Static).content)

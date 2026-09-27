@@ -190,7 +190,7 @@ class TraceSource:
         """Return trace provenance as JSON data."""
         return {
             "format": self.format,
-            "recording": str(self.recording),
+            "recording": self.recording.as_posix(),
             "family": self.family,
             "adapter": self.adapter,
             "model_call_index": self.model_call_index,
