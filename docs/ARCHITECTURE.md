@@ -216,7 +216,9 @@ attest to the remote model bytes.
 
 A failed probe describes the endpoint, which is not always the model behind
 it. A tool-call parser can drop calls that the raw text contains. The probe
-reports what an OpenAI-compatible client receives. The reports under
+reports what an OpenAI-compatible client receives. The parallel-call probe is
+advisory: the report records it, but only the other four probes decide whether
+qualification passed. The reports under
 [`docs/evidence`](evidence) show both outcomes: an MLX gpt-oss-20b endpoint
 passed two of five probes, and Gemma 4 26B-A4B on its managed recipe passed
 all five.

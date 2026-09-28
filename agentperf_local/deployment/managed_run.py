@@ -408,8 +408,8 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         observer.on_activity(
             RunActivity(
                 kind=RunActivityKind.QUALIFIED,
-                probes_passed=sum(1 for outcome in qualification.outcomes if outcome.passed),
-                probes_total=len(qualification.outcomes),
+                probes_passed=sum(1 for outcome in qualification.required_outcomes if outcome.passed),
+                probes_total=len(qualification.required_outcomes),
             )
         )
         power_collector = (

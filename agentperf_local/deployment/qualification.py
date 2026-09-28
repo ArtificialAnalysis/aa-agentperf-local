@@ -62,6 +62,9 @@ QUALIFICATION_PROBE_IDS: tuple[QualificationProbeId, ...] = (
     "tool_history",
     "capped_finish",
 )
+# A probe whose outcome is recorded but does not decide `passed`. Many runtimes cannot
+# stream two tool calls in one turn, and the suite asks for two calls in only 4 of 168 turns.
+ADVISORY_PROBE_IDS: tuple[QualificationProbeId, ...] = ("parallel_tools",)
 QUALIFICATION_FAILURE_CODES: tuple[QualificationFailureCode, ...] = (
     "empty_stream",
     "aborted",
@@ -244,9 +247,14 @@ class RuntimeQualification(BaseModel, frozen=True):
         return self
 
     @property
+    def required_outcomes(self) -> tuple[ProbeOutcome, ...]:
+        """Return the outcomes that decide `passed`."""
+        return tuple(outcome for outcome in self.outcomes if outcome.probe_id not in ADVISORY_PROBE_IDS)
+
+    @property
     def passed(self) -> bool:
-        """Return whether every synthetic probe passed."""
-        return all(outcome.passed for outcome in self.outcomes)
+        """Return whether every required probe passed. Advisory probes are recorded only."""
+        return all(outcome.passed for outcome in self.required_outcomes)
 
     def to_json(self) -> JsonObject:
         """Return the closed local qualification report."""
@@ -294,10 +302,16 @@ class QualificationFile(BaseModel, frozen=True):
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require a valid report whose written pass state matches its outcomes."""
+        """Require a valid report whose written pass state matches its outcomes.
+
+        A file written before advisory probes existed stores whether every probe
+        passed, so that verdict is accepted too. Neither rule lets a file claim a pass
+        while a required probe failed.
+        """
         with raising_validator_errors():
             report = self.report()
-        if self.passed != report.passed:
+        every_probe_passed = all(outcome.passed for outcome in report.outcomes)
+        if self.passed not in (report.passed, every_probe_passed):
             raise ValueError("qualification pass state does not match its outcomes")
         return self
 

@@ -263,3 +263,31 @@ async def test_rejects_malformed_tool_transport(probe_index: int, malformed: Com
 
     assert report.passed is False
     assert "tool_transport_invalid" in report.outcomes[probe_index].failure_codes
+
+
+@pytest.mark.parametrize(
+    ("probe_index", "stored_passes"),
+    [(2, (True, False)), (0, (False,))],
+    ids=("advisory-parallel-tools", "required-single-tool"),
+)
+async def test_only_required_probes_decide_the_pass(
+    tmp_path: Path, probe_index: int, stored_passes: tuple[bool, ...]
+) -> None:
+    """A lone parallel-call failure is recorded but still passes; older files that stored a fail still load."""
+    responses = list(_passing_responses())
+    responses[probe_index] = _tool_result(_tool_call(0, "call-read", "read_file", '{"path":"README.md"}'))
+
+    report = await _qualify(tuple(responses))
+    output_path = tmp_path / "qualification.json"
+    write_runtime_qualification(output_path, report)
+    written = orjson.loads(output_path.read_bytes())
+
+    assert report.outcomes[probe_index].passed is False
+    assert report.passed is written["passed"] is stored_passes[0]
+    for stored in (True, False):
+        record = {**written, "passed": stored}
+        if stored in stored_passes:
+            assert read_object(QualificationFile, record, "qualification").report() == report
+        else:
+            with pytest.raises(ValueError, match="qualification pass state does not match its outcomes"):
+                read_object(QualificationFile, record, "qualification")
