@@ -34,6 +34,14 @@ not have it. Docker and Rust are optional. macOS, Linux, and Windows are
 supported. On Windows, managed runs need an NVIDIA GPU and llama.cpp; vLLM and
 SGLang run only on Linux.
 
+You also need either a model server that you already run with an
+OpenAI-compatible API, such as llama.cpp, LM Studio, vLLM, SGLang, or Ollama,
+or a serving framework that the tool can start. The bundled recipes use
+llama.cpp (`llama-server` on your `PATH`), or vLLM or SGLang on NVIDIA GPUs at
+the exact version each recipe pins. The tool does not install frameworks.
+`agentperf-local deployment-options --profile-id <id>` shows which frameworks
+can serve a recipe on this machine.
+
 ```console
 uv tool install agentperf-local
 agentperf-local
@@ -89,12 +97,26 @@ A full run needs a 65,536-token context at batch size 1. Every catalog profile
 launches at that context. An attached server that serves more, such as
 131,072 tokens, also counts as full.
 
-The default replay's largest turn needs about 58,000 tokens, so it requires a
-65,536 budget. A smaller context window will only work with a smaller replay, e.g.
-such as `aa-mini-v1`. To use this, pass `--context-tokens 32768` to `managed-run`, or choose
-a smaller context in the TUI. That run is marked `reduced: true` and is not
-comparable with full-context results. An attached server's context is read
-from the server at the start of the run.
+The default replay's largest turn needs about 58,000 tokens, so it only runs
+at the full 65,536. If your device cannot fit that, you can still check your
+setup with `aa-mini-v1`, which needs 8,192:
+
+```console
+uv run agentperf-local managed-run \
+  --profile-id gemma4-12b-it-q4-0 \
+  --framework llama-cpp \
+  --replay aa-mini-v1 \
+  --context-tokens 8192 \
+  --output-dir results/gemma4-12b-mini
+```
+
+In the TUI, start with `uv run agentperf-local tui --replay aa-mini-v1` and
+choose a smaller context on the Setup screen. A run below 65,536 tokens is
+marked `reduced: true` and is not comparable with full-context results.
+
+For an attached server, the tool reads the context at the start of the run:
+`meta.n_ctx` from llama.cpp, or `max_model_len` from vLLM and SGLang. A server
+that reports neither is recorded as not comparable.
 
 ## Attached servers
 
@@ -163,7 +185,8 @@ Live-tool runs cannot be submitted.
 
 ## Rust client (experimental)
 
-Python is the default client. An optional Rust client is also available. It needs a [Rust toolchain](https://rustup.rs):
+Python is the default client. An optional Rust client records timings outside
+Python. It needs a [Rust toolchain](https://rustup.rs):
 
 ```console
 uv sync --extra rust
@@ -187,7 +210,7 @@ details on what is sent to Artificial Analysis.
 | --- | --- |
 | `tui` | Open the guided full-screen app. |
 | `run` | Replay a workload against a server you run. |
-| `managed-run` | Download a catalog model, serve and benchmark it. |
+| `managed-run` | Download a catalog model, then serve and benchmark it. |
 | `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |

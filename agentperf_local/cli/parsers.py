@@ -44,7 +44,7 @@ from agentperf_local.workload.bundled import BUNDLED_REPLAYS, DEFAULT_BUNDLED_RE
 
 PROGRAM_NAME = "agentperf-local"
 VERSION_TEXT = f"{PROGRAM_NAME} {__version__}"
-CLIENT_HELP = "measured streaming client; rust is an experimental client for high-concurrency benchmarking"
+CLIENT_HELP = "measured streaming client; rust is an experimental client that records timings outside Python"
 
 
 PROGRAM_DESCRIPTION = (
