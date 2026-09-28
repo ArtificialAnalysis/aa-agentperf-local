@@ -27,9 +27,12 @@ HF_REVISION_HEX_DIGITS = 40
 SHA256_HEX_DIGITS = 64
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 RELEASE_VERSION_PARTS = 3
-# A development build is pinned by its exact version string, such as 0.1.dev20073+g8e685d198:
-# a base version, a commit count, and the abbreviated commit it was built from.
-DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+\.dev\d+\+g[0-9a-f]{7,40}$")
+# A development build is pinned by its exact version string: a base version, a commit count, and
+# the abbreviated commit it was built from. Examples are 0.1.dev20073+g8e685d198 and, for a vLLM
+# source install over a precompiled wheel, 0.30.1rc1.dev187+g066a1598f.precompiled.
+DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+(?:\.\d+)?(?:rc\d+)?\.dev\d+\+g[0-9a-f]{7,40}(?:\.precompiled)?$")
+PLE_TABLE_MEMORY_VARIABLE = "VLLM_PLE_TABLE_MEMORY"
+PLE_TABLE_ON_DISK = "disk"
 ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-Za-z0-9_])?$")
 # Recipes live at recipes/<model>/<hardware>/<profile_id>.yaml.
 # libyaml's loader parses the recipes about four times faster; the pure-Python one is the fallback.
@@ -40,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:3814f36b629873beb148e8a5fb3c385c4d2fcee4c174bc3adafb428ae07b86b2"
+BUNDLED_RECIPES_DIGEST = "sha256:11edf3a6c78b0dcb0618736eba1a7430a5794a394fcb00b702dc32faca376eef"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -60,12 +63,13 @@ type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
 type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
 type LlamaCppLoadMode = Literal["none", "mmap"]
-# How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
+# How llama.cpp serves tensors it reads on demand. Both modes serve the rows of a
 # per-layer-embedding table with explicit reads from disk, so the table is never resident.
-type LlamaCppLazyMode = Literal["on-direct"]
+# The pwilkin strix-halo fork calls this mode "on-direct"; ggml-org/llama.cpp#29030 calls it "on".
+type LlamaCppLazyMode = Literal["on", "on-direct"]
 LLAMA_CPP_BACKENDS: tuple[LlamaCppBackend, ...] = ("rocm", "vulkan", "metal")
 LLAMA_CPP_LOAD_MODES: tuple[LlamaCppLoadMode, ...] = ("none", "mmap")
-LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on-direct",)
+LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on", "on-direct")
 # Which fused-expert kernel serves a mixture-of-experts recipe. SGLang picks one from
 # the device when this is unset, and its choice is not always implemented for the
 # recipe's quantization, so a recipe that needs a particular kernel names it.
@@ -220,7 +224,7 @@ class LlamaCppLaunch(BaseModel, frozen=True):
         if self.load_mode is not None and self.load_mode not in LLAMA_CPP_LOAD_MODES:
             raise ValueError("llama.cpp load_mode must be none or mmap")
         if self.lazy_mode is not None and self.lazy_mode not in LLAMA_CPP_LAZY_MODES:
-            raise ValueError("llama.cpp lazy_mode must be on-direct")
+            raise ValueError("llama.cpp lazy_mode must be on or on-direct")
         if self.cache_ram_mib is not None and self.cache_ram_mib < 0:
             raise ValueError("llama.cpp cache_ram_mib must be non-negative")
         return self
@@ -264,6 +268,15 @@ class VllmLaunch(BaseModel, frozen=True):
                 raise ValueError("vLLM environment must use uppercase names and printable values")
         return self
 
+    @property
+    def reads_ple_table_from_disk(self) -> bool:
+        """Return whether vLLM reads per-layer-embedding rows from the checkpoint files.
+
+        With VLLM_PLE_TABLE_MEMORY=disk, vLLM reads the rows it needs on each step and
+        holds no copy of the table.
+        """
+        return (PLE_TABLE_MEMORY_VARIABLE, PLE_TABLE_ON_DISK) in self.environment
+
 
 class DeploymentMemory(BaseModel, frozen=True):
     """Describe how one model's resident memory grows with the served context.
@@ -290,8 +303,8 @@ class DeploymentMemory(BaseModel, frozen=True):
     constant_state_bytes: NonNegativeInt
     runtime_overhead_bytes: int
     # Artifact bytes the runtime reads from disk on demand and never holds resident,
-    # such as a per-layer-embedding table served by llama.cpp lazy reads. The memory
-    # floor leaves them out.
+    # such as a per-layer-embedding table served by llama.cpp lazy reads or by vLLM
+    # with VLLM_PLE_TABLE_MEMORY=disk. The memory floor leaves them out.
     lazy_read_bytes: NonNegativeInt = 0
 
     @field_validator("lazy_read_bytes", mode="before")
@@ -390,8 +403,13 @@ class ModelDeployment(BaseModel, frozen=True):
             raise ValueError(f"context_tokens must be {BENCHMARK_CONTEXT_TOKENS}")
         if self.memory.lazy_read_bytes > self.artifact_size_bytes:
             raise ValueError("lazy_read_bytes must not exceed the model artifacts")
-        if self.memory.lazy_read_bytes and (self.llama_cpp is None or self.llama_cpp.lazy_mode is None):
-            raise ValueError("only a llama.cpp recipe with a lazy_mode can read artifact bytes on demand")
+        llama_cpp_reads_lazily = self.llama_cpp is not None and self.llama_cpp.lazy_mode is not None
+        vllm_reads_lazily = self.vllm is not None and self.vllm.reads_ple_table_from_disk
+        if self.memory.lazy_read_bytes and not (llama_cpp_reads_lazily or vllm_reads_lazily):
+            raise ValueError(
+                "only a llama.cpp recipe with a lazy_mode or a vLLM recipe with VLLM_PLE_TABLE_MEMORY=disk "
+                "can read artifact bytes on demand"
+            )
         if not self.frameworks:
             raise ValueError("a managed recipe must name at least one framework")
         expected_order = tuple(framework for framework in DEPLOYMENT_FRAMEWORK_ORDER if framework in self.frameworks)

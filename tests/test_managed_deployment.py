@@ -1696,6 +1696,8 @@ def test_recipe_launch_command_carries_its_pinned_flags(
 
 
 DEVELOPMENT_BUILD = "0.1.dev20073+g8e685d198"
+# A vLLM source install over a precompiled wheel reports its base release candidate and a suffix.
+PRECOMPILED_BUILD = "0.30.1rc1.dev187+g066a1598f.precompiled"
 
 
 @pytest.mark.parametrize(
@@ -1707,6 +1709,8 @@ DEVELOPMENT_BUILD = "0.1.dev20073+g8e685d198"
         (DEVELOPMENT_BUILD, DEVELOPMENT_BUILD, None),
         (DEVELOPMENT_BUILD, "0.1.dev20074+g1234567", "development build 0.1.dev20073"),
         (DEVELOPMENT_BUILD, "0.30.0", "development build 0.1.dev20073"),
+        (PRECOMPILED_BUILD, PRECOMPILED_BUILD, None),
+        (PRECOMPILED_BUILD, "0.30.1rc1.dev150+g3f2142c11.precompiled", "development build 0.30.1rc1.dev187"),
     ],
 )
 def test_vllm_launch_serves_only_the_pinned_version(

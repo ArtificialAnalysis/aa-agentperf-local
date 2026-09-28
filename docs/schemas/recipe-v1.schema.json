@@ -132,6 +132,7 @@
         "lazy_mode": {
           "enum": [
             null,
+            "on",
             "on-direct"
           ]
         },
@@ -261,7 +262,7 @@
         "lazy_read_bytes": {
           "type": "integer",
           "minimum": 0,
-          "description": "Artifact bytes the runtime reads from disk on demand and never holds resident; the memory floor leaves them out. Non-zero only for a llama.cpp recipe with a lazy_mode."
+          "description": "Artifact bytes the runtime reads from disk on demand and never holds resident; the memory floor leaves them out. Non-zero only for a llama.cpp recipe with a lazy_mode, or a vLLM recipe whose environment sets VLLM_PLE_TABLE_MEMORY=disk."
         }
       }
     },
@@ -352,7 +353,7 @@
           },
           "additionalProperties": {
             "type": "string",
-            "pattern": "^(?:[0-9]+\\.[0-9]+\\.[0-9]+|[0-9]+\\.[0-9]+\\.dev[0-9]+\\+g[0-9a-f]{7,40})$"
+            "pattern": "^(?:[0-9]+\\.[0-9]+\\.[0-9]+|[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:rc[0-9]+)?\\.dev[0-9]+\\+g[0-9a-f]{7,40}(?:\\.precompiled)?)$"
           }
         },
         "moe_runner_backend": {
