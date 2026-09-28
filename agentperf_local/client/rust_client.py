@@ -16,7 +16,7 @@ from agentperf_local.client.protocol import CompletionError, CompletionResult, R
 from agentperf_local.client.python_client import DEFAULT_MAX_CONNECTIONS, DEFAULT_TIMEOUT_SECONDS
 from agentperf_local.client.request import CompletionRequest
 
-RUSTCORE_COMPATIBILITY_PREFIX = "0.1."
+RUSTCORE_COMPATIBILITY_PREFIX = "0.2."
 RUST_STATUS_PREFIX = "status "
 
 

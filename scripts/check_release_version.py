@@ -18,8 +18,12 @@ class VersionSite(BaseModel, frozen=True):
     line_template: str
 
     def expected_line(self, version: str) -> str:
-        """Return the line this file must contain for the given version."""
-        return self.line_template.format(version=version)
+        """Return the line this file must contain for the given version.
+
+        `{series}` is the version's major and minor parts with a trailing dot, such as "0.2.".
+        """
+        major, minor, _ = version.split(".", 2)
+        return self.line_template.format(version=version, series=f"{major}.{minor}.")
 
 
 # pyproject.toml is the source of truth; every other copy must repeat its version exactly.
@@ -33,6 +37,10 @@ VERSION_SITES = (
     VersionSite(path="rustcore/Cargo.toml", line_template='version = "{version}"'),
     VersionSite(
         path="rustcore/src/engine.rs", line_template='const MEASURED_USER_AGENT: &str = "agentperf-local/{version}";'
+    ),
+    # The Python client accepts any Rust extension from the same major and minor series.
+    VersionSite(
+        path="agentperf_local/client/rust_client.py", line_template='RUSTCORE_COMPATIBILITY_PREFIX = "{series}"'
     ),
 )
 
