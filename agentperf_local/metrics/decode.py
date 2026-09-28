@@ -1,8 +1,7 @@
 """Decode timestamped SSE bytes after a response closes."""
 
-from dataclasses import dataclass
-
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.client.protocol import RawRead
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
@@ -13,16 +12,14 @@ CARRIAGE_RETURN_LINE_FEED = b"\r\n"
 EVENT_SEPARATOR = b"\n\n"
 
 
-@dataclass(frozen=True, slots=True)
-class StreamChunk:
+class StreamChunk(BaseModel, frozen=True):
     """Hold one decoded SSE data event."""
 
     timestamp: float
     data: JsonObject
 
 
-@dataclass(slots=True)
-class _LineTerminators:
+class _LineTerminators(BaseModel):
     """Rewrite SSE line terminators as line feeds across read boundaries."""
 
     pending_carriage_return: bool = False
@@ -79,7 +76,8 @@ def _append_event(block: bytes, timestamp: float, chunks: list[StreamChunk]) -> 
     payload = _data_payload(block)
     data = _decode_payload(payload) if payload is not None else None
     if data is not None:
-        chunks.append(StreamChunk(timestamp=timestamp, data=data))
+        # _decode_payload already normalized the payload, so skip a second deep copy per event.
+        chunks.append(StreamChunk.model_construct(timestamp=timestamp, data=data))
 
 
 def _drain_events(buffer: bytearray, timestamp: float, chunks: list[StreamChunk]) -> None:

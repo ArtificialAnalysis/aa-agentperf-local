@@ -13,6 +13,9 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import NewFile, read_bounded_file, write_new_file
 from agentperf_local.common.identity import sha256_bytes, validate_digest, validate_run_id
@@ -100,8 +103,7 @@ class PhaseClockObserver:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PowerPhaseSummary:
+class PowerPhaseSummary(BaseModel, frozen=True):
     """Store the phase aggregates a private audit carries; no samples, no timestamps."""
 
     phase_id: str
@@ -124,7 +126,8 @@ class PowerPhaseSummary:
     graphics_clock_mhz_median: float | None
     memory_clock_mhz_median: float | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject a phase that claims valid energy without an energy value."""
         if not self.phase_id:
             raise ValueError("phase_id must not be empty")
@@ -150,6 +153,7 @@ class PowerPhaseSummary:
             raise ValueError("phase measures must be non-negative")
         if self.total_sample_count < 0 or self.valid_power_sample_count < 0:
             raise ValueError("phase sample counts must be non-negative")
+        return self
 
     @classmethod
     def from_nvidia(cls, summary: NvidiaPhaseSummary) -> PowerPhaseSummary:
@@ -210,8 +214,7 @@ class PowerPhaseSummary:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PowerSummary:
+class PowerSummary(BaseModel, frozen=True):
     """Store one run's reduced power evidence and how it was collected."""
 
     run_id: str
@@ -223,7 +226,8 @@ class PowerSummary:
     phases: tuple[PowerPhaseSummary, ...]
     version: int = POWER_SUMMARY_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate identifiers and require the measured phase."""
         validate_run_id(self.run_id, "run_id")
         if self.telemetry_digest is not None:
@@ -233,6 +237,7 @@ class PowerSummary:
         phase_ids = tuple(phase.phase_id for phase in self.phases)
         if MEASURED_PHASE_ID not in phase_ids or len(set(phase_ids)) != len(phase_ids):
             raise ValueError("power summary phases must be unique and include the measured phase")
+        return self
 
     @property
     def measured(self) -> PowerPhaseSummary:

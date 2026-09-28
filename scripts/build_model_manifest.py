@@ -11,11 +11,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
 
@@ -30,8 +30,7 @@ DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 MAX_PLAIN_FILE_BYTES = 64 * 1024 * 1024
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManifestEntry:
+class ManifestEntry(BaseModel, frozen=True):
     """Store one pinned file of a managed deployment."""
 
     filename: str

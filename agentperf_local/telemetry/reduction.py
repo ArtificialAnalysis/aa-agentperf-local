@@ -5,7 +5,9 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Callable
-from dataclasses import dataclass
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.units import NANOSECONDS_PER_MILLISECOND, NANOSECONDS_PER_SECOND
 from agentperf_local.telemetry.nvidia import NvidiaSample
@@ -14,20 +16,21 @@ DEFAULT_MINIMUM_COVERAGE = 0.95
 DEFAULT_MAX_SAMPLE_GAP_INTERVALS = 3
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PhaseInterval:
+class PhaseInterval(BaseModel, frozen=True):
     """Describe one half-open benchmark phase interval."""
 
     phase_id: str
     start_ns: int
     end_ns: int
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate the phase interval."""
         if not self.phase_id:
             raise ValueError("phase_id must not be empty")
         if self.start_ns <= 0 or self.end_ns <= self.start_ns:
             raise ValueError("phase interval must be positive and non-empty")
+        return self
 
     @property
     def duration_ns(self) -> int:
@@ -35,38 +38,39 @@ class PhaseInterval:
         return self.end_ns - self.start_ns
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CoveragePolicy:
+class CoveragePolicy(BaseModel, frozen=True):
     """Store explicit telemetry admission thresholds."""
 
     minimum_coverage: float = DEFAULT_MINIMUM_COVERAGE
     max_sample_gap_intervals: int = DEFAULT_MAX_SAMPLE_GAP_INTERVALS
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate coverage thresholds."""
         if not math.isfinite(self.minimum_coverage) or not 0 < self.minimum_coverage <= 1:
             raise ValueError("minimum_coverage must be greater than zero and at most one")
         if self.max_sample_gap_intervals <= 0:
             raise ValueError("max_sample_gap_intervals must be positive")
+        return self
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ScalarObservation:
+class ScalarObservation(BaseModel, frozen=True):
     """Hold one optional scalar at a local monotonic time."""
 
     monotonic_ns: int
     value: float | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one scalar observation."""
         if self.monotonic_ns <= 0:
             raise ValueError("observation time must be positive")
         if self.value is not None and (not math.isfinite(self.value) or self.value < 0):
             raise ValueError("observation value must be finite and non-negative")
+        return self
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ScalarTelemetrySummary:
+class ScalarTelemetrySummary(BaseModel, frozen=True):
     """Store coverage and aggregates for one field and phase."""
 
     field: str
@@ -87,8 +91,7 @@ class ScalarTelemetrySummary:
     policy_passed: bool
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NvidiaPhaseSummary:
+class NvidiaPhaseSummary(BaseModel, frozen=True):
     """Store normalized NVIDIA aggregates for one phase."""
 
     phase: PhaseInterval
@@ -244,7 +247,10 @@ _NVIDIA_FIELD_READERS: dict[str, Callable[[NvidiaSample], float | None]] = {
 
 def _observations(samples: tuple[NvidiaSample, ...], field: str) -> tuple[ScalarObservation, ...]:
     read = _NVIDIA_FIELD_READERS[field]
-    return tuple(ScalarObservation(monotonic_ns=sample.monotonic_ns, value=read(sample)) for sample in samples)
+    # Each NvidiaSample already passed the same checks, so skip validation for every sample and field.
+    return tuple(
+        ScalarObservation.model_construct(monotonic_ns=sample.monotonic_ns, value=read(sample)) for sample in samples
+    )
 
 
 def reduce_nvidia_phase(

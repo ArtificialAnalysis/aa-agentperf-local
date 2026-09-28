@@ -1,14 +1,15 @@
 """Build OpenAI-compatible completion request bodies."""
 
-from dataclasses import dataclass
+from typing import Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_types import JsonObject, JsonValue
 
 DEFAULT_MAX_OUTPUT_TOKENS = 16_384
 
 
-@dataclass(frozen=True, slots=True)
-class CompletionRequest:
+class CompletionRequest(BaseModel, frozen=True):
     """Describe one streamed chat completion."""
 
     messages: tuple[JsonObject, ...]
@@ -25,7 +26,8 @@ class CompletionRequest:
     extra_headers: tuple[tuple[str, str], ...] = ()
     extra_body: tuple[tuple[str, JsonValue], ...] = ()
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject values that cannot form a useful request."""
         if not self.messages:
             raise ValueError("messages must not be empty")
@@ -37,6 +39,7 @@ class CompletionRequest:
             raise ValueError("temperature must not be negative")
         if self.top_p is not None and not 0 < self.top_p <= 1:
             raise ValueError("top_p must be greater than zero and at most one")
+        return self
 
     def body(self) -> JsonObject:
         """Return the JSON body sent to an OpenAI-compatible endpoint."""

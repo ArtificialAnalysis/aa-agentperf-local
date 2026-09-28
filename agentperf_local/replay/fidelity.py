@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
 from agentperf_local.metrics.response import ToolCall
@@ -69,19 +69,20 @@ def _validate_finite_json(value: JsonValue) -> None:
             _validate_finite_json(item)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ExpectedToolCall:
+class ExpectedToolCall(BaseModel, frozen=True):
     """Describe one canonical action without provider-generated identifiers."""
 
     name: str
     arguments: JsonObject
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one expected action."""
         if not _valid_tool_name(self.name):
             raise ValueError("expected tool name must be short printable ASCII without whitespace")
         _validate_finite_json(self.arguments)
         orjson.dumps(self.arguments, option=orjson.OPT_SORT_KEYS)
+        return self
 
     @property
     def canonical_arguments(self) -> bytes:
@@ -89,8 +90,7 @@ class ExpectedToolCall:
         return orjson.dumps(self.arguments, option=orjson.OPT_SORT_KEYS)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ToolFidelityReport:
+class ToolFidelityReport(BaseModel, frozen=True):
     """Store content-free action fidelity outcomes for one response."""
 
     expected_actions: int
@@ -101,7 +101,8 @@ class ToolFidelityReport:
     highest_level: FidelityLevel
     issues: tuple[FidelityIssue, ...]
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require consistent monotonic fidelity levels."""
         if self.expected_actions < 0 or self.observed_actions < 0:
             raise ValueError("action counts must be non-negative")
@@ -122,6 +123,7 @@ class ToolFidelityReport:
             raise ValueError("highest_level does not match fidelity outcomes")
         if len(set(self.issues)) != len(self.issues):
             raise ValueError("fidelity issues must be unique")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return outcomes without names, arguments, or response text."""

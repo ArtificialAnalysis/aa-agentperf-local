@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -15,6 +15,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.pilot import Pilot
 from textual.widgets import Button, Checkbox, Digits, Input, OptionList, ProgressBar, RichLog, Static
 
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_ROOT,
     ModelCandidate,
@@ -2193,8 +2194,8 @@ def _bound_results_writer(tmp_path: Path, *, failed_qualification: bool = False)
             (output_dir / child.name).write_bytes(child.read_bytes())
         if failed_qualification:
             passing = _qualification(RUN_ID)
-            failed_outcome = replace(passing.outcomes[0], passed=False, failure_codes=("request_error",))
-            failed = replace(passing, outcomes=(failed_outcome, *passing.outcomes[1:]))
+            failed_outcome = replace_fields(passing.outcomes[0], passed=False, failure_codes=("request_error",))
+            failed = replace_fields(passing, outcomes=(failed_outcome, *passing.outcomes[1:]))
             write_runtime_qualification(output_dir / QUALIFICATION_FILENAME, failed)
 
     return write

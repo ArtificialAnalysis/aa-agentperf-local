@@ -1,13 +1,13 @@
 """Exercise the recipe folder boundary."""
 
 import shutil
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_DIGEST,
     BUNDLED_RECIPES_ROOT,
@@ -132,7 +132,7 @@ def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> N
     catalog = load_model_catalog(CATALOG_PATH)
     gemma = _named(catalog, "gemma4-12b-it-q4-0")
 
-    limited = replace(gemma, devices=("nvidia-cuda",))
+    limited = replace_fields(gemma, devices=("nvidia-cuda",))
 
     assert limited.deployment.frameworks == ("llama-cpp",)
     assert limited.devices == ("nvidia-cuda",)
@@ -184,7 +184,7 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         frameworks = ("llama-cpp", "llama-cpp")
 
     with pytest.raises(ValueError, match="at least one framework|llama.cpp|frameworks must"):
-        replace(deployment, frameworks=frameworks)
+        replace_fields(deployment, frameworks=frameworks)
 
 
 @pytest.mark.parametrize(

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.client.endpoint import MEASURED_TRANSPORT_POLICY_ID
 from agentperf_local.common.identity import sha256_bytes, sha256_file, validate_digest, validate_run_id
@@ -80,8 +81,7 @@ def _durations_agree(left: float, right: float) -> bool:
     )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TotalsTurn:
+class TotalsTurn(BaseModel, frozen=True):
     """Hold the per-turn values that public totals add up."""
 
     success: bool
@@ -97,8 +97,7 @@ class TotalsTurn:
     local_output_tokens: int
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicTotals:
+class PublicTotals(BaseModel, frozen=True):
     """Store public aggregate counters and durations."""
 
     turns: int
@@ -117,7 +116,8 @@ class PublicTotals:
     total_server_output_tokens: int
     total_local_output_tokens: int
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible aggregate values."""
         if any(value < 0 for value in self._counter_values()):
             raise ValueError("summary totals counters must be non-negative")
@@ -127,6 +127,7 @@ class PublicTotals:
             raise ValueError("successful_turns and failed_turns must add up to turns")
         if self.short_output_warnings > self.turns:
             raise ValueError("short_output_warnings must not exceed turns")
+        return self
 
     def _counter_values(self) -> tuple[int, ...]:
         """Return every integer counter in a fixed order."""
@@ -221,8 +222,7 @@ class PublicTotals:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicDistribution:
+class PublicDistribution(BaseModel, frozen=True):
     """Store one public latency distribution."""
 
     count: int
@@ -230,7 +230,8 @@ class PublicDistribution:
     p50: float | None
     p95: float | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible distribution values."""
         if self.count < 0:
             raise ValueError("distribution count must be non-negative")
@@ -243,6 +244,7 @@ class PublicDistribution:
             raise ValueError("a non-empty distribution must have all statistics")
         if self.p50 is not None and self.p95 is not None and self.p50 > self.p95:
             raise ValueError("distribution p50 must not exceed p95")
+        return self
 
     @classmethod
     def from_values(cls, values: tuple[float, ...]) -> PublicDistribution:
@@ -265,8 +267,7 @@ class PublicDistribution:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicLatencyDistributions:
+class PublicLatencyDistributions(BaseModel, frozen=True):
     """Store public latency distributions."""
 
     e2e: PublicDistribution
@@ -292,8 +293,7 @@ class PublicLatencyDistributions:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicRunPolicy:
+class PublicRunPolicy(BaseModel, frozen=True):
     """Store non-sensitive settings that affect comparability."""
 
     client_backend: str
@@ -318,7 +318,8 @@ class PublicRunPolicy:
     tool_delay_scale: float
     tool_profile_statistic: str | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject unsupported or impossible public policy values."""
         if self.client_backend not in {"python", "rust"}:
             raise ValueError("client_backend must be python or rust")
@@ -362,6 +363,7 @@ class PublicRunPolicy:
             raise ValueError("tool delay scale must be finite and non-negative")
         if self.tool_profile_statistic is not None:
             raise ValueError("public submission v1 does not support tool timing profiles")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject) -> PublicRunPolicy:
@@ -434,8 +436,7 @@ class PublicRunPolicy:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicRunResult:
+class PublicRunResult(BaseModel, frozen=True):
     """Store aggregate run data safe for the public profile."""
 
     success: bool
@@ -445,7 +446,8 @@ class PublicRunResult:
     latency_distributions_ms: PublicLatencyDistributions
     policy: PublicRunPolicy
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject failed or internally inconsistent public results.
 
         The observer rule lives here so the packaging gate and the bundle validator
@@ -476,14 +478,14 @@ class PublicRunResult:
         )
         if any(count != self.totals.successful_turns for count in distribution_counts):
             raise ValueError("every latency distribution count must equal successful turns")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return public run data as JSON data."""
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ValidatedEvidenceTurn:
+class ValidatedEvidenceTurn(BaseModel, frozen=True):
     """Store only turn fields needed to recompute public aggregates."""
 
     turn_id: str
@@ -595,7 +597,8 @@ class ValidatedEvidenceTurn:
         """Return the standard rejection error for this turn."""
         return ValueError(f"turn {self.turn_id} cannot join a public submission: {reason}")
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one turn as public benchmark evidence."""
         if not self.success or self.aborted or self.error is not None:
             raise self._rejected("public turn evidence must be successful, not aborted, and error-free")
@@ -664,6 +667,7 @@ class ValidatedEvidenceTurn:
             raise self._rejected("normalized end-to-end timing does not match raw turn evidence")
         if (expected.warning is not None) != self.has_short_output_warning:
             raise self._rejected("short-output warning does not match raw turn evidence")
+        return self
 
 
 def load_validated_evidence_turns(path: Path) -> tuple[ValidatedEvidenceTurn, ...]:
@@ -773,8 +777,7 @@ def _validate_evidence(
     _validate_failure_artifact(results_dir)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ArtifactDigests:
+class ArtifactDigests(BaseModel, frozen=True):
     """Bind the public result to exact private evidence files."""
 
     summary: str
@@ -801,8 +804,7 @@ class ArtifactDigests:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PublicSubmission:
+class PublicSubmission(BaseModel, frozen=True):
     """Store one deterministic public submission aggregate."""
 
     run_id: str
@@ -814,7 +816,8 @@ class PublicSubmission:
     payload_digest: str
     version: int = PUBLIC_SUBMISSION_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate the payload digest when the aggregate already carries one.
 
         The empty digest belongs to the draft built to compute it.
@@ -823,6 +826,7 @@ class PublicSubmission:
         validate_run_id(self.run_id, "run_id")
         if self.payload_digest:
             validate_digest(self.payload_digest, "payload_digest")
+        return self
 
     def _payload_json(self) -> JsonObject:
         return {

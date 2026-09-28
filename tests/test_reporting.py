@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from agentperf_local.client.request import CompletionRequest
 from agentperf_local.common.json_types import JsonObject, JsonValue
@@ -37,7 +38,7 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
     config = RunConfig(
         base_url="http://127.0.0.1:8000/v1",
         model="local-model",
-        api_key="never-serialize-this-key",
+        api_key=SecretStr("never-serialize-this-key"),
         client_backend="python",
         output_token_policy="recorded",
         max_output_tokens=20,

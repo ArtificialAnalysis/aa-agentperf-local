@@ -8,7 +8,7 @@
 - Same constraints apply to the use of "as any" and "any" types. This is not allowed.
 - Avoid magic numbers, everything in the code should be self-explanatory and avoid unnecessary complexity that requires consulting the outside world.
 - Write docstrings in simple English: short sentences, active voice, one idea per sentence.
-- When working in Python ensure you treat type hints as first-class citizens and use dataclasses instead of dictionaries and key-value pairs data structures.
+- When working in Python ensure you treat type hints as first-class citizens and use Pydantic models (`BaseModel`; declare `class X(BaseModel, frozen=True)` for immutable values, and put other config in the class line too) instead of dictionaries and key-value pairs data structures. Put invariants in `@model_validator(mode="after")`. Copy a model with `replace_fields`, never `model_copy(update=...)`, which skips validation. Show errors to people through `error_text`. Hold secrets in `SecretStr`. Models are for data: values that are validated, stored, or sent. Objects that do work (observers, controllers, collectors, anything holding a process, stream, widget, event, or callable) and test fakes stay plain dataclasses, so they need no `arbitrary_types_allowed`. Stdlib dataclasses also remain for `RawRead` (built inside the stream loop) and Textual `Message` subclasses.
 
 ### Testing
 

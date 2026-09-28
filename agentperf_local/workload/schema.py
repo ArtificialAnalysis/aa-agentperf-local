@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import NewFile, write_new_file
 from agentperf_local.common.json_fields import (
@@ -66,8 +66,7 @@ def _check_version(data: JsonObject, source: str) -> None:
         raise ValueError(f"{source}.version must be {FORMAT_VERSION}, got {version}")
 
 
-@dataclass(frozen=True, kw_only=True)
-class RequestMessage:
+class RequestMessage(BaseModel, frozen=True):
     """Store one sanitized message sent to the model provider."""
 
     role: str
@@ -111,8 +110,7 @@ class RequestMessage:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class ToolDefinition:
+class ToolDefinition(BaseModel, frozen=True):
     """Wrap one provider tool definition without changing its schema."""
 
     definition: JsonObject
@@ -122,8 +120,7 @@ class ToolDefinition:
         return self.definition
 
 
-@dataclass(frozen=True, kw_only=True)
-class RecordedToolCall:
+class RecordedToolCall(BaseModel, frozen=True):
     """Describe one recorded tool call after a model turn."""
 
     duration_ms: float
@@ -175,8 +172,7 @@ class RecordedToolCall:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class TraceSource:
+class TraceSource(BaseModel, frozen=True):
     """Identify the recorded model call that produced one replay turn."""
 
     recording: Path
@@ -213,8 +209,7 @@ class TraceSource:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class TraceRow:
+class TraceRow(BaseModel, frozen=True):
     """Describe one model turn in a replay task."""
 
     turn_id: str
@@ -222,7 +217,7 @@ class TraceRow:
     conversation_id: str
     conversation_idx: int
     messages: list[RequestMessage]
-    tools: list[ToolDefinition] = field(default_factory=list)
+    tools: list[ToolDefinition] = []
     target_output_tokens: int | None = None
     max_output_tokens: int | None = None
     recorded_prompt_tokens: int | None = None
@@ -230,14 +225,16 @@ class TraceRow:
     recorded_total_tokens: int | None = None
     recorded_model_duration_ms: float | None = None
     simulated_tool_delay_ms_after: float = 0.0
-    recorded_tool_calls_after: list[RecordedToolCall] = field(default_factory=list)
+    recorded_tool_calls_after: list[RecordedToolCall] = []
     source: TraceSource | None = None
     version: int = FORMAT_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require a positive request cap when the trace supplies one."""
         if self.max_output_tokens is not None and self.max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be greater than zero")
+        return self
 
     def to_dict(self) -> JsonObject:
         """Return one versioned JSONL trace row."""
@@ -311,8 +308,7 @@ class TraceRow:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class DockerToolEnvironmentSpec:
+class DockerToolEnvironmentSpec(BaseModel, frozen=True):
     """Describe an isolated Docker environment for live tool replay."""
 
     image: str
@@ -357,8 +353,7 @@ class DockerToolEnvironmentSpec:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class ManifestTask:
+class ManifestTask(BaseModel, frozen=True):
     """Point to one task trace and its recorded totals."""
 
     task_id: str
@@ -418,13 +413,12 @@ class ManifestTask:
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class ReplayManifest:
+class ReplayManifest(BaseModel, frozen=True):
     """List the tasks in one replay workload."""
 
     name: str
     source: str
-    tasks: list[ManifestTask] = field(default_factory=list)
+    tasks: list[ManifestTask] = []
     mode: ReplayMode = REPLAY_MODE
     version: int = FORMAT_VERSION
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import orjson
+from pydantic import BaseModel, field_validator, model_validator
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError, CompletionResult
@@ -108,19 +108,20 @@ _PRIVACY_BLOCK: JsonObject = {
 }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ExpectedCall:
+class ExpectedCall(BaseModel, frozen=True):
     """Describe one exact synthetic tool call."""
 
     name: str
     arguments: tuple[tuple[str, str], ...]
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject empty call expectations."""
         if not self.name:
             raise ValueError("expected call name must not be empty")
         if any(not key or not value for key, value in self.arguments):
             raise ValueError("expected call arguments must not be empty")
+        return self
 
     def argument_object(self) -> JsonObject:
         """Return the expected JSON argument object."""
@@ -131,8 +132,7 @@ class ExpectedCall:
         return {"name": self.name, "arguments": self.argument_object()}
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class QualificationProbe:
+class QualificationProbe(BaseModel, frozen=True):
     """Bind one synthetic request to structural expectations."""
 
     probe_id: QualificationProbeId
@@ -142,7 +142,8 @@ class QualificationProbe:
     require_content: bool = False
     require_capped_finish: bool = False
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate one probe contract."""
         if not self.probe_id or not self.description:
             raise ValueError("probe identity and description must not be empty")
@@ -150,6 +151,7 @@ class QualificationProbe:
             raise ValueError("a probe cannot require content and exact tool calls")
         if self.require_capped_finish and self.request.max_tokens != CAPPED_PROBE_OUTPUT_TOKENS:
             raise ValueError("a capped probe must use the one-token limit")
+        return self
 
     def digest_json(self) -> JsonObject:
         """Return the public request and expectation used for pack identity."""
@@ -175,8 +177,7 @@ def _bounded_finish_reason(finish_reason: str) -> str | None:
     return finish_reason[:MAX_FINISH_REASON_CHARACTERS] if finish_reason else None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ProbeOutcome:
+class ProbeOutcome(BaseModel, frozen=True):
     """Store allowlisted structural evidence from one probe."""
 
     probe_id: QualificationProbeId
@@ -196,14 +197,22 @@ class ProbeOutcome:
     decoded_chunk_count: int
     status_code: int | None = None
 
-    def __post_init__(self) -> None:
-        """Bound server-chosen text and reject outcomes outside the closed public contract.
+    # The endpoint chooses tool names and finish reasons, so the report caps them to its schema limits.
+    @field_validator("tool_names")
+    @classmethod
+    def _bound_tool_names(cls, tool_names: tuple[str, ...]) -> tuple[str, ...]:
+        """Cap each server-chosen tool name to the published limit."""
+        return tuple(_bounded_tool_name(name) for name in tool_names)
 
-        The endpoint chooses tool names and finish reasons, so the report caps them to its schema limits.
-        """
-        object.__setattr__(self, "tool_names", tuple(_bounded_tool_name(name) for name in self.tool_names))
-        if self.finish_reason is not None:
-            object.__setattr__(self, "finish_reason", _bounded_finish_reason(self.finish_reason))
+    @field_validator("finish_reason")
+    @classmethod
+    def _bound_finish_reason(cls, finish_reason: str | None) -> str | None:
+        """Cap a server-chosen finish reason to the published limit."""
+        return _bounded_finish_reason(finish_reason) if finish_reason is not None else None
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Reject outcomes outside the closed public contract."""
         if self.probe_id not in QUALIFICATION_PROBE_IDS:
             raise ValueError("qualification probe ID is not supported")
         if self.passed != (not self.failure_codes):
@@ -222,6 +231,7 @@ class ProbeOutcome:
                 raise ValueError("qualification token counts must be non-negative")
         if self.status_code is not None and not 100 <= self.status_code <= 599:
             raise ValueError("qualification status code is outside the HTTP range")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str) -> ProbeOutcome:
@@ -254,8 +264,7 @@ class ProbeOutcome:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RuntimeQualification:
+class RuntimeQualification(BaseModel, frozen=True):
     """Store one endpoint qualification result."""
 
     profile_id: str
@@ -266,7 +275,8 @@ class RuntimeQualification:
     # The benchmark attempt this report belongs to; None for a standalone probe of an endpoint.
     run_id: str | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate report identity and coverage."""
         if self.run_id is not None:
             validate_run_id(self.run_id, "run_id")
@@ -278,6 +288,7 @@ class RuntimeQualification:
             raise ValueError("qualification client backend is not supported")
         if tuple(outcome.probe_id for outcome in self.outcomes) != QUALIFICATION_PROBE_IDS:
             raise ValueError("qualification outcomes must cover the synthetic probes in order")
+        return self
 
     @property
     def passed(self) -> bool:

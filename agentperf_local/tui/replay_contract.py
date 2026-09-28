@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
-from urllib.parse import urlsplit
+from typing import Protocol, Self
+
+from pydantic import BaseModel, Field, model_validator
 
 from agentperf_local.client.backends import ClientBackend
-from agentperf_local.client.endpoint import normalize_base_url, url_names_loopback_host
+from agentperf_local.client.endpoint import normalize_base_url, url_is_cleartext_remote, url_names_loopback_host
 from agentperf_local.client.rust_client import validate_rustcore_available
 from agentperf_local.common.durable_files import nearest_existing_ancestor, validate_new_file_paths
 from agentperf_local.common.identity import validate_digest
@@ -135,8 +135,7 @@ class ManagedDeviceSelectionRequired(ValueError):
     """Report that this computer detected several accelerators and none was chosen."""
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedDeviceOption:
+class ManagedDeviceOption(BaseModel, frozen=True):
     """Describe one detected accelerator a managed launch can be pinned to."""
 
     index: int
@@ -144,8 +143,7 @@ class ManagedDeviceOption:
     memory_bytes: int | None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SafeHardwareSummary:
+class SafeHardwareSummary(BaseModel, frozen=True):
     """Store identifier-free host facts for preflight display."""
 
     operating_system: str
@@ -173,8 +171,7 @@ class SafeHardwareSummary:
         )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedModelAvailability:
+class ManagedModelAvailability(BaseModel, frozen=True):
     """Describe managed deployment choices for one model on this computer."""
 
     hardware: SafeHardwareSummary
@@ -193,8 +190,7 @@ class ManagedModelAvailability:
         return bool(self.deployable_offers)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedDeploymentChoice:
+class ManagedDeploymentChoice(BaseModel, frozen=True):
     """Bind one catalog model to a local framework choice."""
 
     candidate: ModelCandidate
@@ -208,11 +204,12 @@ class ManagedDeploymentChoice:
     device_index: int | None = None
     # None launches the recipe's full benchmark context; a smaller value records a reduced run.
     context_tokens: int | None = None
-    cache_root: Path = field(default_factory=default_model_cache_root)
+    cache_root: Path = Field(default_factory=default_model_cache_root)
     port: int = DEFAULT_DEPLOYMENT_PORT
     startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject choices that are not present in the model recipe."""
         validate_digest(self.catalog_digest, "catalog_digest")
         deployment = self.candidate.deployment
@@ -225,6 +222,7 @@ class ManagedDeploymentChoice:
             )
         if self.startup_timeout_seconds <= 0:
             raise ManagedLaunchSettingsProblem("the --startup-timeout-seconds value must be positive")
+        return self
 
     @property
     def resolved_context_tokens(self) -> int:
@@ -237,8 +235,7 @@ class ManagedDeploymentChoice:
         return below_benchmark_context(self.resolved_context_tokens)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ReplayRequest:
+class ReplayRequest(BaseModel, frozen=True):
     """Describe one Explorer replay without storing an API key."""
 
     manifest_path: Path
@@ -253,7 +250,8 @@ class ReplayRequest:
     candidate_revision: str | None = None
     managed_deployment: ManagedDeploymentChoice | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject invalid input before execution starts."""
         if self.api_key_env is not None and not API_KEY_ENV_PATTERN.fullmatch(self.api_key_env):
             raise ValueError("API key environment variable name is invalid")
@@ -262,14 +260,10 @@ class ReplayRequest:
                 "endpoint model must not be empty",
                 block_code=PreflightBlockCode.ENDPOINT_MODEL_EMPTY,
             )
-        scheme = urlsplit(self.normalized_base_url).scheme
+        normalized_base_url = self.normalized_base_url
         # A plain-http endpoint on the local network stays allowed while no key travels
         # with the request. Sending a key over cleartext would expose it, so that needs HTTPS.
-        if (
-            self.api_key_env is not None
-            and self.endpoint_scope is EndpointScope.NON_LOOPBACK_NAME
-            and scheme != "https"
-        ):
+        if self.api_key_env is not None and url_is_cleartext_remote(normalized_base_url):
             raise SetupProblem(
                 "a non-loopback endpoint with an API key must use HTTPS",
                 block_code=PreflightBlockCode.ENDPOINT_NEEDS_HTTPS,
@@ -285,6 +279,7 @@ class ReplayRequest:
                 raise ValueError("managed deployment URL must match its owned localhost port")
             if self.endpoint_model != candidate.profile_id:
                 raise ValueError("managed deployment model must use its recipe profile_id before launch")
+        return self
 
     @property
     def endpoint_is_loopback(self) -> bool:
@@ -307,8 +302,7 @@ class ReplayRequest:
         return EndpointScope.NON_LOOPBACK_NAME
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ReplayPreflight:
+class ReplayPreflight(BaseModel, frozen=True):
     """Store safe checks that do not contact the endpoint."""
 
     ready: bool
@@ -325,8 +319,7 @@ class ReplayPreflight:
         return self.endpoint_scope is EndpointScope.LOOPBACK_NAME
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ValidatedReplayInputs:
+class ValidatedReplayInputs(BaseModel, frozen=True):
     """Store replay counts and context demand after local freshness validation."""
 
     manifest_tasks: int
@@ -412,8 +405,7 @@ def validate_managed_replay_inputs(request: ReplayRequest) -> ValidatedReplayInp
     return inputs
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ReplayExecution:
+class ReplayExecution(BaseModel, frozen=True):
     """Store the local artifacts and headline timings produced by one replay."""
 
     artifacts: ArtifactPaths

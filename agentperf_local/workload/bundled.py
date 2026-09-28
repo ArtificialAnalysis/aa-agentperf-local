@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import platform
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel
 
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT
 
 CUSTOM_REPLAY_ID = "custom-manifest"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BundledReplay:
+class BundledReplay(BaseModel, frozen=True):
     """Describe one replay workload included in the Python package."""
 
     replay_id: str

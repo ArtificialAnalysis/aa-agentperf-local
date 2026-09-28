@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from agentperf_local.tools.docker import (
     DOCKER_CLEANUP_TIMEOUT_SECONDS,
@@ -24,8 +24,7 @@ from agentperf_local.workload.schema import RecordedToolCall
 CONTAINER_ID = "container-123"
 
 
-@dataclass(frozen=True, slots=True)
-class _DockerCall:
+class _DockerCall(BaseModel, frozen=True):
     """Hold one command the fake Docker dispatcher received."""
 
     command: list[str]

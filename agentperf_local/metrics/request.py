@@ -1,7 +1,8 @@
 """Calculate request metrics after streaming ends."""
 
 import math
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from agentperf_local.client.protocol import CompletionResult
 from agentperf_local.common.json_types import JsonValue, json_object_or_none
@@ -15,8 +16,7 @@ from agentperf_local.metrics.response import (
 from agentperf_local.metrics.tokenization import TokenCounter
 
 
-@dataclass(frozen=True, slots=True)
-class RequestMetrics:
+class RequestMetrics(BaseModel, frozen=True):
     """Hold measurements and decoded output for one request."""
 
     started_at: float

@@ -1,6 +1,6 @@
-"""Describe one dataclass as a closed JSON record.
+"""Describe one Pydantic model as a closed JSON record.
 
-A record's field list is written once, in the dataclass. Its closed key set and
+A record's field list is written once, in the model. Its closed key set and
 its encoding are derived from that list, so a new field cannot reach the reader
 without reaching the writer. Fields keep declaration order, which is the order
 the hand-written encoders emitted and the order a digest covers.
@@ -11,10 +11,11 @@ renames a field, or nests a sub-object — writes its own `to_json` instead.
 
 from __future__ import annotations
 
-from dataclasses import MISSING, fields, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonObject, JsonValue
 
@@ -28,20 +29,14 @@ class JsonRecord(Protocol):
         ...
 
 
-def json_field_names(record: type) -> frozenset[str]:
-    """Return the closed key set of one dataclass, for `require_exact_keys`."""
-    if not is_dataclass(record):
-        raise TypeError(f"{record.__name__} is not a dataclass")
-    return frozenset(field.name for field in fields(record))
+def json_field_names(record: type[BaseModel]) -> frozenset[str]:
+    """Return the closed key set of one model, for `require_exact_keys`."""
+    return frozenset(record.model_fields)
 
 
-def required_json_field_names(record: type) -> frozenset[str]:
-    """Return the fields of one dataclass that have no default, so a reader must see them."""
-    if not is_dataclass(record):
-        raise TypeError(f"{record.__name__} is not a dataclass")
-    return frozenset(
-        field.name for field in fields(record) if field.default is MISSING and field.default_factory is MISSING
-    )
+def required_json_field_names(record: type[BaseModel]) -> frozenset[str]:
+    """Return the fields of one model that have no default, so a reader must see them."""
+    return frozenset(name for name, info in record.model_fields.items() if info.is_required())
 
 
 def json_value(value: object) -> JsonValue:
@@ -59,7 +54,7 @@ def json_value(value: object) -> JsonValue:
     if isinstance(value, Path):
         # "/" keeps records identical across platforms, and Windows accepts it as a separator.
         return value.as_posix()
-    if isinstance(value, JsonRecord) and is_dataclass(value):
+    if isinstance(value, JsonRecord) and isinstance(value, BaseModel):
         return value.to_json()
     if isinstance(value, tuple | list | frozenset | set):
         return [json_value(item) for item in value]
@@ -70,8 +65,6 @@ def json_value(value: object) -> JsonValue:
     raise TypeError(f"{type(value).__name__} has no JSON encoding")
 
 
-def json_record(record: object) -> JsonObject:
-    """Encode one dataclass as a JSON object of exactly its fields, in order."""
-    if not is_dataclass(record) or isinstance(record, type):
-        raise TypeError("a JSON record must be a dataclass instance")
-    return {field.name: json_value(getattr(record, field.name)) for field in fields(record)}
+def json_record(record: BaseModel) -> JsonObject:
+    """Encode one model as a JSON object of exactly its fields, in order."""
+    return {name: json_value(value) for name, value in record}

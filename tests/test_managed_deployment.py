@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +25,7 @@ from huggingface_hub import scan_cache_dir
 from huggingface_hub.file_download import repo_folder_name
 
 from agentperf_local.common.durable_files import PRIVATE_FILE_PERMISSIONS
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_DIGEST,
     BUNDLED_RECIPES_ROOT,
@@ -343,7 +344,7 @@ def test_offers_only_compatible_frameworks_for_the_detected_gpu(
 
 def test_offers_reject_a_gpu_family_absent_from_the_model_recipe() -> None:
     candidate = _candidate()
-    nvidia_only = replace(candidate, devices=("nvidia-cuda",))
+    nvidia_only = replace_fields(candidate, devices=("nvidia-cuda",))
 
     offers = framework_offers(_hardware("Apple", "Metal"), nvidia_only, command_finder=_installed_command)
 
@@ -395,9 +396,9 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
         for name, content in parts
     )
     base = _candidate()
-    candidate = replace(
+    candidate = replace_fields(
         base,
-        deployment=replace(
+        deployment=replace_fields(
             base.deployment,
             artifact_kind="gguf-file-set",
             artifacts=artifacts,
@@ -444,7 +445,7 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
         source_revision="b" * 40,
     )
     base = _candidate()
-    deployment = replace(
+    deployment = replace_fields(
         base.deployment,
         artifact_kind="gguf-file-set",
         artifacts=(draft, target),
@@ -458,7 +459,7 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
             draft_backend_sampling=True,
         ),
     )
-    candidate = replace(
+    candidate = replace_fields(
         base,
         speculation_policy="enabled-dflash-external-draft",
         deployment=deployment,
@@ -522,11 +523,11 @@ def test_screened_recipes_keep_their_measured_launch_settings(
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     recipe = next(model for model in catalog.models if model.profile_id == profile_id)
     base = _candidate()
-    candidate = replace(
+    candidate = replace_fields(
         base,
         speculation_policy=recipe.speculation_policy,
         devices=recipe.devices,
-        deployment=replace(base.deployment, llama_cpp=recipe.deployment.llama_cpp),
+        deployment=replace_fields(base.deployment, llama_cpp=recipe.deployment.llama_cpp),
     )
     _cached_artifact(tmp_path, candidate)
     verified = ensure_model_artifacts(tmp_path, candidate)
@@ -572,11 +573,13 @@ def test_lazy_mode_recipe_passes_its_lazy_read_flag(tmp_path: Path) -> None:
     recipe = next(model for model in catalog.models if model.profile_id == "qwen35-9b-q4-k-m-mtp-strix-halo")
     base = _candidate()
     assert recipe.deployment.llama_cpp is not None
-    candidate = replace(
+    candidate = replace_fields(
         base,
         speculation_policy=recipe.speculation_policy,
         devices=recipe.devices,
-        deployment=replace(base.deployment, llama_cpp=replace(recipe.deployment.llama_cpp, lazy_mode="on-direct")),
+        deployment=replace_fields(
+            base.deployment, llama_cpp=replace_fields(recipe.deployment.llama_cpp, lazy_mode="on-direct")
+        ),
     )
     _cached_artifact(tmp_path, candidate)
     plan = create_deployment_plan(
@@ -763,7 +766,9 @@ def test_a_server_that_exits_before_readiness_names_its_own_runtime(
     hint: str,
 ) -> None:
     """A failure hint must name the runtime that failed, not whichever one is bundled."""
-    plan = replace(_owned_plan(tmp_path), framework=framework, command=(sys.executable, "-c", "raise SystemExit(1)"))
+    plan = replace_fields(
+        _owned_plan(tmp_path), framework=framework, command=(sys.executable, "-c", "raise SystemExit(1)")
+    )
     log_path = tmp_path / "deployment.log"
 
     with start_managed_deployment(plan, log_path) as deployment:
@@ -797,7 +802,7 @@ def test_amd_startup_requires_the_requested_backend_and_full_offload(
     tmp_path: Path, requested_device: str, reported_backend: str, offloaded: str, passes: bool
 ) -> None:
     base = _owned_plan(tmp_path, offloaded=offloaded)
-    plan = replace(
+    plan = replace_fields(
         base,
         accelerator_platform="amd-rocm",
         command=(*base.command, "--device", requested_device, "--platform", reported_backend),
@@ -858,7 +863,7 @@ def test_owned_deployment_accepts_a_port_left_behind_by_a_stopped_server(tmp_pat
 
 
 def test_failed_launch_leaves_the_output_directory_fresh(tmp_path: Path) -> None:
-    plan = replace(_owned_plan(tmp_path), command=(str(tmp_path / "missing-llama-server"),))
+    plan = replace_fields(_owned_plan(tmp_path), command=(str(tmp_path / "missing-llama-server"),))
     log_path = tmp_path / "deployment.log"
 
     with pytest.raises(OSError):
@@ -1195,7 +1200,7 @@ def test_cache_reuse_requires_the_pinned_commit_hash(
     candidate = _candidate()
     foreign = _cached_artifact(
         tmp_path,
-        replace(candidate, hf_revision="b" * 40),
+        replace_fields(candidate, hf_revision="b" * 40),
         content=b"bytes from an unpinned commit",
     )
 
@@ -1253,8 +1258,8 @@ def test_default_model_cache_root_honors_the_hugging_face_environment(
 
 def _dual_accelerator_snapshot(vendor: str, api: str) -> HardwareSnapshot:
     base = _hardware(vendor, api, memory_bytes=24 * 1024**3)
-    second = replace(base.accelerators[0], name=f"{vendor} second test GPU")
-    return replace(base, accelerators=(base.accelerators[0], second))
+    second = replace_fields(base.accelerators[0], name=f"{vendor} second test GPU")
+    return replace_fields(base, accelerators=(base.accelerators[0], second))
 
 
 def test_binding_without_an_index_keeps_a_single_accelerator_unpinned() -> None:
@@ -1301,7 +1306,7 @@ def test_binding_rejects_an_out_of_range_device_index() -> None:
 
 
 def test_device_environment_reaches_the_owned_child_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    plan = replace(
+    plan = replace_fields(
         _owned_plan(tmp_path),
         device_environment=(("CUDA_DEVICE_ORDER", "PCI_BUS_ID"), ("CUDA_VISIBLE_DEVICES", "1")),
     )
@@ -1324,7 +1329,7 @@ def test_device_environment_reaches_the_owned_child_process(tmp_path: Path, monk
 
 
 def test_deployment_record_json_carries_the_pinning_environment(tmp_path: Path) -> None:
-    plan = replace(_owned_plan(tmp_path), device_environment=(("CUDA_VISIBLE_DEVICES", "1"),))
+    plan = replace_fields(_owned_plan(tmp_path), device_environment=(("CUDA_VISIBLE_DEVICES", "1"),))
 
     data = plan.to_json()
 
@@ -1373,7 +1378,7 @@ def _weights_candidate() -> ModelCandidate:
         runtime_versions=(),
         moe_runner_backend=None,
     )
-    return replace(
+    return replace_fields(
         _candidate(),
         profile_id="fixture-nvfp4",
         display_name="Fixture NVFP4",
@@ -1428,7 +1433,7 @@ def test_a_gguf_recipe_can_not_name_a_fused_expert_kernel() -> None:
     gguf = next(model for model in catalog.models if model.profile_id == "gemma4-12b-it-q4-0")
 
     with pytest.raises(ValueError, match="only an SGLang recipe can name a fused-expert kernel"):
-        replace(gguf.deployment, moe_runner_backend="flashinfer_cutlass")
+        replace_fields(gguf.deployment, moe_runner_backend="flashinfer_cutlass")
 
 
 @pytest.mark.parametrize(
@@ -1444,12 +1449,12 @@ def test_owned_sglang_deployment_requires_a_pool_that_covers_the_context(
     expected_error: str | None,
 ) -> None:
     """A server can advertise the full context while holding a pool too small to reach it."""
-    plan = replace(
+    plan = replace_fields(
         _owned_plan(tmp_path),
         framework="sglang",
         accelerator_platform="nvidia-cuda",
     )
-    plan = replace(
+    plan = replace_fields(
         plan,
         command=(*plan.command, "--backend", "sglang", "--token-pool", str(token_pool)),
     )
@@ -1501,31 +1506,33 @@ def _vllm_reporting(tmp_path: Path, version: str) -> CommandFinder:
 def _vllm_candidate() -> ModelCandidate:
     """Return the weights candidate with the vLLM recipe enabled alongside SGLang."""
     candidate = _weights_candidate()
-    deployment = replace(
+    deployment = replace_fields(
         candidate.deployment,
         frameworks=("sglang", "vllm"),
         runtime_versions=(("sglang", "0.5.18"), ("vllm", "0.29.0")),
     )
-    return replace(candidate, deployment=deployment)
+    return replace_fields(candidate, deployment=deployment)
 
 
 def _mtp_candidate() -> ModelCandidate:
     """Return the GeForce MTP recipe, which drafts with the checkpoint's own nextn layers."""
-    return replace(_candidate(), speculation_policy="enabled-mtp-self-draft")
+    return replace_fields(_candidate(), speculation_policy="enabled-mtp-self-draft")
 
 
 def _recurrent_weights_candidate() -> ModelCandidate:
     """Return a hybrid weights recipe, which pins its state pool so free memory cannot size it."""
     candidate = _weights_candidate()
-    memory = replace(WEIGHTS_MEMORY, recurrent_state_slots=10, constant_state_bytes=1024)
-    deployment = replace(candidate.deployment, memory=memory)
-    return replace(candidate, deployment=deployment)
+    memory = replace_fields(WEIGHTS_MEMORY, recurrent_state_slots=10, constant_state_bytes=1024)
+    deployment = replace_fields(candidate.deployment, memory=memory)
+    return replace_fields(candidate, deployment=deployment)
 
 
 def _fused_expert_weights_candidate() -> ModelCandidate:
     """Return a weights recipe that names the NVFP4 kernel SGLang may not pick on its own."""
     candidate = _weights_candidate()
-    return replace(candidate, deployment=replace(candidate.deployment, moe_runner_backend="flashinfer_cutlass"))
+    return replace_fields(
+        candidate, deployment=replace_fields(candidate.deployment, moe_runner_backend="flashinfer_cutlass")
+    )
 
 
 def _tuned_vllm_candidate() -> ModelCandidate:
@@ -1535,12 +1542,12 @@ def _tuned_vllm_candidate() -> ModelCandidate:
         arguments=("--gpu-memory-utilization", "0.8", "--enable-prefix-caching"),
         environment=(("VLLM_ALLOW_LONG_MAX_MODEL_LEN", "1"),),
     )
-    return replace(candidate, deployment=replace(candidate.deployment, vllm=vllm))
+    return replace_fields(candidate, deployment=replace_fields(candidate.deployment, vllm=vllm))
 
 
 def _vllm_dflash_candidate() -> ModelCandidate:
     """Return the DGX Spark recipe, which drafts with a DFlash model vLLM fetches at launch."""
-    return replace(_vllm_candidate(), speculation_policy="enabled-dflash-draft")
+    return replace_fields(_vllm_candidate(), speculation_policy="enabled-dflash-draft")
 
 
 # llama.cpp proves its GPU path by the offload count; the weights runtimes by the backend they log.
@@ -1701,7 +1708,7 @@ def test_vllm_launch_serves_only_the_pinned_version(
 ) -> None:
     """vLLM can pass every startup check and still emit nonsense, so the version is pinned too."""
     base = _vllm_candidate()
-    candidate = replace(base, deployment=replace(base.deployment, runtime_versions=(("vllm", pinned),)))
+    candidate = replace_fields(base, deployment=replace_fields(base.deployment, runtime_versions=(("vllm", pinned),)))
     _cached_weights(tmp_path, candidate)
     finder = _vllm_reporting(tmp_path, reported)
 
@@ -1736,8 +1743,8 @@ def test_owned_vllm_deployment_requires_a_kv_cache_that_covers_the_context(
     expected_error: str | None,
 ) -> None:
     """vLLM can advertise the full context while holding a KV cache too small to reach it."""
-    plan = replace(_owned_plan(tmp_path), framework="vllm", accelerator_platform="nvidia-cuda")
-    plan = replace(plan, command=(*plan.command, "--backend", "vllm", "--token-pool", str(kv_cache)))
+    plan = replace_fields(_owned_plan(tmp_path), framework="vllm", accelerator_platform="nvidia-cuda")
+    plan = replace_fields(plan, command=(*plan.command, "--backend", "vllm", "--token-pool", str(kv_cache)))
     log_path = tmp_path / "deployment.log"
 
     with start_managed_deployment(plan, log_path) as deployment:
@@ -1769,8 +1776,8 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
     verified against, not a floor.
     """
     candidate = _weights_candidate()
-    deployment = replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),))
-    candidate = replace(candidate, deployment=deployment)
+    deployment = replace_fields(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),))
+    candidate = replace_fields(candidate, deployment=deployment)
     _cached_weights(tmp_path, candidate)
     finder = _sglang_reporting(tmp_path, reported)
 
@@ -1795,7 +1802,9 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
 def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A slow version command is not a missing version; the refusal must say which it was."""
     candidate = _weights_candidate()
-    candidate = replace(candidate, deployment=replace(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),)))
+    candidate = replace_fields(
+        candidate, deployment=replace_fields(candidate.deployment, runtime_versions=(("sglang", "0.5.18"),))
+    )
     _cached_weights(tmp_path, candidate)
     executable = write_python_executable(
         tmp_path / "sglang", "import time\ntime.sleep(2)\nprint('sglang version: 0.5.18')\n"

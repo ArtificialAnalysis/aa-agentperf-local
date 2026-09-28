@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend
 from agentperf_local.common.argparse_fields import (
@@ -194,8 +194,7 @@ def read_deployment_framework(namespace: argparse.Namespace) -> DeploymentFramew
     return one_of(read_string(namespace, "framework"), DEPLOYMENT_FRAMEWORK_ORDER, "--framework")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ManagedTarget:
+class ManagedTarget(BaseModel, frozen=True):
     """Name the catalog and candidate one managed command targets."""
 
     catalog: ModelCatalog

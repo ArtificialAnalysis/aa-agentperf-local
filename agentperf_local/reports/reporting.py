@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.client.endpoint import MEASURED_TRANSPORT_POLICY_ID
 from agentperf_local.common.durable_files import NewFile, commit_new_file_set, validate_new_file_paths
@@ -39,8 +39,7 @@ FAILURES_FILENAME = "failures.json"
 SUMMARY_FILENAME = "summary.json"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ShortOutputWarning:
+class ShortOutputWarning(BaseModel, frozen=True):
     """Describe output that cannot support a trustworthy normalization."""
 
     observed_output_tokens: int
@@ -68,8 +67,7 @@ class ShortOutputWarning:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NormalizationReport:
+class NormalizationReport(BaseModel, frozen=True):
     """Store output-length-normalized timing values."""
 
     observed_output_tokens: int | None
@@ -93,8 +91,7 @@ class NormalizationReport:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TimingReport:
+class TimingReport(BaseModel, frozen=True):
     """Store request timing values in milliseconds."""
 
     e2e_latency_ms: float | None
@@ -107,8 +104,7 @@ class TimingReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TokenUsageReport:
+class TokenUsageReport(BaseModel, frozen=True):
     """Store recorded, server, and locally counted token usage."""
 
     server_prompt_tokens: int | None
@@ -125,8 +121,7 @@ class TokenUsageReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ToolCallReport:
+class ToolCallReport(BaseModel, frozen=True):
     """Store one recorded and replayed tool call."""
 
     tool_name: str | None
@@ -150,8 +145,7 @@ class ToolCallReport:
         return {**json_record(self), "profile_key": None}
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TurnReport:
+class TurnReport(BaseModel, frozen=True):
     """Store report fields for one replay turn."""
 
     turn_id: str
@@ -195,8 +189,7 @@ class TurnReport:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TotalsReport:
+class TotalsReport(BaseModel, frozen=True):
     """Store totals shared by task and run summaries."""
 
     turns: int
@@ -224,8 +217,7 @@ class TotalsReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TaskReport:
+class TaskReport(BaseModel, frozen=True):
     """Store aggregate data for one replay task."""
 
     task_id: str
@@ -237,8 +229,7 @@ class TaskReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ToolGroupReport:
+class ToolGroupReport(BaseModel, frozen=True):
     """Store aggregate replay data for one tool grouping."""
 
     key: str
@@ -255,8 +246,7 @@ class ToolGroupReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ToolSummary:
+class ToolSummary(BaseModel, frozen=True):
     """Store overall and grouped tool replay totals."""
 
     overall: ToolGroupReport
@@ -276,8 +266,7 @@ class ToolSummary:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DistributionReport:
+class DistributionReport(BaseModel, frozen=True):
     """Store a small latency distribution."""
 
     count: int
@@ -290,8 +279,7 @@ class DistributionReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class FailureReport:
+class FailureReport(BaseModel, frozen=True):
     """Store one failed turn and its error details."""
 
     task_id: str
@@ -304,8 +292,7 @@ class FailureReport:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ArtifactPaths:
+class ArtifactPaths(BaseModel, frozen=True):
     """Point to every artifact written for one run."""
 
     turns: Path
@@ -315,8 +302,7 @@ class ArtifactPaths:
     summary: Path
 
 
-@dataclass(slots=True)
-class _ToolAccumulator:
+class _ToolAccumulator(BaseModel):
     calls: int = 0
     recorded_duration_ms: float = 0.0
     replayed_duration_ms: float = 0.0
@@ -622,8 +608,7 @@ def summarize_distribution(values: tuple[float, ...]) -> DistributionReport:
     )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunTimingSummary:
+class RunTimingSummary(BaseModel, frozen=True):
     """Store headline turn timings shared by the summary writer and the TUI."""
 
     ttft_p50_ms: float | None

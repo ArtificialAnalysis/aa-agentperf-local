@@ -20,6 +20,7 @@ from agentperf_local.cli.submit import (
 )
 from agentperf_local.cli.workload import convert_command
 from agentperf_local.common.argparse_fields import read_string
+from agentperf_local.common.models import error_text
 
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "convert": convert_command,
@@ -47,5 +48,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("error: interrupted", file=sys.stderr)
         return INTERRUPTED_STATUS
     except Exception as error:
-        print(f"error: {error}", file=sys.stderr)
+        print(f"error: {error_text(error)}", file=sys.stderr)
         return 1

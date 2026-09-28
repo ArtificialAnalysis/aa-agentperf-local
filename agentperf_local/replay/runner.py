@@ -9,7 +9,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter, time
-from typing import Literal, Protocol
+from typing import Literal, Protocol, Self
+
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.client.backends import ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionResult
@@ -69,17 +71,18 @@ class _LiveDocker:
     image_present: ImageProbe
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunStartedBoundary:
+class RunStartedBoundary(BaseModel, frozen=True):
     """Describe immutable work before the first request starts."""
 
     tasks: int
     turns: int
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject impossible replay plans."""
         if self.tasks < 0 or self.turns < 0:
             raise ValueError("run plan counts must be non-negative")
+        return self
 
 
 def _validate_turn_position(*, task: int, tasks: int, task_turn: int, task_turns: int, turn: int, turns: int) -> None:
@@ -93,8 +96,7 @@ def _validate_turn_position(*, task: int, tasks: int, task_turn: int, task_turns
             raise ValueError(f"{label} must be between one and its total")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TurnStartedBoundary:
+class TurnStartedBoundary(BaseModel, frozen=True):
     """Describe the request about to be sent: where it sits in the run and how large it is.
 
     The size is the count the recording carries, not one the served model produced,
@@ -110,7 +112,8 @@ class TurnStartedBoundary:
     turns: int
     recorded_prompt_tokens: int | None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject an impossible position or a negative prompt size."""
         _validate_turn_position(
             task=self.task,
@@ -122,10 +125,10 @@ class TurnStartedBoundary:
         )
         if self.recorded_prompt_tokens is not None and self.recorded_prompt_tokens < 0:
             raise ValueError("recorded prompt tokens must be non-negative")
+        return self
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TurnCompletedBoundary:
+class TurnCompletedBoundary(BaseModel, frozen=True):
     """Describe one completed turn without response content or identifiers."""
 
     task: int
@@ -143,7 +146,8 @@ class TurnCompletedBoundary:
     generation_time_ms: float | None
     success: bool
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject inconsistent or non-finite turn progress."""
         _validate_turn_position(
             task=self.task,
@@ -170,10 +174,10 @@ class TurnCompletedBoundary:
             raise ValueError("generation time must not exceed end-to-end latency")
         if self.output_tokens is not None and self.output_tokens < 0:
             raise ValueError("output tokens must be non-negative")
+        return self
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunFinishedBoundary:
+class RunFinishedBoundary(BaseModel, frozen=True):
     """Describe a completed finite replay without private run fields."""
 
     completed_tasks: int
@@ -183,7 +187,8 @@ class RunFinishedBoundary:
     elapsed_ms: float
     success: bool
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject inconsistent final progress."""
         for completed, total, label in (
             (self.completed_tasks, self.tasks, "completed tasks"),
@@ -195,6 +200,7 @@ class RunFinishedBoundary:
             raise ValueError("elapsed_ms must be finite and non-negative")
         if self.success and (self.completed_tasks != self.tasks or self.completed_turns != self.turns):
             raise ValueError("a successful run must complete every task and turn")
+        return self
 
 
 type RunBoundaryEvent = RunStartedBoundary | TurnStartedBoundary | TurnCompletedBoundary | RunFinishedBoundary
@@ -225,8 +231,7 @@ class CompositeRunObserver:
             observer.on_boundary(event)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ToolReplayResult:
+class ToolReplayResult(BaseModel, frozen=True):
     """Store how one recorded tool call was replayed."""
 
     call: RecordedToolCall
@@ -238,8 +243,7 @@ class ToolReplayResult:
     exception_info: str = ""
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TurnResult:
+class TurnResult(BaseModel, frozen=True):
     """Store one attempted model turn and its tool replay."""
 
     turn_id: str
@@ -272,8 +276,7 @@ class TurnResult:
         return sum(replay.replayed_duration_ms for replay in self.tool_replays)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TaskResult:
+class TaskResult(BaseModel, frozen=True):
     """Store the ordered turns from one manifest task."""
 
     task_id: str
@@ -286,8 +289,7 @@ class TaskResult:
         return all(turn.success for turn in self.turns)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RunResult:
+class RunResult(BaseModel, frozen=True):
     """Store all task results from one finite replay."""
 
     manifest_path: Path
@@ -301,7 +303,8 @@ class RunResult:
     observer_enabled: bool
     tasks: tuple[TaskResult, ...]
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject invalid run clocks and observer metadata."""
         values = (
             self.started_at,
@@ -317,6 +320,7 @@ class RunResult:
             raise ValueError("run durations must be non-negative")
         if not self.observer_enabled and self.observer_duration_seconds != 0:
             raise ValueError("observer duration requires an enabled observer")
+        return self
 
     @property
     def turns(self) -> tuple[TurnResult, ...]:
@@ -329,8 +333,7 @@ class RunResult:
         return all(task.success for task in self.tasks)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _PreparedTask:
+class _PreparedTask(BaseModel, frozen=True):
     task: ManifestTask
     trace_path: Path
     rows: tuple[TraceRow, ...]
@@ -396,7 +399,7 @@ def _create_client(config: RunConfig) -> CompletionClient:
     return streaming_client(
         config.client_backend,
         base_url=config.base_url,
-        api_key=config.api_key,
+        api_key=config.api_key_text,
         timeout_seconds=config.request_timeout_seconds,
         max_connections=SEQUENTIAL_MAX_CONNECTIONS,
     )
@@ -417,7 +420,7 @@ def _max_output_tokens(row: TraceRow, config: RunConfig) -> int:
     if target is None:
         # Unreachable under exact: _prepare_tasks refuses a suite whose rows carry no target.
         return config.max_output_tokens
-    # exact forbids a margin (RunConfig.__post_init__), so this is the bare target there.
+    # exact forbids a margin (RunConfig.check_invariants), so this is the bare target there.
     return max(1, min(config.max_output_tokens, target + config.output_token_margin))
 
 

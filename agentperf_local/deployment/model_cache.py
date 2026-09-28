@@ -14,13 +14,14 @@ import shutil
 import stat
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Self
 
 import httpx
 import orjson
 from huggingface_hub import try_to_load_from_cache
 from huggingface_hub.file_download import repo_folder_name
+from pydantic import BaseModel, model_validator
 
 from agentperf_local.common.durable_files import (
     PRIVATE_FILE_PERMISSIONS,
@@ -93,8 +94,7 @@ class _CorruptDownloadError(ValueError):
     """Report downloaded bytes that can never verify, so the partial file must be discarded."""
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class VerifiedArtifact:
+class VerifiedArtifact(BaseModel, frozen=True):
     """Store one verified model artifact without hashing it again."""
 
     filename: str
@@ -106,18 +106,19 @@ class VerifiedArtifact:
     modified_ns: int
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class VerifiedDeployment:
+class VerifiedDeployment(BaseModel, frozen=True):
     """Store every verified file of one recipe and the path its runtime is given."""
 
     model_path: Path
     artifacts: tuple[VerifiedArtifact, ...]
     draft_model_path: Path | None = None
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Require at least one verified file."""
         if not self.artifacts:
             raise ValueError("a verified deployment must hold at least one artifact")
+        return self
 
     @property
     def size_bytes(self) -> int:

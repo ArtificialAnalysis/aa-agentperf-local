@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import orjson
+from pydantic import BaseModel, model_validator
 
 from agentperf_local import __version__
 from agentperf_local.common.durable_files import NewFile, write_new_file
@@ -40,8 +40,7 @@ PRODUCER_CLIENT_NAME = "agentperf-local"
 type SourceState = Literal["clean", "dirty", "not_git", "unavailable"]
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SubmissionContext:
+class SubmissionContext(BaseModel, frozen=True):
     """Identify the immutable suite, model semantics, runtime recipe, and served context."""
 
     suite_id: str
@@ -54,7 +53,8 @@ class SubmissionContext:
     # full run. The workload digest stays untouched: bundled replays pin that digest.
     context_tokens: int = BENCHMARK_CONTEXT_TOKENS
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Reject ambiguous or privacy-sensitive identifiers."""
         for field, value in (
             ("suite_id", self.suite_id),
@@ -67,6 +67,7 @@ class SubmissionContext:
         validate_digest(self.model_artifact_digest, "model_artifact_digest")
         if self.context_tokens <= 0 or self.context_tokens > BENCHMARK_CONTEXT_TOKENS:
             raise ValueError(f"context_tokens must be between 1 and {BENCHMARK_CONTEXT_TOKENS}")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject, source: str = "benchmark") -> SubmissionContext:
@@ -99,15 +100,15 @@ class SubmissionContext:
         return json_record(self)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SourceProvenance:
+class SourceProvenance(BaseModel, frozen=True):
     """Identify the benchmark client source used for a run."""
 
     client_version: str
     source_revision: str | None
     source_state: SourceState
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate public source provenance."""
         validate_identifier(self.client_version, "client_version")
         if self.source_state not in {"clean", "dirty", "not_git", "unavailable"}:
@@ -119,6 +120,7 @@ class SourceProvenance:
             raise ValueError("source_revision must be 40 lowercase hex digits or null")
         if self.source_state in {"clean", "dirty"} and self.source_revision is None:
             raise ValueError("clean or dirty source state requires a source revision")
+        return self
 
     @classmethod
     def from_json(cls, data: JsonObject) -> SourceProvenance:
@@ -152,8 +154,7 @@ class SourceProvenance:
         }
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class MeasurementBinding:
+class MeasurementBinding(BaseModel, frozen=True):
     """Bind one run to its inputs before inference starts."""
 
     # Minted before inference so every artifact of one attempt shares one identifier.
@@ -175,7 +176,8 @@ class MeasurementBinding:
     deployment_digest: str | None = None
     version: int = MEASUREMENT_BINDING_VERSION
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
         """Validate measurement binding digests and the context observation."""
         validate_run_id(self.run_id, "run_id")
         validate_digest(self.manifest_digest, "manifest_digest")
@@ -186,6 +188,7 @@ class MeasurementBinding:
             raise ValueError("manifest_digest must match benchmark.suite_digest")
         if self.observed_context_tokens is not None and self.observed_context_tokens <= 0:
             raise ValueError("observed_context_tokens must be positive or null")
+        return self
 
     def to_json(self) -> JsonObject:
         """Return private run-binding data."""

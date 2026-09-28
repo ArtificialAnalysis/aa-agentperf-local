@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from functools import cache
 
+from pydantic import BaseModel
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
@@ -130,8 +130,7 @@ def chart_width(bins: int = DEFAULT_BIN_COUNT) -> int:
     return bins * (BAR_WIDTH + BAR_GAP) - BAR_GAP
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Histogram:
+class Histogram(BaseModel, frozen=True):
     """Store binned counts of one metric with the bounds and percentiles the chart labels."""
 
     bins: tuple[int, ...]

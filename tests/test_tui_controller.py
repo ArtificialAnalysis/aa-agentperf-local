@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from agentperf_local.client.backends import ClientBackend
+from agentperf_local.common.models import raising_validator_errors, replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_DIGEST,
     BUNDLED_RECIPES_ROOT,
@@ -139,7 +140,7 @@ def _apple_hardware() -> HardwareSnapshot:
 
 
 def _multi_accelerator_hardware() -> HardwareSnapshot:
-    return replace(
+    return replace_fields(
         _hardware(),
         accelerators=(
             *_hardware().accelerators,
@@ -353,7 +354,7 @@ def test_managed_choice_names_launch_settings_no_setup_field_can_fix(
 ) -> None:
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
 
-    with pytest.raises(ManagedLaunchSettingsProblem):
+    with pytest.raises(ManagedLaunchSettingsProblem), raising_validator_errors():
         ManagedDeploymentChoice(
             candidate=_named(catalog, "gemma4-12b-it-q4-0"),
             catalog_as_of=catalog.as_of,
@@ -365,7 +366,7 @@ def test_managed_choice_names_launch_settings_no_setup_field_can_fix(
 
 
 def test_replay_request_rejects_a_cleartext_remote_endpoint_that_sends_a_key(tmp_path: Path) -> None:
-    with pytest.raises(SetupProblem) as problem:
+    with pytest.raises(SetupProblem) as problem, raising_validator_errors():
         ReplayRequest(
             manifest_path=_manifest(tmp_path),
             output_dir=tmp_path / "results",
@@ -392,7 +393,7 @@ def test_replay_request_names_the_setup_problem_it_rejects(
     endpoint_model: str,
     expected_block_code: PreflightBlockCode,
 ) -> None:
-    with pytest.raises(SetupProblem) as problem:
+    with pytest.raises(SetupProblem) as problem, raising_validator_errors():
         ReplayRequest(
             manifest_path=_manifest(tmp_path),
             output_dir=tmp_path / "results",

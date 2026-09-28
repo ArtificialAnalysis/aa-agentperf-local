@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 
 import orjson
+from pydantic import BaseModel
 
 from tests.sse_ignore_eos import ignore_eos_max_tokens_of, parse_request, rewrite_event
 
@@ -23,8 +23,7 @@ SSE_OK_RESPONSE = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class CapturedRequest:
+class CapturedRequest(BaseModel, frozen=True):
     """Store one request received by the localhost server."""
 
     method: str
@@ -33,12 +32,12 @@ class CapturedRequest:
     raw_headers: tuple[tuple[str, str], ...]
     body: bytes
     # The body parsed once, so the server and the tests read the same request facts.
-    json: dict[str, object] | None
+    body_json: dict[str, object] | None
 
     @property
     def asks_ignore_eos(self) -> bool:
         """Return whether this completion request carried the ignore_eos field."""
-        return self.json is not None and self.json.get("ignore_eos") is True
+        return self.body_json is not None and self.body_json.get("ignore_eos") is True
 
 
 class LocalSseServer:
@@ -170,7 +169,7 @@ class LocalSseServer:
                 response_chunks = self._responses[min(self._response_number, len(self._responses) - 1)]
                 self._response_number += 1
                 if self._honours_ignore_eos:
-                    response_chunks = _honour_ignore_eos(request.json, response_chunks)
+                    response_chunks = _honour_ignore_eos(request.body_json, response_chunks)
                 writer.write(
                     _response_head(
                         self._status,
@@ -247,7 +246,7 @@ async def _read_request(reader: asyncio.StreamReader) -> CapturedRequest:
         headers=headers,
         raw_headers=tuple(raw_headers),
         body=body,
-        json=parse_request(body) if body else None,
+        body_json=parse_request(body) if body else None,
     )
 
 

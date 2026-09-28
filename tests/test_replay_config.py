@@ -1,4 +1,4 @@
-"""Exercise replay configuration validation through its public dataclasses."""
+"""Exercise replay configuration validation through its public models."""
 
 import math
 from typing import Any

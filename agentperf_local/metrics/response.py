@@ -1,8 +1,7 @@
 """Reconstruct response channels from decoded stream events."""
 
-from dataclasses import dataclass
-
 import orjson
+from pydantic import BaseModel
 
 from agentperf_local.common.json_types import JsonObject, JsonValue, json_object_or_none
 from agentperf_local.metrics.decode import StreamChunk
@@ -10,8 +9,7 @@ from agentperf_local.metrics.decode import StreamChunk
 INVALID_TOOL_CALL_INDEX = -1
 
 
-@dataclass(frozen=True, slots=True)
-class ToolCall:
+class ToolCall(BaseModel, frozen=True):
     """Hold one reconstructed function call."""
 
     index: int
@@ -20,8 +18,7 @@ class ToolCall:
     arguments: str
 
 
-@dataclass(frozen=True, slots=True)
-class ResponseChannels:
+class ResponseChannels(BaseModel, frozen=True):
     """Hold separated model output channels."""
 
     content: str
@@ -30,8 +27,7 @@ class ResponseChannels:
     finish_reason: str | None
 
 
-@dataclass(slots=True)
-class _ToolCallParts:
+class _ToolCallParts(BaseModel):
     identifier: str | None = None
     name: str = ""
     arguments: str = ""

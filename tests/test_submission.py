@@ -4,16 +4,18 @@ import hashlib
 import math
 import statistics
 from collections.abc import Callable
-from dataclasses import dataclass, replace
 from pathlib import Path
 
 import orjson
 import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
+from pydantic import BaseModel
+from pydantic import ValidationError as ModelValidationError
 
 from agentperf_local.cli import main
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object, pretty_json_bytes
+from agentperf_local.common.models import error_text, replace_fields
 from agentperf_local.deployment.qualification import (
     QUALIFICATION_FILENAME,
     QUALIFICATION_PROBE_IDS,
@@ -568,8 +570,7 @@ def test_prepare_submission_cli_is_local_and_no_clobber(
     assert "outside the private results directory" in capsys.readouterr().err
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _SyntheticTurn:
+class _SyntheticTurn(BaseModel, frozen=True):
     """Hold one synthetic turn's duration inputs."""
 
     e2e_ms: float
@@ -1196,7 +1197,7 @@ def test_public_submission_rejects_workload_changed_after_binding(tmp_path: Path
 @pytest.mark.parametrize("accelerator_count", (0, 2))
 def test_attached_submission_keeps_unattested_hardware_private(tmp_path: Path, accelerator_count: int) -> None:
     base_hardware = _hardware()
-    hardware = replace(
+    hardware = replace_fields(
         base_hardware,
         accelerators=base_hardware.accelerators * accelerator_count,
         warnings=("no_supported_accelerator",) if accelerator_count == 0 else (),
@@ -1410,10 +1411,10 @@ def test_public_submission_names_the_turn_it_rejects(
     turns_path.write_bytes(b"".join(orjson.dumps(turn, option=orjson.OPT_APPEND_NEWLINE) for turn in turns))
     turn_id = turns[0]["turn_id"]
 
-    with pytest.raises(ValueError) as rejection:
+    with pytest.raises(ModelValidationError) as rejection:
         build_public_submission(results_dir)
 
-    assert str(rejection.value) == f"turn {turn_id} cannot join a public submission: {reason}"
+    assert error_text(rejection.value) == f"turn {turn_id} cannot join a public submission: {reason}"
 
 
 @pytest.mark.parametrize(
