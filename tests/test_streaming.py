@@ -8,6 +8,7 @@ from time import perf_counter
 
 import orjson
 import pytest
+from pydantic import SecretStr
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend, streaming_client
 from agentperf_local.client.endpoint import MEASURED_USER_AGENT, normalize_base_url
@@ -336,7 +337,7 @@ async def test_python_client_streams_raw_bytes_from_localhost() -> None:
     events = _events()
     async with LocalSseServer(events, inter_chunk_delay_seconds=STREAM_DELAY_SECONDS) as server:
         client = streaming_client(
-            "python", base_url=server.base_url, api_key="secret", timeout_seconds=2.0, max_connections=1
+            "python", base_url=server.base_url, api_key=SecretStr("secret"), timeout_seconds=2.0, max_connections=1
         )
         try:
             result = await client.complete(_request())
@@ -524,7 +525,7 @@ async def test_rust_and_python_clients_send_identical_request_headers() -> None:
     async with LocalSseServer(_events()) as server:
         for backend in CLIENT_BACKENDS:
             client = streaming_client(
-                backend, base_url=server.base_url, api_key="secret", timeout_seconds=2.0, max_connections=1
+                backend, base_url=server.base_url, api_key=SecretStr("secret"), timeout_seconds=2.0, max_connections=1
             )
             try:
                 await client.complete(request)

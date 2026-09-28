@@ -30,12 +30,12 @@ DEFAULT_OUTPUT_TOKEN_MARGIN = 0
 DEFAULT_TOOL_DELAY_SCALE = 1.0
 
 
-def read_api_key_env(name: str) -> str | None:
+def read_api_key_env(name: str) -> SecretStr | None:
     """Read one API key value, or return None when it is unset, empty, or holds whitespace."""
     value = os.environ.get(name)
     if not value or any(character.isspace() for character in value):
         return None
-    return value
+    return SecretStr(value)
 
 
 # How each request's output length is set:
@@ -101,11 +101,6 @@ class RunConfig(BaseModel, frozen=True):
     live_network: str | None = None
     live_timeout_seconds: float = DEFAULT_LIVE_TOOL_TIMEOUT_SECONDS
     live_docker_executable: str | None = None
-
-    @property
-    def api_key_text(self) -> str | None:
-        """Return the API key text for the request header, or None when there is no key."""
-        return None if self.api_key is None else self.api_key.get_secret_value()
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:

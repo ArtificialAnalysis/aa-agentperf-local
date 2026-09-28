@@ -15,7 +15,7 @@ from enum import StrEnum
 
 import httpx
 import orjson
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from agentperf_local.client.backends import ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError
@@ -134,13 +134,13 @@ def _unobserved(reason: ContextObservationReason) -> ContextProbeResult:
     return ContextProbeResult(observed_tokens=None, reason=reason)
 
 
-def probe_served_context_tokens(base_url: str, model: str, api_key: str | None = None) -> ContextProbeResult:
+def probe_served_context_tokens(base_url: str, model: str, api_key: SecretStr | None = None) -> ContextProbeResult:
     """Ask an OpenAI-compatible endpoint what context length it serves one model at.
 
     Endpoint misbehavior never raises: any failure to observe returns None with the
     reason, because an unknown context is itself non-comparable evidence.
     """
-    headers = {} if api_key is None else {"Authorization": f"Bearer {api_key}"}
+    headers = {} if api_key is None else {"Authorization": f"Bearer {api_key.get_secret_value()}"}
     try:
         with httpx.Client(timeout=CONTEXT_PROBE_TIMEOUT_SECONDS, headers=headers) as client:
             response = client.get(f"{base_url.rstrip('/')}/models")
@@ -231,7 +231,7 @@ class IgnoreEosProbeResult(BaseModel, frozen=True):
 
 
 def is_ollama_endpoint(
-    base_url: str, api_key: str | None = None, *, deadline_seconds: float = OLLAMA_IDENTITY_TIMEOUT_SECONDS
+    base_url: str, api_key: SecretStr | None = None, *, deadline_seconds: float = OLLAMA_IDENTITY_TIMEOUT_SECONDS
 ) -> bool:
     """Return whether the server behind this OpenAI-compatible base URL is Ollama.
 
@@ -240,7 +240,7 @@ def is_ollama_endpoint(
     return asyncio.run(_answers_as_ollama(base_url, api_key, deadline_seconds))
 
 
-async def _answers_as_ollama(base_url: str, api_key: str | None, deadline_seconds: float) -> bool:
+async def _answers_as_ollama(base_url: str, api_key: SecretStr | None, deadline_seconds: float) -> bool:
     """Ask both Ollama identity paths under one overall deadline.
 
     Ollama serves its native API next to the OpenAI one. GET /api/version answers with a
@@ -250,7 +250,7 @@ async def _answers_as_ollama(base_url: str, api_key: str | None, deadline_second
     bytes would outlast them; the deadline bounds the whole check.
     """
     root = base_url.rstrip("/").removesuffix(OPENAI_COMPATIBLE_PATH_SUFFIX)
-    headers = {} if api_key is None else {"Authorization": f"Bearer {api_key}"}
+    headers = {} if api_key is None else {"Authorization": f"Bearer {api_key.get_secret_value()}"}
     try:
         async with (
             asyncio.timeout(deadline_seconds),
@@ -330,7 +330,7 @@ async def probe_ignore_eos(
     base_url: str,
     model: str,
     client_backend: ClientBackend,
-    api_key: str | None = None,
+    api_key: SecretStr | None = None,
 ) -> IgnoreEosProbeResult:
     """Return whether this endpoint generates past end-of-sequence when asked to.
 

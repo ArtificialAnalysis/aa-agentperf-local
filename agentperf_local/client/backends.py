@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import SecretStr
+
 from agentperf_local.client.protocol import CompletionClient
 from agentperf_local.client.python_client import PythonStreamingClient
 from agentperf_local.client.rust_client import RustStreamingClient
@@ -20,7 +22,7 @@ def streaming_client(
     client_backend: ClientBackend,
     *,
     base_url: str,
-    api_key: str | None,
+    api_key: SecretStr | None,
     timeout_seconds: float,
     max_connections: int,
 ) -> CompletionClient:

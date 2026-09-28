@@ -9,6 +9,7 @@ from types import ModuleType
 from typing import Protocol, cast
 
 import orjson
+from pydantic import SecretStr
 
 from agentperf_local.client.endpoint import normalize_base_url
 from agentperf_local.client.protocol import CompletionError, CompletionResult, RawRead
@@ -121,7 +122,7 @@ class RustStreamingClient:
     def __init__(
         self,
         base_url: str,
-        api_key: str | None = None,
+        api_key: SecretStr | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_connections: int = DEFAULT_MAX_CONNECTIONS,
     ) -> None:
@@ -133,7 +134,7 @@ class RustStreamingClient:
         module = _load_rustcore()
         self._core = module.RustCoreClient(
             normalized_base_url,
-            api_key,
+            None if api_key is None else api_key.get_secret_value(),
             timeout_seconds,
             max_connections,
             perf_counter(),

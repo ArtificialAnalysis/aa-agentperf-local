@@ -6,6 +6,7 @@ from time import perf_counter
 
 import httpx
 import orjson
+from pydantic import SecretStr
 
 from agentperf_local.client.endpoint import COMPLETION_PATH, MEASURED_USER_AGENT, normalize_base_url
 from agentperf_local.client.protocol import CompletionError, CompletionResult, RawRead
@@ -71,7 +72,7 @@ class PythonStreamingClient:
     def __init__(
         self,
         base_url: str,
-        api_key: str | None = None,
+        api_key: SecretStr | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_connections: int = DEFAULT_MAX_CONNECTIONS,
     ) -> None:
@@ -87,8 +88,8 @@ class PythonStreamingClient:
             "content-type": "application/json",
             "user-agent": MEASURED_USER_AGENT,
         }
-        if api_key:
-            headers["authorization"] = f"Bearer {api_key}"
+        if api_key is not None:
+            headers["authorization"] = f"Bearer {api_key.get_secret_value()}"
         limits = httpx.Limits(
             max_connections=max_connections,
             max_keepalive_connections=max_connections,

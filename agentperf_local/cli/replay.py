@@ -10,8 +10,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import SecretStr
-
 from agentperf_local.cli.options import (
     print_json,
     read_api_key,
@@ -135,11 +133,10 @@ def _run_status(result: RunResult, failures_path: Path) -> int:
 
 def _run_config(namespace: argparse.Namespace, output_token_policy: OutputTokenPolicy) -> RunConfig:
     tool_mode = read_tool_mode(namespace)
-    api_key = read_api_key(namespace)
     return RunConfig(
         base_url=read_string(namespace, "base_url"),
         model=read_string(namespace, "model"),
-        api_key=None if api_key is None else SecretStr(api_key),
+        api_key=read_api_key(namespace),
         client_backend=read_client_backend(namespace),
         request_timeout_seconds=read_number(namespace, "timeout_seconds"),
         output_token_policy=output_token_policy,
@@ -418,7 +415,7 @@ def run_command(namespace: argparse.Namespace) -> int:
     probe = probe_served_context_tokens(
         config.base_url,
         config.model,
-        api_key=config.api_key_text,
+        api_key=config.api_key,
     )
     run_context = RunContextFacts(
         requested_tokens=BENCHMARK_CONTEXT_TOKENS,
@@ -431,7 +428,7 @@ def run_command(namespace: argparse.Namespace) -> int:
     # the command never switches the policy on the user's behalf.
     if config.output_token_policy == "exact":
         capability = asyncio.run(
-            probe_ignore_eos(config.base_url, config.model, config.client_backend, api_key=config.api_key_text)
+            probe_ignore_eos(config.base_url, config.model, config.client_backend, api_key=config.api_key)
         )
         if capability.output_token_policy != config.output_token_policy:
             raise RuntimeError(

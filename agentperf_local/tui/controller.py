@@ -95,7 +95,7 @@ async def _execute_validated_replay(
     run_id: str,
 ) -> ReplayExecution:
     """Run one attached replay under the run identifier its measurement binding already carries."""
-    api_key = None if request.api_key_env is None else SecretStr(require_api_key_value(request.api_key_env))
+    api_key = None if request.api_key_env is None else require_api_key_value(request.api_key_env)
     config = RunConfig(
         base_url=request.normalized_base_url,
         model=request.endpoint_model,
@@ -199,11 +199,11 @@ class LocalReplayController:
     """Run one attached endpoint replay with the existing measured client."""
 
     hardware_collector: Callable[[], HardwareSnapshot] = collect_hardware_snapshot
-    context_prober: Callable[[str, str, str | None], ContextProbeResult] = probe_served_context_tokens
-    ignore_eos_prober: Callable[[str, str, ClientBackend, str | None], Awaitable[IgnoreEosProbeResult]] = (
+    context_prober: Callable[[str, str, SecretStr | None], ContextProbeResult] = probe_served_context_tokens
+    ignore_eos_prober: Callable[[str, str, ClientBackend, SecretStr | None], Awaitable[IgnoreEosProbeResult]] = (
         probe_ignore_eos
     )
-    ollama_detector: Callable[[str, str | None], bool] = is_ollama_endpoint
+    ollama_detector: Callable[[str, SecretStr | None], bool] = is_ollama_endpoint
 
     def preflight(self, request: ReplayRequest) -> ReplayPreflight:
         """Validate the manifest and fresh artifact destinations."""

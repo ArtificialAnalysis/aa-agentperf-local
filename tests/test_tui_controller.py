@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.common.models import raising_validator_errors, replace_fields
@@ -187,14 +188,14 @@ class _SilentObserver:
         """Ignore one batch of server log lines."""
 
 
-def _listed_model_probe(base_url: str, model: str, api_key: str | None = None) -> ContextProbeResult:
+def _listed_model_probe(base_url: str, model: str, api_key: SecretStr | None = None) -> ContextProbeResult:
     """Answer as a reachable server that lists the model above the full benchmark context."""
     del base_url, model, api_key
     return ContextProbeResult(observed_tokens=131_072, reason=ContextObservationReason.REPORTED)
 
 
 async def _honouring_probe(
-    base_url: str, model: str, client_backend: ClientBackend, api_key: str | None = None
+    base_url: str, model: str, client_backend: ClientBackend, api_key: SecretStr | None = None
 ) -> IgnoreEosProbeResult:
     """Answer the capability probe without touching a socket."""
     del base_url, model, client_backend, api_key
@@ -204,7 +205,7 @@ async def _honouring_probe(
     )
 
 
-def _not_ollama(base_url: str, api_key: str | None = None) -> bool:
+def _not_ollama(base_url: str, api_key: SecretStr | None = None) -> bool:
     """Answer the Ollama identity check without touching a socket."""
     del base_url, api_key
     return False
@@ -826,8 +827,8 @@ async def test_attached_execute_checks_the_server_with_the_key_and_refuses_one_t
     probes: list[tuple[str, str, str | None]] = []
     replays: list[Path] = []
 
-    def probe(base_url: str, model: str, api_key: str | None = None) -> ContextProbeResult:
-        probes.append((base_url, model, api_key))
+    def probe(base_url: str, model: str, api_key: SecretStr | None = None) -> ContextProbeResult:
+        probes.append((base_url, model, None if api_key is None else api_key.get_secret_value()))
         observed = 131_072 if reason is ContextObservationReason.REPORTED else None
         return ContextProbeResult(observed_tokens=observed, reason=reason)
 
