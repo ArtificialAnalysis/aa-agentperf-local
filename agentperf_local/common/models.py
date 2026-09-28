@@ -4,6 +4,8 @@
 - `raised_error`: return the exception a validator raised inside a `ValidationError`.
 - `raising_validator_errors`: re-raise that exception in place of its `ValidationError`.
 - `error_text`: show an error to a person, without Pydantic's wrapper text.
+- `read_record`: parse one JSON document into a model, strictly, naming its source in errors.
+- `read_object`: the same for a JSON object that is already decoded.
 """
 
 from __future__ import annotations
@@ -11,7 +13,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import orjson
 from pydantic import BaseModel, ValidationError
+
+from agentperf_local.common.json_types import JsonObject
 
 
 def replace_fields[Model: BaseModel](model: Model, **changes: object) -> Model:
@@ -67,3 +72,25 @@ def error_text(error: BaseException) -> str:
         field = ".".join(str(part) for part in detail["loc"])
         lines.append(f"{field}: {detail['msg']}" if field else detail["msg"])
     return "\n".join(lines)
+
+
+def read_record[Model: BaseModel](model: type[Model], encoded: bytes | str, source: str) -> Model:
+    """Parse one JSON document into `model`, and name `source` in any error.
+
+    Strict JSON mode accepts only the declared JSON type for each field: "5" is not
+    an integer and true is not a number. An array fills a tuple field. An unknown
+    key is an error, so every reader keeps a closed key set.
+    """
+    try:
+        return model.model_validate_json(encoded, strict=True, extra="forbid")
+    except ValidationError as error:
+        raise ValueError("\n".join(f"{source}: {line}" for line in error_text(error).splitlines())) from error
+
+
+def read_object[Model: BaseModel](model: type[Model], data: JsonObject, source: str) -> Model:
+    """Parse one decoded JSON object into `model`, with the rules of `read_record`.
+
+    Strict Python mode would reject a list for a tuple field, so the object is
+    encoded again and read in JSON mode.
+    """
+    return read_record(model, orjson.dumps(data), source)
