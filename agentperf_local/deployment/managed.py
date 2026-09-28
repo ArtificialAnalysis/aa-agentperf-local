@@ -13,7 +13,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import IO, Self
 
 import httpx
@@ -104,6 +104,9 @@ FULL_OFFLOAD_PATTERN = re.compile(r"offloaded\s+([0-9]+)/([0-9]+)\s+layers\s+to\
 TOKEN_POOL_PATTERN = re.compile(r"max_total_num_tokens=([0-9]+)")
 # vLLM logs the KV cache it settled on as e.g. "GPU KV cache size: 1,177,344 tokens".
 VLLM_KV_CACHE_PATTERN = re.compile(r"kv cache size[:\s]+([0-9,]+)\s*tokens")
+# Splash's engine runs only on Metal and names the Apple GPU family it chose kernels for,
+# as in "Kernel policy for GPU family 10 with 20 cores".
+SPLASH_METAL_MARKER = "kernel policy for gpu family"
 
 # What most often ends a managed server before it ever answers, named per runtime so a
 # failure points at the right thing to check.
@@ -114,6 +117,7 @@ _EARLY_EXIT_HINTS: dict[DeploymentFramework, str] = {
         "which on a device that shares host memory can mean another process holds it"
     ),
     "vllm": ("a server killed with status -9 ran out of memory; lower --gpu-memory-utilization or free the device"),
+    "splash": "Splash needs macOS 26.4 or later on an M3 or newer Mac, and a build that knows the launch flags",
 }
 
 
@@ -575,6 +579,42 @@ def _vllm_argv(
     )
 
 
+def _splash_argv(
+    candidate: ModelCandidate,
+    deployment: ModelDeployment,
+    context_tokens: int,
+    draft_model_path: Path | None,
+    model_alias: str,
+    endpoint: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the Splash server flags for one recipe, after the executable prefix."""
+    launch = deployment.splash
+    if launch is None:
+        raise ValueError("Splash recipe is missing its Splash launch settings")
+    if draft_model_path is None:
+        raise ValueError("Splash recipe is missing its verified draft directory")
+    # Splash selects the target by variant at the pinned revision and loads the pinned
+    # draft as a local directory, so it serves exactly the verified files. The replay
+    # sends text only, so the unpinned vision tower is never loaded.
+    return (
+        "--model",
+        f"{candidate.hf_repository}:{launch.gguf_variant}",
+        "--revision",
+        candidate.hf_revision,
+        "--draft-model",
+        str(draft_model_path),
+        "--language-only",
+        "--served-model-name",
+        model_alias,
+        *endpoint,
+        "--max-context",
+        str(context_tokens),
+        "--kv-format",
+        launch.kv_format,
+        "--no-webui",
+    )
+
+
 def _launch_command(
     executable: FrameworkExecutable,
     candidate: ModelCandidate,
@@ -596,6 +636,8 @@ def _launch_command(
         arguments = _sglang_argv(candidate, deployment, context_tokens, model_path, model_alias, endpoint)
     elif executable.framework == "vllm":
         arguments = _vllm_argv(candidate, deployment, context_tokens, model_path, model_alias, endpoint)
+    elif executable.framework == "splash":
+        arguments = _splash_argv(candidate, deployment, context_tokens, draft_model_path, model_alias, endpoint)
     else:
         raise ValueError(f"{executable.framework} does not have a complete pinned managed recipe")
     return (*executable.command_prefix, *arguments)
@@ -678,6 +720,8 @@ def create_deployment_plan(
         raise ValueError("managed deployment alias nonce must be non-empty ASCII letters and digits")
     model_alias = f"{candidate.profile_id}-{nonce}"
     recipe_environment = deployment.vllm.environment if framework == "vllm" and deployment.vllm is not None else ()
+    if framework == "splash":
+        recipe_environment = _splash_environment(artifacts)
     combined_environment = (*recipe_environment, *device_environment)
     environment_names = tuple(name for name, _ in combined_environment)
     if len(set(environment_names)) != len(environment_names):
@@ -711,6 +755,17 @@ def create_deployment_plan(
         runtime=runtime,
         device_environment=combined_environment,
     )
+
+
+def _splash_environment(artifacts: VerifiedDeployment) -> tuple[tuple[str, str], ...]:
+    """Point Splash at the verified hub cache and forbid it any other download.
+
+    Offline, Splash installs the pinned revision from the cache and never follows a
+    branch that moved since the recipe was verified.
+    """
+    if artifacts.hub_cache is None:
+        raise ValueError("Splash recipe is missing the hub cache that holds its verified files")
+    return (("HF_HUB_CACHE", str(artifacts.hub_cache)), ("HF_HUB_OFFLINE", "1"))
 
 
 def _discard_unwritten_log(log_stream: IO[bytes], log_path: Path) -> None:
@@ -880,7 +935,9 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
             platform_markers = ("rocm", "hipblas", "rocblas", "hip platform", "rocmplatform")
     else:
         failure_markers = ("metal unavailable", "metal is not available", "failed to initialize metal")
-        platform_markers = ("ggml_metal_init", "metal backend")
+        platform_markers = (
+            (SPLASH_METAL_MARKER,) if deployment.plan.framework == "splash" else ("ggml_metal_init", "metal backend")
+        )
     if any(marker in log for marker in failure_markers):
         raise RuntimeError(
             _log_hint(
@@ -908,6 +965,11 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
                     f"managed llama.cpp did not report full {deployment.plan.accelerator_platform} offload", log_path
                 )
             )
+        return
+    if deployment.plan.framework == "splash":
+        _require_splash_selection(deployment.plan, log, log_path)
+        # Splash starts only when its engine grants the requested context, and readiness
+        # has already read that context back from the model list.
         return
     if deployment.plan.framework == "sglang":
         # SGLang sizes its token pool from free device memory, so a server can advertise the
@@ -939,6 +1001,20 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
                 log_path,
             )
         )
+
+
+def _require_splash_selection(plan: DeploymentPlan, log: str, log_path: Path) -> None:
+    """Require Splash to report that it serves the recipe's pinned GGUF target.
+
+    Splash picks the file for a variant itself, and a fresh installation names it. An
+    installation it already holds is keyed by the model, revision, and draft directory,
+    so starting it serves the same pinned files.
+    """
+    model_id = plan.command[plan.command.index("--model") + 1]
+    selected = f"selected {PurePosixPath(plan.model_path).name} from {plan.hf_repository}"
+    installed = f"splash model {model_id} is already installed"
+    if selected.lower() not in log and installed.lower() not in log:
+        raise RuntimeError(_log_hint(f"managed Splash did not report that it {selected}", log_path))
 
 
 class DeploymentRecord(BaseModel, frozen=True):

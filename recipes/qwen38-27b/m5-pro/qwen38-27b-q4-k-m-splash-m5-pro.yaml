@@ -1,0 +1,45 @@
+profile_id: qwen38-27b-q4-k-m-splash-m5-pro
+as_of: '2026-09-28'
+display_name: Qwen3.8 27B Q4_K_M, M5 Pro Splash DFlash2
+hf_repository: unsloth/Qwen3.8-27B-GGUF
+hf_revision: f1bfb127c64f7072bdd2cad55f258b9c8b2910fe
+devices:
+- apple-silicon
+tool_call_parser: qwen3_coder
+reasoning_parser: qwen3
+thinking_policy: enabled-medium-candidate
+speculation_policy: enabled-dflash-external-draft
+deployment:
+  artifact_kind: gguf-target-safetensors-draft
+  artifacts:
+  - filename: Qwen3.8-27B-Q4_K_M.gguf
+    sha256: 7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169
+    size_bytes: 17106775008
+  - filename: config.json
+    sha256: 873e3556509b0da06e29654ba00d4944888d4b5e8a33afde25f7eb27d321e980
+    size_bytes: 1239
+    source_repository: incoai/Qwen3.8-27B-DFlash2
+    source_revision: 015e795645c74b1a0eeef3b570031fb62e769bc5
+  - filename: model.safetensors
+    sha256: 67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c
+    size_bytes: 3848817896
+    source_repository: incoai/Qwen3.8-27B-DFlash2
+    source_revision: 015e795645c74b1a0eeef3b570031fb62e769bc5
+  context_tokens: 65536
+  frameworks:
+  - splash
+  memory:
+    full_attention_layers: 16
+    full_kv_heads: 4
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 1
+    recurrent_state_slots: 1
+    constant_state_bytes: 350224384
+    runtime_overhead_bytes: 1838563648
+  splash:
+    gguf_variant: Q4_K_M
+    kv_format: int8
