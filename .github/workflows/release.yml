@@ -20,7 +20,7 @@ jobs:
       - name: Tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Tag matches every version string
-        run: uv run --no-project python scripts/check_release_version.py "$GITHUB_REF_NAME"
+        run: uv run --locked python scripts/check_release_version.py "$GITHUB_REF_NAME"
       - name: Build agentperf-local wheel and sdist
         run: uv build --no-sources --out-dir dist/agentperf-local
       # The Rust extension ships as an sdist only; `agentperf-local[rust]` compiles it on install.
