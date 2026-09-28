@@ -205,7 +205,7 @@ async def write_run_artifacts_uncancellable(
     run_context: RunContextFacts,
     run_id: str,
 ) -> ArtifactPaths:
-    """Finish the durable report commit even if the worker is cancelled."""
+    """Finish the durable report commit even if the worker is canceled."""
     write_task = asyncio.create_task(
         asyncio.to_thread(write_run_artifacts, result, output_dir, config, run_context=run_context, run_id=run_id)
     )
@@ -269,7 +269,7 @@ async def _start_owned_deployment(plan: DeploymentPlan, log_path: Path) -> Manag
 
 
 async def _close_owned_deployment(deployment: ManagedDeployment) -> None:
-    """Finish process-group cleanup even when the worker is cancelled."""
+    """Finish process-group cleanup even when the worker is canceled."""
     close_task = asyncio.create_task(asyncio.to_thread(deployment.close))
     try:
         await asyncio.shield(close_task)
@@ -285,7 +285,7 @@ def _start_power_collector(collector: NvidiaPowerCollector) -> bool:
 
 
 async def _stop_power_collector(collector: NvidiaPowerCollector) -> None:
-    """Stop the collector even if the worker is being cancelled; the child must not outlive the run."""
+    """Stop the collector even if the worker is being canceled; the child must not outlive the run."""
     stop_task = asyncio.create_task(asyncio.to_thread(collector.stop))
     try:
         await asyncio.shield(stop_task)

@@ -633,7 +633,7 @@ def test_cached_artifact_verification_honors_cooperative_cancellation(tmp_path: 
     candidate = _candidate()
     artifact = _cached_artifact(tmp_path, candidate)
 
-    with pytest.raises(InterruptedError, match="cancelled"):
+    with pytest.raises(InterruptedError, match="canceled"):
         ensure_model_artifacts(tmp_path, candidate, cancellation_requested=_cancel_requested)
 
     assert artifact.read_bytes() == MODEL_BYTES

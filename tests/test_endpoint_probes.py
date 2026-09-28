@@ -47,8 +47,8 @@ SSE_NO_USAGE_RESPONSE = (
 @pytest.mark.parametrize(
     ("chunks", "honours_ignore_eos", "rejects_ignore_eos", "status", "expected_support", "expected_requests"),
     (
-        pytest.param(SSE_OK_RESPONSE, True, False, 200, IgnoreEosSupport.HONOURED, 2, id="honouring"),
-        pytest.param(SSE_NO_USAGE_RESPONSE, True, False, 200, IgnoreEosSupport.HONOURED, 2, id="honouring-no-usage"),
+        pytest.param(SSE_OK_RESPONSE, True, False, 200, IgnoreEosSupport.HONOURED, 2, id="honoring"),
+        pytest.param(SSE_NO_USAGE_RESPONSE, True, False, 200, IgnoreEosSupport.HONOURED, 2, id="honoring-no-usage"),
         pytest.param(SSE_OK_RESPONSE, False, False, 200, IgnoreEosSupport.IGNORED, 1, id="dropping"),
         pytest.param(SSE_OK_RESPONSE, True, True, 200, IgnoreEosSupport.IGNORED, 2, id="strict"),
         pytest.param(SSE_FILLED_BUDGET_RESPONSE, False, False, 200, IgnoreEosSupport.UNDETERMINED, 2, id="long-winded"),

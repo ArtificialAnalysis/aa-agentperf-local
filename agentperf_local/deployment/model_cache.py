@@ -201,7 +201,7 @@ def _model_artifact_digest(path: Path, cancellation_requested: CancellationCheck
     with path.open("rb") as source:
         while chunk := source.read(MODEL_DOWNLOAD_CHUNK_BYTES):
             if cancellation_requested():
-                raise InterruptedError("model artifact operation was cancelled")
+                raise InterruptedError("model artifact operation was canceled")
             digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
 
@@ -324,7 +324,7 @@ def _hash_partial_download(
     with partial_path.open("rb") as source:
         while chunk := source.read(MODEL_DOWNLOAD_CHUNK_BYTES):
             if cancellation_requested():
-                raise InterruptedError("model artifact operation was cancelled")
+                raise InterruptedError("model artifact operation was canceled")
             digest.update(chunk)
             hashed_bytes += len(chunk)
     return hashed_bytes
@@ -346,7 +346,7 @@ def _wait_before_retry(backoff_seconds: float, deadline: float, cancellation_req
     wake_time = min(time.monotonic() + backoff_seconds, deadline)
     while time.monotonic() < wake_time:
         if cancellation_requested():
-            raise InterruptedError("model artifact operation was cancelled")
+            raise InterruptedError("model artifact operation was canceled")
         time.sleep(MODEL_DOWNLOAD_BACKOFF_POLL_SECONDS)
 
 
@@ -398,7 +398,7 @@ def _download_model_artifact(
         with httpx.Client(follow_redirects=True, timeout=timeout) as client:
             while downloaded_bytes < artifact.size_bytes:
                 if cancellation_requested():
-                    raise InterruptedError("model artifact operation was cancelled")
+                    raise InterruptedError("model artifact operation was canceled")
                 if time.monotonic() >= deadline:
                     raise TimeoutError("model download exceeded the total time limit")
                 # Identity encoding keeps the stream byte-exact: iter_raw yields whatever
@@ -418,7 +418,7 @@ def _download_model_artifact(
                         )
                         for chunk in response.iter_raw():
                             if cancellation_requested():
-                                raise InterruptedError("model artifact operation was cancelled")
+                                raise InterruptedError("model artifact operation was canceled")
                             if time.monotonic() >= deadline:
                                 raise TimeoutError("model download exceeded the total time limit")
                             if downloaded_bytes + len(chunk) > artifact.size_bytes:
@@ -434,7 +434,7 @@ def _download_model_artifact(
                             )
                 except httpx.HTTPError as error:
                     if cancellation_requested():
-                        raise InterruptedError("model artifact operation was cancelled") from error
+                        raise InterruptedError("model artifact operation was canceled") from error
                     if not _is_retryable_download_error(error):
                         raise
                     destination.flush()
@@ -553,7 +553,7 @@ def _ensure_artifact(
             cancellation_requested=cancellation_requested,
         )
     if cancellation_requested():
-        raise InterruptedError("model artifact operation was cancelled")
+        raise InterruptedError("model artifact operation was canceled")
     blob_path = _hf_blob_path(cache_root, candidate, artifact)
     snapshot_path = _hf_snapshot_path(cache_root, candidate, artifact)
     if blob_path.exists() or blob_path.is_symlink():
@@ -564,7 +564,7 @@ def _ensure_artifact(
         return verified
     _prepare_cache_parent(blob_path.parent)
     # huggingface_hub's cache scanner reports a repository directory without snapshots/
-    # as corrupted, so the directory must exist before a cancelled attempt can leave a
+    # as corrupted, so the directory must exist before a canceled attempt can leave a
     # resumable incomplete file behind in blobs/.
     _prepare_cache_parent(_hf_repository_cache(cache_root, repository) / "snapshots")
     partial_path = blob_path.with_name(f"{blob_path.name}{MODEL_DOWNLOAD_INCOMPLETE_SUFFIX}")
@@ -582,7 +582,7 @@ def _ensure_artifact(
         partial_path.unlink(missing_ok=True)
         raise
     if cancellation_requested():
-        raise InterruptedError("model artifact operation was cancelled")
+        raise InterruptedError("model artifact operation was canceled")
     # The hub's .locks protocol is deliberately not taken here: huggingface_hub holds a
     # blob lock for its entire multi-gigabyte download, and waiting on it would need
     # cancellation-aware polling. The worst unlocked race with a concurrent hub download

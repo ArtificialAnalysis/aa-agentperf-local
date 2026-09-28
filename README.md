@@ -117,10 +117,10 @@ Use your server's base URL and the model name it reports:
 | SGLang | `http://127.0.0.1:30000/v1` |
 
 The `exact` policy sends `ignore_eos`, which is not part of the OpenAI API.
-Before the replay, `run` checks that the server honours it. If it does not,
+Before the replay, `run` checks that the server honors it. If it does not,
 `run` stops and names the flag to change.
 
-**Ollama cannot honour `ignore_eos`.** The tool detects Ollama before the run
+**Ollama cannot honor `ignore_eos`.** The tool detects Ollama before the run
 and warns you. The run then uses the `recorded` policy, which lets the model
 stop on its own and reports end-to-end latency as a normalized estimate. That
 result is not directly comparable with `exact` runs.
@@ -244,4 +244,4 @@ CI runs these checks and the Python and Rust client equivalence tests. See
 
 agentperf-local is built and maintained by [Artificial Analysis](https://artificialanalysis.ai).
 Code is licensed under [Apache-2.0](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/LICENSE). The Artificial Analysis name and logo
-are not covered by the code licence.
+are not covered by the code license.

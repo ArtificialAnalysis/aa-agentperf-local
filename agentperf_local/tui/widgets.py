@@ -59,7 +59,7 @@ CONTEXT_WINDOW_UNKNOWN = "context length not reported"
 
 @cache
 def _colored_kitty(art: str) -> Text:
-    """Colour one pose's face once; every later frame change is a lookup and a repaint."""
+    """Color one pose's face once; every later frame change is a lookup and a repaint."""
     ears, face, paws = art.splitlines()
     return Text.assemble(ears, "\n", face[0], (face[1:-1], AA_PURPLE_LIGHT), face[-1], "\n", paws)
 
@@ -185,7 +185,7 @@ def histogram_rows(histogram: Histogram, rows: int = DEFAULT_CHART_ROWS) -> tupl
 class DistributionChart(Static):
     """Draw a small block-character histogram of one per-turn metric with its p50 and p90.
 
-    The bin holding the median is lit in the success colour so the centre of the
+    The bin holding the median is lit in the success color so the center of the
     distribution reads without a legend.
     """
 
@@ -272,7 +272,7 @@ class ContextGauge(Static):
         else:
             fraction = tokens / context_tokens
             filled = min(round(fraction * width), width)
-            # A request larger than the window will not fit, so the bar says so in the warning colour.
+            # A request larger than the window will not fit, so the bar says so in the warning color.
             fill_style = AA_ORANGE if fraction > 1 else AA_PURPLE
             line.append(f" {CONTEXT_BAR_LEFT_CAP}", style=AA_NEUTRAL_500)
             line.append(CONTEXT_BAR_FILLED * filled, style=fill_style)

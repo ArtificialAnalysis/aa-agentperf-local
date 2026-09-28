@@ -224,7 +224,7 @@ MANAGED_RUN_STOPPED_MESSAGE = "The model server this app started stopped before 
 MANAGED_LAUNCH_INVALID_TEMPLATE = (
     "Launch settings are not valid: {reason}. Start the app again with a different --port or --startup-timeout-seconds."
 )
-FORCE_QUIT_MESSAGE = "Still cancelling. Press q again to force quit. The model server may be left running."
+FORCE_QUIT_MESSAGE = "Still canceling. Press q again to force quit. The model server may be left running."
 CANCEL_CONFIRM_MESSAGE = "Press esc again to cancel the run"
 # One stray Esc must not abort a possibly hours-long run, so the first Esc only arms
 # cancellation and the confirming Esc must land within this window.
@@ -241,7 +241,7 @@ RUN_HERO_STARTING = "Starting the server"
 RUN_HERO_RUNNING = "Running the benchmark"
 RUN_HERO_SAVING = "Saving results"
 RUN_HERO_STOPPING = "Stopping the server"
-RUN_HERO_CANCELLING = "Cancelling the run"
+RUN_HERO_CANCELLING = "Canceling the run"
 RUN_LIVE_CHECKING_SETUP = "Checking the setup"
 RUN_LIVE_DOWNLOADING = "Downloading the model"
 RUN_ACTIVITY_TITLE = "ACTIVITY"
@@ -321,7 +321,7 @@ UPLOAD_DUPLICATE_NOTE = " · this bundle was already on file"
 UPLOAD_FAILED_TEMPLATE = (
     "Upload failed · {reason}\nBundle kept at {bundle}\nRetry: agentperf-local submit {bundle} --yes"
 )
-UPLOAD_CANCELLED_REASON = "cancelled before the service answered"
+UPLOAD_CANCELLED_REASON = "canceled before the service answered"
 UPLOAD_NOT_PREPARED_TEMPLATE = "Upload failed · {reason}\nNo bundle was written; the run folder is unchanged."
 # Every back-style button leaves its own page, so all of them share the escape handler.
 BACK_BUTTON_IDS = frozenset(
@@ -1921,7 +1921,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self._focus_on_page(TuiStep.PREFLIGHT, "#endpoint-consent-checkbox" if preflight.ready else "#preflight-back")
 
     def _set_preflight_consent_enabled(self, enabled: bool) -> None:
-        """Reset the network acknowledgement and any server check after each setup check."""
+        """Reset the network acknowledgment and any server check after each setup check."""
         checkbox = self.query_one("#endpoint-consent-checkbox", Checkbox)
         checkbox.value = False
         checkbox.disabled = not enabled
@@ -2255,7 +2255,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#run-hero", Static).update(RUN_HERO_STOPPING if managed else RUN_HERO_CANCELLING)
         log = self.query_one("#run-activity", ActivityLog)
         log.record(WARNING_MARK, "Cancel requested")
-        log.set_live("Stopping the server" if managed else "Cancelling the replay")
+        log.set_live("Stopping the server" if managed else "Canceling the replay")
         self._set_run_metrics(RUN_CLEANUP_MESSAGE)
 
     @work(exclusive=True, group="replay", exit_on_error=False)
@@ -2573,7 +2573,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                 else failure
             )
         elif self.outcome is TuiOutcome.CANCELLED:
-            text = "Run cancelled · model and GPU not verified"
+            text = "Run canceled · model and GPU not verified"
         elif self.evidence.partition is ResultPartition.SERVICE_LATENCY_ONLY:
             text = (
                 "Remote server · timing includes network delay · saved on this computer · "
@@ -2693,9 +2693,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             return
         self.run_generation += 1
         self.force_quit_armed = False
-        self._end_run_without_report(TuiOutcome.CANCELLED, WARNING_MARK, "Run cancelled")
+        self._end_run_without_report(TuiOutcome.CANCELLED, WARNING_MARK, "Run canceled")
         title = self.query_one("#result-title", Static)
-        title.update("Run cancelled.")
+        title.update("Run canceled.")
         status = self.query_one("#result-status", Static)
         status.set_classes("cancel-card")
         status.update(

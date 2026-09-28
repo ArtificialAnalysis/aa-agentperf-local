@@ -42,7 +42,7 @@ class UploadCompletedMessage(Message):
 
 
 class UploadFailedMessage(Message):
-    """Report a failed or cancelled upload with a display-safe reason and the bundle left behind."""
+    """Report a failed or canceled upload with a display-safe reason and the bundle left behind."""
 
     def __init__(self, generation: int, reason: str, bundle_dir: Path | None) -> None:
         super().__init__()
