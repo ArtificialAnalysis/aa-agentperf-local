@@ -394,6 +394,8 @@ def _llama_cpp_argv(
             tuning.extend(("--fit", "off"))
         if launch.cache_ram_mib is not None:
             tuning.extend(("--cache-ram", str(launch.cache_ram_mib)))
+        if launch.context_checkpoints is not None:
+            tuning.extend(("--ctx-checkpoints", str(launch.context_checkpoints)))
     batching = (
         ()
         if launch is None
@@ -417,11 +419,14 @@ def _llama_cpp_argv(
     else:
         if launch.draft_model_filename is not None and draft_model_path is None:
             raise ValueError("llama.cpp external-draft recipe is missing its verified draft model path")
-        spec_type = (
-            "draft-dflash"
-            if candidate.speculation_policy in ("enabled-dflash-external-draft", "enabled-dflash-draft")
-            else "draft-mtp"
-        )
+        if launch.speculative_tokens is None:
+            raise ValueError("speculative llama.cpp recipe is missing its speculative_tokens")
+        if candidate.speculation_policy in ("enabled-dflash-external-draft", "enabled-dflash-draft"):
+            spec_type = "draft-dflash"
+        elif candidate.speculation_policy == "enabled-dspark-external-draft":
+            spec_type = "draft-dspark"
+        else:
+            spec_type = "draft-mtp"
         draft_model = (
             (
                 "--model-draft",

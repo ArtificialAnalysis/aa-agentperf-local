@@ -40,9 +40,9 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:26d70649e21a906493875673aec751dfc98a2f3f49ff14f77f036422fc00f08c"
+BUNDLED_RECIPES_DIGEST = "sha256:3814f36b629873beb148e8a5fb3c385c4d2fcee4c174bc3adafb428ae07b86b2"
 
-type ToolCallParser = Literal["gemma4", "gpt-oss", "qwen3_coder", "qwen3_xml"]
+type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
 type ThinkingPolicy = Literal["disabled", "enabled", "enabled-medium-candidate"]
 type SpeculationPolicy = Literal[
@@ -51,6 +51,7 @@ type SpeculationPolicy = Literal[
     "enabled-mtp-external-draft",
     "enabled-dflash-external-draft",
     "enabled-dflash-draft",
+    "enabled-dspark-external-draft",
     "enabled-dspark-draft",
     "enabled-vllm-external-draft",
 ]
@@ -81,10 +82,11 @@ SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "enabled-mtp-external-draft",
     "enabled-dflash-external-draft",
     "enabled-dflash-draft",
+    "enabled-dspark-external-draft",
     "enabled-dspark-draft",
     "enabled-vllm-external-draft",
 )
-TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "gpt-oss", "qwen3_coder", "qwen3_xml")
+TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml")
 ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set", "safetensors-repository")
 # A weights repository is only servable when the runtime can read the model shape
 # and the tokenizer beside the tensors.
@@ -182,7 +184,8 @@ class LlamaCppLaunch(BaseModel, frozen=True):
 
     batch_size: int
     ubatch_size: int
-    speculative_tokens: int
+    # A target-only recipe drafts nothing, so it leaves the draft depth out.
+    speculative_tokens: PositiveInt | None = None
     draft_model_filename: str | None = None
     target_backend_sampling: bool
     draft_backend_sampling: bool
@@ -193,6 +196,9 @@ class LlamaCppLaunch(BaseModel, frozen=True):
     flash_attention: bool = False
     disable_fit: bool = False
     cache_ram_mib: int | None = None
+    # How many recurrent-state checkpoints llama.cpp keeps per slot. A checkpoint also
+    # copies an external draft's KV cache, so a draft recipe caps them to bound memory.
+    context_checkpoints: PositiveInt | None = None
 
     @field_validator("flash_attention", "disable_fit", mode="before")
     @classmethod
@@ -202,9 +208,9 @@ class LlamaCppLaunch(BaseModel, frozen=True):
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require usable batch sizes and a positive draft depth."""
-        if min(self.batch_size, self.ubatch_size, self.speculative_tokens) <= 0:
-            raise ValueError("llama.cpp batch sizes and speculative token count must be positive")
+        """Require usable batch sizes."""
+        if min(self.batch_size, self.ubatch_size) <= 0:
+            raise ValueError("llama.cpp batch sizes must be positive")
         if self.ubatch_size > self.batch_size:
             raise ValueError("llama.cpp ubatch_size must not exceed batch_size")
         if self.draft_model_filename is not None:
@@ -476,9 +482,19 @@ class ModelCandidate(BaseModel, frozen=True):
             expected_devices = ("apple-silicon",) if llama_cpp.backend == "metal" else ("amd-rocm",)
             if self.devices != expected_devices:
                 raise ValueError("llama.cpp backend must match the recipe's devices")
-        if self.speculation_policy in ("enabled-mtp-external-draft", "enabled-dflash-external-draft"):
+        if self.speculation_policy in (
+            "enabled-mtp-external-draft",
+            "enabled-dflash-external-draft",
+            "enabled-dspark-external-draft",
+        ):
             if llama_cpp is None or llama_cpp.draft_model_filename is None:
                 raise ValueError("an external-draft policy requires a pinned llama.cpp draft model")
+        if llama_cpp is not None:
+            drafts = self.speculation_policy != "disabled-target-only-baseline"
+            if drafts and llama_cpp.speculative_tokens is None:
+                raise ValueError("a speculative llama.cpp recipe must set speculative_tokens")
+            if not drafts and llama_cpp.speculative_tokens is not None:
+                raise ValueError("a target-only llama.cpp recipe must not set speculative_tokens")
         if self.speculation_policy == "enabled-mtp-self-draft" and llama_cpp is not None:
             if llama_cpp.draft_model_filename is not None:
                 raise ValueError("an MTP self-draft policy must not name an external draft model")

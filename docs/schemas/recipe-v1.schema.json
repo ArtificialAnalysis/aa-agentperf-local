@@ -79,7 +79,6 @@
       "required": [
         "batch_size",
         "ubatch_size",
-        "speculative_tokens",
         "target_backend_sampling",
         "draft_backend_sampling"
       ],
@@ -93,7 +92,10 @@
           "minimum": 1
         },
         "speculative_tokens": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "draft_model_filename": {
@@ -152,6 +154,13 @@
             "null"
           ],
           "minimum": 0
+        },
+        "context_checkpoints": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
         }
       }
     },
@@ -407,6 +416,7 @@
         "tool_call_parser": {
           "enum": [
             "gemma4",
+            "glm45",
             "gpt-oss",
             "qwen3_coder",
             "qwen3_xml"
@@ -434,6 +444,7 @@
             "enabled-mtp-external-draft",
             "enabled-dflash-external-draft",
             "enabled-dflash-draft",
+            "enabled-dspark-external-draft",
             "enabled-dspark-draft",
             "enabled-vllm-external-draft"
           ]
