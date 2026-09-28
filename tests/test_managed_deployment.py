@@ -36,6 +36,7 @@ from agentperf_local.deployment.catalog import (
     ModelCandidate,
     ModelDeployment,
     SpeculationPolicy,
+    SplashLaunch,
     VllmLaunch,
     load_model_catalog,
 )
@@ -1830,3 +1831,136 @@ def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch
             command_finder=lambda command: str(executable),
             alias_nonce="test",
         )
+
+
+SPLASH_TARGET_FILENAME = "model-Q4_0.gguf"
+SPLASH_DRAFT_REPOSITORY = "example/model-draft"
+SPLASH_DRAFT_REVISION = "b" * 40
+SPLASH_FILES = {
+    "config.json": b'{"architectures": ["DFlash2DraftModel"]}',
+    SPLASH_TARGET_FILENAME: b"small deterministic Splash target",
+    "model.safetensors": b"small deterministic draft weights",
+}
+
+
+def _splash_candidate() -> ModelCandidate:
+    artifacts = tuple(
+        DeploymentArtifact(
+            filename=filename,
+            sha256=hashlib.sha256(content).hexdigest(),
+            size_bytes=len(content),
+            source_repository=None if filename == SPLASH_TARGET_FILENAME else SPLASH_DRAFT_REPOSITORY,
+            source_revision=None if filename == SPLASH_TARGET_FILENAME else SPLASH_DRAFT_REVISION,
+        )
+        for filename, content in sorted(SPLASH_FILES.items())
+    )
+    deployment = ModelDeployment(
+        artifact_kind="gguf-target-safetensors-draft",
+        artifacts=artifacts,
+        context_tokens=PROFILE_CONTEXT_TOKENS,
+        frameworks=("splash",),
+        memory=FIXTURE_MEMORY,
+        splash=SplashLaunch(gguf_variant="Q4_0", kv_format="int8"),
+    )
+    return ModelCandidate(
+        profile_id="fixture-splash",
+        as_of="2026-09-28",
+        display_name="Fixture Splash",
+        hf_repository="example/model-gguf",
+        hf_revision="a" * 40,
+        devices=("apple-silicon",),
+        tool_call_parser="qwen3_coder",
+        reasoning_parser="qwen3",
+        thinking_policy="enabled",
+        speculation_policy="enabled-dflash-external-draft",
+        deployment=deployment,
+    )
+
+
+def _cached_splash(cache_root: Path, candidate: ModelCandidate) -> None:
+    """Lay the target and draft out as huggingface_hub caches their two repositories."""
+    for artifact in candidate.deployment.artifacts:
+        repository = artifact.source_repository or candidate.hf_repository
+        revision = artifact.source_revision or candidate.hf_revision
+        folder = cache_root / repo_folder_name(repo_id=repository, repo_type="model")
+        blob = folder / "blobs" / artifact.sha256
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(SPLASH_FILES[artifact.filename])
+        entry = folder / "snapshots" / revision / artifact.filename
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.symlink_to(os.path.relpath(blob, entry.parent))
+
+
+def test_splash_serves_its_pinned_target_and_draft_offline_on_apple_silicon(tmp_path: Path) -> None:
+    """Splash reads the pinned revision from the verified cache, with the draft as a local directory."""
+    candidate = _splash_candidate()
+    _cached_splash(tmp_path, candidate)
+    cached = ensure_model_artifacts(tmp_path, candidate)
+
+    plan = create_deployment_plan(
+        _hardware("Apple", "Metal"),
+        candidate,
+        "splash",
+        cached,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
+        command_finder=_installed_command,
+        alias_nonce="test",
+    )
+
+    draft_root = tmp_path / "models--example--model-draft" / "snapshots" / SPLASH_DRAFT_REVISION
+    for flag, value in (
+        ("--model", "example/model-gguf:Q4_0"),
+        ("--revision", "a" * 40),
+        ("--draft-model", str(draft_root)),
+        ("--language-only", None),
+        ("--served-model-name", "fixture-splash-test"),
+        ("--max-context", str(PROFILE_CONTEXT_TOKENS)),
+        ("--kv-format", "int8"),
+        ("--no-webui", None),
+    ):
+        assert flag in plan.command
+        if value is not None:
+            assert plan.command[plan.command.index(flag) + 1] == value
+    assert plan.device_environment == (("HF_HUB_CACHE", str(tmp_path)), ("HF_HUB_OFFLINE", "1"))
+    assert Path(plan.model_path).name == SPLASH_TARGET_FILENAME
+    with pytest.raises(ValueError, match="splash is not supported on nvidia-cuda"):
+        create_deployment_plan(
+            _hardware("NVIDIA", "CUDA"),
+            candidate,
+            "splash",
+            cached,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
+            command_finder=_installed_command,
+        )
+
+
+@pytest.mark.parametrize(
+    ("startup_log", "expected_error"),
+    (
+        pytest.param(("--selected", SPLASH_TARGET_FILENAME), None, id="fresh-install"),
+        pytest.param(("--splash-installed",), None, id="installed-selection"),
+        pytest.param(("--selected", "model-UD-Q4_0.gguf"), f"selected {SPLASH_TARGET_FILENAME}", id="other-file"),
+    ),
+)
+def test_owned_splash_deployment_must_serve_the_pinned_target(
+    tmp_path: Path,
+    startup_log: tuple[str, ...],
+    expected_error: str | None,
+) -> None:
+    """Splash picks the file for a variant itself, so the one it reports must be the pinned target."""
+    plan = _owned_plan(tmp_path)
+    plan = replace_fields(
+        plan,
+        framework="splash",
+        model_path=tmp_path / SPLASH_TARGET_FILENAME,
+        command=(*plan.command, "--backend", "splash", "--model", "example/model-gguf:Q4_0", *startup_log),
+    )
+    log_path = tmp_path / "deployment.log"
+
+    with start_managed_deployment(plan, log_path) as deployment:
+        wait_for_deployment(deployment, timeout_seconds=MANAGED_TEST_STARTUP_TIMEOUT_SECONDS)
+        if expected_error is None:
+            verify_gpu_startup(deployment)
+        else:
+            with pytest.raises(RuntimeError, match=expected_error):
+                verify_gpu_startup(deployment)

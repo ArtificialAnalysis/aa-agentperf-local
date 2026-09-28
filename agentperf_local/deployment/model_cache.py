@@ -112,6 +112,9 @@ class VerifiedDeployment(BaseModel, frozen=True):
     model_path: Path
     artifacts: Annotated[tuple[VerifiedArtifact, ...], Field(min_length=1)]
     draft_model_path: Path | None = None
+    # The hub cache that holds the verified snapshots, for a runtime that reads them by
+    # repository and revision itself (Splash) instead of by path.
+    hub_cache: Path | None = None
 
     @property
     def size_bytes(self) -> int:
@@ -695,6 +698,33 @@ def ensure_model_artifacts(
             artifacts=tuple(verified),
             draft_model_path=draft_artifact.path if draft_artifact is not None else None,
         )
+    if deployment.artifact_kind == "gguf-target-safetensors-draft":
+        return _splash_deployment(cache_root, candidate, tuple(verified))
     snapshot_root = _hf_snapshot_root(cache_root, candidate.hf_repository, candidate.hf_revision)
     _require_snapshot_directory(snapshot_root, deployment)
     return VerifiedDeployment(model_path=snapshot_root, artifacts=tuple(verified))
+
+
+def _splash_deployment(
+    cache_root: Path, candidate: ModelCandidate, verified: tuple[VerifiedArtifact, ...]
+) -> VerifiedDeployment:
+    """Return the snapshot paths Splash reads a GGUF target and its draft from.
+
+    Splash opens the target by repository, variant, and revision from the hub cache,
+    and the draft as a directory. Each snapshot entry must be the verified file itself.
+    """
+    deployment = candidate.deployment
+    draft = deployment.draft_artifacts[0]
+    draft_root = _hf_snapshot_root(
+        cache_root, _artifact_repository(candidate, draft), _artifact_revision(candidate, draft)
+    )
+    target_name = deployment.target_model_filename
+    target = next(artifact for artifact in deployment.artifacts if artifact.filename == target_name)
+    target_path = _hf_snapshot_path(cache_root, candidate, target)
+    for pinned, artifact in zip(deployment.artifacts, verified, strict=True):
+        entry = _hf_snapshot_path(cache_root, candidate, pinned)
+        if not entry.exists() or not os.path.samefile(entry, artifact.path):
+            raise ValueError(f"model snapshot directory does not expose verified file {pinned.filename}")
+    return VerifiedDeployment(
+        model_path=target_path, artifacts=verified, draft_model_path=draft_root, hub_cache=cache_root
+    )

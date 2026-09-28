@@ -86,9 +86,16 @@ class _FakeRuntime(BaseModel, frozen=True):
 
 
 def _install_fake_runtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, framework: DeploymentFramework
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    framework: DeploymentFramework,
+    *,
+    drops_ignore_eos: bool = False,
 ) -> _FakeRuntime:
-    """Serve a catalog model from tests.managed_server with a cached artifact and a fake nvidia-smi."""
+    """Serve a catalog model from tests.managed_server with a cached artifact and a fake nvidia-smi.
+
+    A Splash server runs on Metal and reports the GGUF file it selected, as Splash does.
+    """
     fake_smi = write_looping_nvidia_smi(tmp_path / "bin" / "nvidia-smi")
     monkeypatch.setenv("PATH", f"{fake_smi.parent}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr("agentperf_local.cli.options.collect_hardware_snapshot", _two_gpu_hardware)
@@ -151,13 +158,27 @@ def _install_fake_runtime(
         context_tokens: int | None = None,
     ) -> DeploymentPlan:
         del snapshot, context_tokens
+        splash = recipe.splash
+        server_flags: tuple[str, ...] = ("--platform", "cuda", "--backend", planned_framework)
+        if splash is not None:
+            server_flags = (
+                "--platform",
+                "metal",
+                "--backend",
+                "splash",
+                "--model",
+                f"{selected.hf_repository}:{splash.gguf_variant}",
+                "--selected",
+                verified.model_path.name,
+                *(("--drop-ignore-eos",) if drops_ignore_eos else ()),
+            )
         return DeploymentPlan(
             profile_id=selected.profile_id,
             hf_repository=selected.hf_repository,
             hf_revision=selected.hf_revision,
             catalog_digest=catalog_digest,
             framework=planned_framework,
-            accelerator_platform="nvidia-cuda",
+            accelerator_platform="nvidia-cuda" if splash is None else "apple-metal",
             model_path=verified.model_path,
             artifact_manifest_sha256=verified.manifest_sha256,
             artifact_size_bytes=verified.size_bytes,
@@ -173,10 +194,7 @@ def _install_fake_runtime(
                 str(port),
                 "--alias",
                 candidate.profile_id,
-                "--platform",
-                "cuda",
-                "--backend",
-                planned_framework,
+                *server_flags,
             ),
             runtime=FrameworkIdentity(version="fixture", executable_sha256=runtime_digest, fingerprint=runtime_digest),
             device_environment=device_environment,
@@ -500,4 +518,44 @@ async def test_an_observer_failure_while_stopping_still_stops_the_server(
         async with asyncio.timeout(REPLAY_TIMEOUT_SECONDS):
             await controller.execute(request, _FailingStopObserver())
 
+    assert _port_is_free(runtime.port)
+
+
+@pytest.mark.parametrize("drops_ignore_eos", (False, True), ids=("patched-build", "released-build"))
+def test_a_managed_splash_run_needs_a_build_that_honours_ignore_eos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], drops_ignore_eos: bool
+) -> None:
+    """A Splash build that drops ignore_eos would end every long exact turn early, so the run refuses it."""
+    runtime = _install_fake_runtime(tmp_path, monkeypatch, "splash", drops_ignore_eos=drops_ignore_eos)
+    output_dir = tmp_path / "results"
+
+    status = main(
+        [
+            "managed-run",
+            str(write_replay_workload(tmp_path / "workload", name="managed-splash")),
+            "--output-dir",
+            str(output_dir),
+            "--profile-id",
+            runtime.candidate.profile_id,
+            "--framework",
+            "splash",
+            "--device",
+            str(CHOSEN_DEVICE_INDEX),
+            "--client",
+            "python",
+            "--port",
+            str(runtime.port),
+            "--no-power",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    if drops_ignore_eos:
+        assert status != 0
+        assert "the exact policy needs a Splash build that honours ignore_eos" in captured.err
+        assert not (output_dir / "measurement.json").exists()
+    else:
+        assert status == 0, captured.err
+        summary = orjson.loads((output_dir / "summary.json").read_bytes())
+        assert summary["config"]["output_tokens"]["policy"] == "exact"
     assert _port_is_free(runtime.port)

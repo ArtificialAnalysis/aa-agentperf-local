@@ -164,6 +164,27 @@
         }
       }
     },
+    "splash": {
+      "description": "How Splash selects the GGUF target by variant and stores its KV cache. A Splash recipe pins one .gguf target from its own repository and a DFlash2 draft (config.json and safetensors) from one source_repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gguf_variant",
+        "kv_format"
+      ],
+      "properties": {
+        "gguf_variant": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        },
+        "kv_format": {
+          "enum": [
+            "int8",
+            "bf16"
+          ]
+        }
+      }
+    },
     "vllm": {
       "type": "object",
       "additionalProperties": false,
@@ -280,6 +301,7 @@
           "enum": [
             "gguf-single-file",
             "gguf-file-set",
+            "gguf-target-safetensors-draft",
             "safetensors-repository"
           ]
         },
@@ -301,6 +323,7 @@
             "enum": [
               "llama-cpp",
               "sglang",
+              "splash",
               "vllm"
             ]
           },
@@ -331,6 +354,16 @@
             }
           ]
         },
+        "splash": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/splash"
+            }
+          ]
+        },
         "vllm": {
           "anyOf": [
             {
@@ -347,6 +380,7 @@
           "propertyNames": {
             "enum": [
               "sglang",
+              "splash",
               "vllm"
             ]
           },

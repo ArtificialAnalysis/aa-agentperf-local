@@ -91,6 +91,9 @@ class FrameworkIdentity(BaseModel, frozen=True):
 def framework_supported(framework: DeploymentFramework, platform: AcceleratorPlatform) -> bool:
     if framework == "llama-cpp":
         return True
+    # Splash is an engine for Apple Silicon only: its kernels are Metal.
+    if framework == "splash":
+        return platform == "apple-metal"
     return platform == "nvidia-cuda"
 
 
@@ -108,6 +111,8 @@ def framework_display_name(framework: DeploymentFramework) -> str:
         return "llama.cpp"
     if framework == "vllm":
         return "vLLM"
+    if framework == "splash":
+        return "Splash"
     return "SGLang"
 
 
@@ -116,12 +121,18 @@ def installation_hint(framework: DeploymentFramework) -> str:
         return "Install a backend-enabled llama.cpp build that provides llama-server or llama."
     if framework == "vllm":
         return "Install vLLM in the selected CUDA environment."
+    if framework == "splash":
+        return "Install Splash with `brew install incoai/tap/splash`, or put a source build's splash on PATH."
     return "Install SGLang in the selected CUDA environment."
 
 
 def _support_note(framework: DeploymentFramework, platform: AcceleratorPlatform) -> str:
     if framework == "llama-cpp":
         return "Native GGUF path using the framework's CUDA, HIP, or Metal backend."
+    if framework == "splash":
+        if platform == "apple-metal":
+            return "Metal engine built for the model, with a DFlash2 draft for speculative decoding."
+        raise ValueError("Splash is not supported on this platform")
     if platform == "nvidia-cuda":
         return "Native weights path using the framework's CUDA backend; this path is not offered on ROCm."
     raise ValueError(f"{framework_display_name(framework)} is not supported on this platform")
@@ -175,6 +186,17 @@ def resolve_framework_executable(
                 executable_path=Path(unified),
             )
         return None
+    if framework == "splash":
+        # Splash serves through `splash serve` and prints "Splash 1.1.0" for --version.
+        splash = command_finder("splash")
+        if splash is None:
+            return None
+        return FrameworkExecutable(
+            framework=framework,
+            command_prefix=(splash, "serve"),
+            version_command=(splash, "--version"),
+            executable_path=Path(splash),
+        )
     if framework == "vllm":
         # vLLM serves through `vllm serve` and answers `vllm --version` on a zero exit.
         vllm = command_finder("vllm")

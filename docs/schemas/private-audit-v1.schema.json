@@ -387,7 +387,8 @@
           "enum": [
             "llama-cpp",
             "vllm",
-            "sglang"
+            "sglang",
+            "splash"
           ]
         },
         "accelerator_platform": {

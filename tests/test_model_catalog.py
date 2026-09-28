@@ -23,6 +23,7 @@ from agentperf_local.deployment.catalog import (
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
 METAL_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+SPLASH_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-splash-m5-pro.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -79,6 +80,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-nvfp4-dgx-spark", "319f741cce68d7914884900c138a1fbb70a42f30"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-27b-q4-k-m-splash-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
     ]
@@ -315,4 +317,59 @@ def test_rejects_oversized_recipe_before_parsing(tmp_path: Path) -> None:
     (root / GEMMA_RECIPE).write_bytes(b" " * (MAX_RECIPE_BYTES + 1))
 
     with pytest.raises(ValueError, match="outside the accepted range"):
+        load_model_catalog(root)
+
+
+def test_splash_recipe_pins_the_llama_cpp_target_and_a_dflash2_draft() -> None:
+    """Splash serves the same pinned GGUF as the M5 Pro llama.cpp recipe, beside its own draft."""
+    catalog = load_model_catalog(CATALOG_PATH)
+    splash = _named(catalog, "qwen38-27b-q4-k-m-splash-m5-pro").deployment
+    llama_cpp = _named(catalog, "qwen38-27b-q4-k-m-mtp-m5-pro").deployment
+
+    assert splash.frameworks == ("splash",)
+    assert splash.target_model_filename == llama_cpp.target_model_filename
+    assert {artifact.source_repository for artifact in splash.draft_artifacts} == {"incoai/Qwen3.8-27B-DFlash2"}
+    assert [artifact.filename for artifact in splash.draft_artifacts] == ["config.json", "model.safetensors"]
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("other-variant", "splash.gguf_variant must name the pinned .gguf target"),
+        ("draft-from-two-revisions", "must pin its draft from one repository at one revision"),
+        ("draft-without-config", "must pin config.json and at least one safetensors file"),
+        ("llama-cpp-framework", "served by Splash alone"),
+        ("no-launch-settings", "must carry Splash launch settings"),
+        ("cuda-device", "runs on apple-silicon alone"),
+        ("target-only-policy", "always drafts"),
+    ],
+)
+def test_rejects_splash_recipes_splash_cannot_serve(tmp_path: Path, case: str, message: str) -> None:
+    """Refuse a Splash recipe whose files or settings would not reach the pinned target and draft."""
+    root = tmp_path / "recipes"
+    shutil.copytree(CATALOG_PATH, root)
+    recipe = _read(root, SPLASH_RECIPE)
+    deployment = recipe["deployment"]
+    assert isinstance(deployment, dict)
+    artifacts = deployment["artifacts"]
+    assert isinstance(artifacts, list)
+    config, weights = artifacts[1], artifacts[2]
+    assert isinstance(config, dict) and isinstance(weights, dict)
+    if case == "other-variant":
+        deployment["splash"] = {"gguf_variant": "Q8_0", "kv_format": "int8"}
+    elif case == "draft-from-two-revisions":
+        weights["source_revision"] = "0" * 40
+    elif case == "draft-without-config":
+        artifacts.remove(config)
+    elif case == "llama-cpp-framework":
+        deployment["frameworks"] = ["llama-cpp"]
+    elif case == "no-launch-settings":
+        del deployment["splash"]
+    elif case == "cuda-device":
+        recipe["devices"] = ["nvidia-cuda"]
+    else:
+        recipe["speculation_policy"] = "disabled-target-only-baseline"
+    _write(root, SPLASH_RECIPE, recipe)
+
+    with pytest.raises(ValueError, match=re.escape(message)):
         load_model_catalog(root)

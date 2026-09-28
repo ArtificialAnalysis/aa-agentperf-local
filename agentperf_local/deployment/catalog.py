@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal, Self
 
 import yaml
@@ -40,7 +40,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:3814f36b629873beb148e8a5fb3c385c4d2fcee4c174bc3adafb428ae07b86b2"
+BUNDLED_RECIPES_DIGEST = "sha256:2ba10ab9b4c906bc6fc117d20e736e8924d495c29f8b05143f62ad969bbdec64"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -56,10 +56,15 @@ type SpeculationPolicy = Literal[
     "enabled-vllm-external-draft",
 ]
 type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
-type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
-type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
+type DeploymentFramework = Literal["llama-cpp", "sglang", "splash", "vllm"]
+type ArtifactKind = Literal[
+    "gguf-single-file", "gguf-file-set", "gguf-target-safetensors-draft", "safetensors-repository"
+]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
 type LlamaCppLoadMode = Literal["none", "mmap"]
+# How Splash stores the target's KV cache. Its default is int8; bf16 doubles the cache.
+type SplashKvFormat = Literal["int8", "bf16"]
+SPLASH_KV_FORMATS: tuple[SplashKvFormat, ...] = ("int8", "bf16")
 # How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
 # per-layer-embedding table with explicit reads from disk, so the table is never resident.
 type LlamaCppLazyMode = Literal["on-direct"]
@@ -71,7 +76,7 @@ LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on-direct",)
 # recipe's quantization, so a recipe that needs a particular kernel names it.
 type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
-DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm")
+DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "splash", "vllm")
 DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
@@ -87,10 +92,19 @@ SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "enabled-vllm-external-draft",
 )
 TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml")
-ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set", "safetensors-repository")
+ARTIFACT_KINDS: tuple[ArtifactKind, ...] = (
+    "gguf-single-file",
+    "gguf-file-set",
+    "gguf-target-safetensors-draft",
+    "safetensors-repository",
+)
 # A weights repository is only servable when the runtime can read the model shape
 # and the tokenizer beside the tensors.
 REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
+# Splash loads a draft directory by its configuration and its safetensors weights.
+SPLASH_DRAFT_CONFIG_FILENAME = "config.json"
+# A GGUF variant is a quantization label such as Q4_K_M or UD-Q4_K_M.
+SPLASH_GGUF_VARIANT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 def _revision(value: str, field: str) -> str:
@@ -265,6 +279,24 @@ class VllmLaunch(BaseModel, frozen=True):
         return self
 
 
+class SplashLaunch(BaseModel, frozen=True):
+    """Pin how Splash selects the recipe's GGUF target and stores its KV cache."""
+
+    # Splash selects a GGUF file by the variant after the repository, as in
+    # unsloth/Qwen3.8-27B-GGUF:Q4_K_M. It must name the recipe's pinned target file.
+    gguf_variant: str
+    kv_format: SplashKvFormat
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Require a plain variant label and a known KV format."""
+        if SPLASH_GGUF_VARIANT_PATTERN.fullmatch(self.gguf_variant) is None:
+            raise ValueError("splash.gguf_variant must be a quantization label such as Q4_K_M")
+        if self.kv_format not in SPLASH_KV_FORMATS:
+            raise ValueError("splash.kv_format must be int8 or bf16")
+        return self
+
+
 class DeploymentMemory(BaseModel, frozen=True):
     """Describe how one model's resident memory grows with the served context.
 
@@ -345,6 +377,7 @@ class ModelDeployment(BaseModel, frozen=True):
     moe_runner_backend: MoeRunnerBackend | None = None
     model_filename: str | None = None
     llama_cpp: LlamaCppLaunch | None = None
+    splash: SplashLaunch | None = None
     vllm: VllmLaunch | None = None
 
     @field_validator("runtime_versions", mode="before")
@@ -376,6 +409,8 @@ class ModelDeployment(BaseModel, frozen=True):
                 raise ValueError("a GGUF recipe must name its pinned target model file")
             if self.vllm is not None:
                 raise ValueError("a GGUF recipe must not carry vLLM launch settings")
+        elif self.artifact_kind == "gguf-target-safetensors-draft":
+            self._check_splash_artifacts()
         else:
             missing = tuple(name for name in REQUIRED_REPOSITORY_FILES if name not in filenames)
             if missing:
@@ -417,7 +452,44 @@ class ModelDeployment(BaseModel, frozen=True):
                 raise ValueError("llama.cpp draft_model_filename must name a pinned artifact")
         if self.vllm is not None and "vllm" not in self.frameworks:
             raise ValueError("only a vLLM recipe can name vLLM launch settings")
+        if self.splash is not None and "splash" not in self.frameworks:
+            raise ValueError("only a Splash recipe can name Splash launch settings")
         return self
+
+    def _check_splash_artifacts(self) -> None:
+        """Require one GGUF target from the recipe repository and one pinned safetensors draft.
+
+        Splash selects the target by variant from the recipe's repository and revision,
+        and loads the draft as a local directory, so the draft files must all come from
+        one other repository at one revision.
+        """
+        if self.frameworks != ("splash",):
+            raise ValueError("a GGUF recipe with a safetensors draft is served by Splash alone")
+        if self.splash is None:
+            raise ValueError("a Splash recipe must carry Splash launch settings")
+        if self.model_filename is not None or self.llama_cpp is not None or self.vllm is not None:
+            raise ValueError("a Splash recipe must not carry llama.cpp or vLLM file or launch settings")
+        targets = tuple(artifact for artifact in self.artifacts if artifact.source_repository is None)
+        drafts = tuple(artifact for artifact in self.artifacts if artifact.source_repository is not None)
+        if len(targets) != 1 or not targets[0].filename.endswith(".gguf"):
+            raise ValueError("a Splash recipe must pin exactly one .gguf target from its own repository")
+        if not PurePosixPath(targets[0].filename).name.endswith(f"-{self.splash.gguf_variant}.gguf"):
+            raise ValueError("splash.gguf_variant must name the pinned .gguf target")
+        sources = {(artifact.source_repository, artifact.source_revision) for artifact in drafts}
+        if len(sources) != 1:
+            raise ValueError("a Splash recipe must pin its draft from one repository at one revision")
+        draft_names = tuple(artifact.filename for artifact in drafts)
+        if SPLASH_DRAFT_CONFIG_FILENAME not in draft_names or not any(
+            name.endswith(".safetensors") for name in draft_names
+        ):
+            raise ValueError("a Splash draft must pin config.json and at least one safetensors file")
+
+    @property
+    def draft_artifacts(self) -> tuple[DeploymentArtifact, ...]:
+        """Return the files a Splash recipe pins from its draft repository, or none."""
+        if self.artifact_kind != "gguf-target-safetensors-draft":
+            return ()
+        return tuple(artifact for artifact in self.artifacts if artifact.source_repository is not None)
 
     @property
     def artifact_size_bytes(self) -> int:
@@ -436,6 +508,8 @@ class ModelDeployment(BaseModel, frozen=True):
             return self.model_filename
         if self.artifact_kind == "gguf-single-file":
             return self.artifacts[0].filename
+        if self.artifact_kind == "gguf-target-safetensors-draft":
+            return next(artifact.filename for artifact in self.artifacts if artifact.source_repository is None)
         return None
 
     def runtime_version_for(self, framework: DeploymentFramework) -> str | None:
@@ -482,7 +556,13 @@ class ModelCandidate(BaseModel, frozen=True):
             expected_devices = ("apple-silicon",) if llama_cpp.backend == "metal" else ("amd-rocm",)
             if self.devices != expected_devices:
                 raise ValueError("llama.cpp backend must match the recipe's devices")
-        if self.speculation_policy in (
+        splash = self.deployment.splash
+        if splash is not None:
+            if self.devices != ("apple-silicon",):
+                raise ValueError("a Splash recipe runs on apple-silicon alone")
+            if self.speculation_policy != "enabled-dflash-external-draft":
+                raise ValueError("a Splash recipe always drafts, so its policy is enabled-dflash-external-draft")
+        elif self.speculation_policy in (
             "enabled-mtp-external-draft",
             "enabled-dflash-external-draft",
             "enabled-dspark-external-draft",
