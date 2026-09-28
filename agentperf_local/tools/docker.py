@@ -9,9 +9,9 @@ import subprocess
 import uuid
 from pathlib import Path
 from time import perf_counter
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, PositiveFloat, model_validator
 
 from agentperf_local.workload.schema import RecordedToolCall
 
@@ -45,26 +45,16 @@ class DockerEnvironmentVariable(BaseModel, frozen=True):
 class DockerToolEnvironmentConfig(BaseModel, frozen=True):
     """Configure one isolated live tool environment."""
 
-    image: str
+    image: Annotated[str, Field(min_length=1)]
     cwd: str = "/workspace"
     network: str | None = "none"
     executable: str = "docker"
-    command_timeout_seconds: float = DEFAULT_DOCKER_COMMAND_TIMEOUT_SECONDS
+    command_timeout_seconds: PositiveFloat = DEFAULT_DOCKER_COMMAND_TIMEOUT_SECONDS
     container_timeout: str = DEFAULT_DOCKER_CONTAINER_TIMEOUT
-    interpreter: tuple[str, ...] = ("bash", "-c")
+    interpreter: Annotated[tuple[str, ...], Field(min_length=1)] = ("bash", "-c")
     workspace: Path | None = None
     run_args: tuple[str, ...] = ("--rm",)
     environment: tuple[DockerEnvironmentVariable, ...] = ()
-
-    @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        if not self.image:
-            raise ValueError("Docker tool image must not be empty")
-        if not self.interpreter:
-            raise ValueError("Docker tool interpreter must not be empty")
-        if self.command_timeout_seconds <= 0:
-            raise ValueError("Docker tool command timeout must be positive")
-        return self
 
 
 class ToolExecutionResult(BaseModel, frozen=True):

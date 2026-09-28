@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Callable
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, PositiveInt, model_validator
 
 from agentperf_local.common.units import NANOSECONDS_PER_MILLISECOND, NANOSECONDS_PER_SECOND
 from agentperf_local.telemetry.nvidia import NvidiaSample
@@ -19,15 +19,13 @@ DEFAULT_MAX_SAMPLE_GAP_INTERVALS = 3
 class PhaseInterval(BaseModel, frozen=True):
     """Describe one half-open benchmark phase interval."""
 
-    phase_id: str
+    phase_id: Annotated[str, Field(min_length=1)]
     start_ns: int
     end_ns: int
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Validate the phase interval."""
-        if not self.phase_id:
-            raise ValueError("phase_id must not be empty")
         if self.start_ns <= 0 or self.end_ns <= self.start_ns:
             raise ValueError("phase interval must be positive and non-empty")
         return self
@@ -42,29 +40,25 @@ class CoveragePolicy(BaseModel, frozen=True):
     """Store explicit telemetry admission thresholds."""
 
     minimum_coverage: float = DEFAULT_MINIMUM_COVERAGE
-    max_sample_gap_intervals: int = DEFAULT_MAX_SAMPLE_GAP_INTERVALS
+    max_sample_gap_intervals: PositiveInt = DEFAULT_MAX_SAMPLE_GAP_INTERVALS
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Validate coverage thresholds."""
         if not math.isfinite(self.minimum_coverage) or not 0 < self.minimum_coverage <= 1:
             raise ValueError("minimum_coverage must be greater than zero and at most one")
-        if self.max_sample_gap_intervals <= 0:
-            raise ValueError("max_sample_gap_intervals must be positive")
         return self
 
 
 class ScalarObservation(BaseModel, frozen=True):
     """Hold one optional scalar at a local monotonic time."""
 
-    monotonic_ns: int
+    monotonic_ns: PositiveInt
     value: float | None
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Validate one scalar observation."""
-        if self.monotonic_ns <= 0:
-            raise ValueError("observation time must be positive")
         if self.value is not None and (not math.isfinite(self.value) or self.value < 0):
             raise ValueError("observation value must be finite and non-negative")
         return self

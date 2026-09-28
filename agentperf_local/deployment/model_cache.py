@@ -15,13 +15,13 @@ import stat
 import time
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Self
+from typing import Annotated
 
 import httpx
 import orjson
 from huggingface_hub import try_to_load_from_cache
 from huggingface_hub.file_download import repo_folder_name
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field
 
 from agentperf_local.common.durable_files import (
     PRIVATE_FILE_PERMISSIONS,
@@ -110,15 +110,8 @@ class VerifiedDeployment(BaseModel, frozen=True):
     """Store every verified file of one recipe and the path its runtime is given."""
 
     model_path: Path
-    artifacts: tuple[VerifiedArtifact, ...]
+    artifacts: Annotated[tuple[VerifiedArtifact, ...], Field(min_length=1)]
     draft_model_path: Path | None = None
-
-    @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        """Require at least one verified file."""
-        if not self.artifacts:
-            raise ValueError("a verified deployment must hold at least one artifact")
-        return self
 
     @property
     def size_bytes(self) -> int:

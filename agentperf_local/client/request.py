@@ -1,8 +1,8 @@
 """Build OpenAI-compatible completion request bodies."""
 
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, PositiveInt, model_validator
 
 from agentperf_local.common.json_types import JsonObject, JsonValue
 
@@ -12,10 +12,10 @@ DEFAULT_MAX_OUTPUT_TOKENS = 16_384
 class CompletionRequest(BaseModel, frozen=True):
     """Describe one streamed chat completion."""
 
-    messages: tuple[JsonObject, ...]
-    model: str
+    messages: Annotated[tuple[JsonObject, ...], Field(min_length=1)]
+    model: Annotated[str, Field(min_length=1)]
     tools: tuple[JsonObject, ...] = ()
-    max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    max_tokens: PositiveInt = DEFAULT_MAX_OUTPUT_TOKENS
     reasoning_effort: str | None = None
     temperature: float | None = None
     top_p: float | None = None
@@ -29,12 +29,6 @@ class CompletionRequest(BaseModel, frozen=True):
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Reject values that cannot form a useful request."""
-        if not self.messages:
-            raise ValueError("messages must not be empty")
-        if not self.model:
-            raise ValueError("model must not be empty")
-        if self.max_tokens <= 0:
-            raise ValueError("max_tokens must be greater than zero")
         if self.temperature is not None and self.temperature < 0:
             raise ValueError("temperature must not be negative")
         if self.top_p is not None and not 0 < self.top_p <= 1:

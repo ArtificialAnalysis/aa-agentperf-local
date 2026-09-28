@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Self
 
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, NonNegativeInt, model_validator
 
 from agentperf_local.client.endpoint import MEASURED_TRANSPORT_POLICY_ID
 from agentperf_local.common.identity import sha256_bytes, sha256_file, validate_digest, validate_run_id
@@ -225,7 +225,7 @@ class PublicTotals(BaseModel, frozen=True):
 class PublicDistribution(BaseModel, frozen=True):
     """Store one public latency distribution."""
 
-    count: int
+    count: NonNegativeInt
     mean: float | None
     p50: float | None
     p95: float | None
@@ -233,8 +233,6 @@ class PublicDistribution(BaseModel, frozen=True):
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Reject impossible distribution values."""
-        if self.count < 0:
-            raise ValueError("distribution count must be non-negative")
         values = (self.mean, self.p50, self.p95)
         if any(value is not None and (not math.isfinite(value) or value < 0) for value in values):
             raise ValueError("distribution values must be finite and non-negative")
@@ -313,7 +311,7 @@ class PublicRunPolicy(BaseModel, frozen=True):
     reasoning_effort: str | None
     cache_isolation_enabled: bool
     cache_isolation_mode: str
-    cache_namespace_digits: int
+    cache_namespace_digits: NonNegativeInt
     tool_replay_mode: str
     tool_delay_scale: float
     tool_profile_statistic: str | None
@@ -353,8 +351,6 @@ class PublicRunPolicy(BaseModel, frozen=True):
             raise ValueError("reasoning_effort must be a short portable value")
         if self.cache_isolation_mode not in {"none", "run_namespace_prefix"}:
             raise ValueError("cache isolation mode is not supported")
-        if self.cache_namespace_digits < 0:
-            raise ValueError("cache namespace digits must be non-negative")
         if self.cache_isolation_enabled != (self.cache_isolation_mode != "none"):
             raise ValueError("cache isolation fields are inconsistent")
         if self.tool_replay_mode not in {"none", "recorded"}:

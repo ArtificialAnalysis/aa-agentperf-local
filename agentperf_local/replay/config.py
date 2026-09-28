@@ -6,9 +6,16 @@ import math
 import os
 import re
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    SecretStr,
+    model_validator,
+)
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend
 from agentperf_local.client.endpoint import normalize_base_url, url_is_cleartext_remote
@@ -78,13 +85,13 @@ class RunConfig(BaseModel, frozen=True):
     """Configure one sequential manifest replay."""
 
     base_url: str
-    model: str
+    model: Annotated[str, Field(min_length=1)]
     api_key: SecretStr | None = None
     client_backend: ClientBackend = "python"
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     output_token_policy: OutputTokenPolicy = "exact"
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
-    output_token_margin: int = DEFAULT_OUTPUT_TOKEN_MARGIN
+    max_output_tokens: PositiveInt = DEFAULT_MAX_OUTPUT_TOKENS
+    output_token_margin: NonNegativeInt = DEFAULT_OUTPUT_TOKEN_MARGIN
     sampling_preset: SamplingPreset = "standard"
     temperature: float | None = None
     top_p: float | None = None
@@ -119,18 +126,13 @@ class RunConfig(BaseModel, frozen=True):
         normalized_base_url = normalize_base_url(self.base_url)
         if self.api_key is not None and url_is_cleartext_remote(normalized_base_url):
             raise ValueError(CLEARTEXT_API_KEY_MESSAGE)
-        if not self.model:
-            raise ValueError("model must not be empty")
         if self.client_backend not in CLIENT_BACKENDS:
             raise ValueError("client_backend must be python or rust")
+        # The float limits stay here, after the finite checks above, so NaN and infinity get their own message.
         if self.request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be positive")
         if self.output_token_policy not in OUTPUT_TOKEN_POLICIES:
             raise ValueError("output_token_policy must be exact, recorded, or fixed")
-        if self.max_output_tokens <= 0:
-            raise ValueError("max_output_tokens must be positive")
-        if self.output_token_margin < 0:
-            raise ValueError("output_token_margin must be non-negative")
         if self.output_token_policy == "exact" and self.output_token_margin != 0:
             raise ValueError("the exact output policy pins each turn to its recorded length; it takes no margin")
         if self.sampling_preset not in {"standard", "custom"}:

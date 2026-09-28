@@ -6,10 +6,10 @@ import hashlib
 import re
 from datetime import date
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, model_validator
 
 from agentperf_local.common.durable_files import read_bounded_file
 from agentperf_local.common.identity import sha256_bytes, validate_identifier
@@ -167,7 +167,7 @@ class DeploymentArtifact(BaseModel, frozen=True):
 
     filename: str
     sha256: str
-    size_bytes: int
+    size_bytes: NonNegativeInt
     source_repository: str | None = None
     source_revision: str | None = None
 
@@ -176,8 +176,6 @@ class DeploymentArtifact(BaseModel, frozen=True):
         """Require a relative path with an exact digest and a non-negative size."""
         validate_artifact_path(self.filename, "artifact.filename")
         _sha256(self.sha256, "artifact.sha256")
-        if self.size_bytes < 0:
-            raise ValueError("artifact.size_bytes must not be negative")
         if (self.source_repository is None) != (self.source_revision is None):
             raise ValueError("artifact source_repository and source_revision must be set together")
         if self.source_repository is not None:
@@ -338,14 +336,14 @@ class DeploymentMemory(BaseModel, frozen=True):
     # only the model's window: llama.cpp pads the window, while SGLang sizes a share
     # of the token pool, so the pinned value is read from the runtime.
     sliding_cached_tokens: int
-    kv_bytes_per_scalar: int
-    recurrent_state_slots: int
+    kv_bytes_per_scalar: PositiveInt
+    recurrent_state_slots: NonNegativeInt
     constant_state_bytes: int
     runtime_overhead_bytes: int
     # Artifact bytes the runtime reads from disk on demand and never holds resident,
     # such as a per-layer-embedding table served by llama.cpp lazy reads. The memory
     # floor leaves them out.
-    lazy_read_bytes: int = 0
+    lazy_read_bytes: NonNegativeInt = 0
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -354,8 +352,6 @@ class DeploymentMemory(BaseModel, frozen=True):
             raise ValueError("attention layer counts must not be negative")
         if self.full_attention_layers + self.sliding_attention_layers <= 0:
             raise ValueError("a managed recipe must have at least one attention layer")
-        if self.kv_bytes_per_scalar <= 0:
-            raise ValueError("KV scalar width must be positive")
         for layers, heads, dimension, name in (
             (self.full_attention_layers, self.full_kv_heads, self.full_kv_head_dimension, "full"),
             (self.sliding_attention_layers, self.sliding_kv_heads, self.sliding_kv_head_dimension, "sliding"),
@@ -372,10 +368,6 @@ class DeploymentMemory(BaseModel, frozen=True):
             raise ValueError("memory reserves must be non-negative and the runtime overhead positive")
         if (self.recurrent_state_slots > 0) != (self.constant_state_bytes > 0):
             raise ValueError("recurrent state slots and constant state bytes must both be set or both be zero")
-        if self.recurrent_state_slots < 0:
-            raise ValueError("recurrent state slots must not be negative")
-        if self.lazy_read_bytes < 0:
-            raise ValueError("lazy_read_bytes must not be negative")
         return self
 
     @classmethod
@@ -656,14 +648,12 @@ class ModelCandidate(BaseModel, frozen=True):
 class ModelCatalog(BaseModel, frozen=True):
     """Store every recipe of one folder and the folder's identity."""
 
-    models: tuple[ModelCandidate, ...]
+    models: Annotated[tuple[ModelCandidate, ...], Field(min_length=1)]
     digest: str
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Require at least one recipe and unique names."""
-        if not self.models:
-            raise ValueError("recipe folder must contain at least one recipe")
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")

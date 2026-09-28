@@ -15,10 +15,10 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import FrameType
-from typing import IO, BinaryIO, Self
+from typing import IO, Annotated, BinaryIO, Self
 
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, model_validator
 
 from agentperf_local.common.argparse_fields import (
     read_integer,
@@ -91,10 +91,10 @@ class CollectorConfig(BaseModel, frozen=True):
     """Store one NVIDIA collector policy."""
 
     output_path: Path
-    device_ordinal: int = 0
-    interval_ms: int = DEFAULT_INTERVAL_MS
+    device_ordinal: NonNegativeInt = 0
+    interval_ms: PositiveInt = DEFAULT_INTERVAL_MS
     sample_limit: int | None = None
-    executable: str = "nvidia-smi"
+    executable: Annotated[str, Field(min_length=1)] = "nvidia-smi"
     # Set when a benchmark run owns this collection; the standalone command leaves it unset.
     run_id: str | None = None
 
@@ -103,14 +103,8 @@ class CollectorConfig(BaseModel, frozen=True):
         """Validate collector settings."""
         if self.run_id is not None:
             validate_run_id(self.run_id, "run_id")
-        if self.device_ordinal < 0:
-            raise ValueError("device_ordinal must be non-negative")
-        if self.interval_ms <= 0:
-            raise ValueError("interval_ms must be positive")
         if self.sample_limit is not None and self.sample_limit <= 0:
             raise ValueError("sample_limit must be positive")
-        if not self.executable:
-            raise ValueError("executable must not be empty")
         return self
 
     def command(self, fields: tuple[str, ...]) -> tuple[str, ...]:
@@ -127,7 +121,7 @@ class CollectorConfig(BaseModel, frozen=True):
 class NvidiaSample(BaseModel, frozen=True):
     """Store one normalized sensor sample."""
 
-    monotonic_ns: int
+    monotonic_ns: PositiveInt
     gpu_utilization_percent: float | None
     memory_used_mib: float | None
     temperature_c: float | None
@@ -138,8 +132,6 @@ class NvidiaSample(BaseModel, frozen=True):
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Reject invalid normalized values."""
-        if self.monotonic_ns <= 0:
-            raise ValueError("monotonic_ns must be positive")
         values = (
             self.gpu_utilization_percent,
             self.memory_used_mib,
