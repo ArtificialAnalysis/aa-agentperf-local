@@ -29,6 +29,7 @@ from agentperf_local.deployment.qualification import QUALIFICATION_FILENAME, wri
 from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.provenance.hardware import HardwareSnapshot
 from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
+from agentperf_local.replay.config import ToolChoice
 from agentperf_local.replay.runner import (
     RunFinishedBoundary,
     RunStartedBoundary,
@@ -1405,15 +1406,17 @@ async def test_unsuccessful_report_set_uses_failure_outcome_and_style(tmp_path: 
 
 
 @pytest.mark.parametrize(
-    ("honours_ignore_eos", "answers_as_ollama", "expected_policy", "expected_posts"),
+    ("honours_ignore_eos", "answers_as_ollama", "expected_policy", "expected_posts", "tool_choice"),
     [
         # The ignore_eos probe posts once and its control once; the replay's one turn posts last.
-        (True, False, "exact", 3),
+        (True, False, "exact", 3, None),
+        # A vLLM user picks tool_choice none, and the replay request carries it.
+        (True, False, "exact", 3, "none"),
         # A server that drops ignore_eos still runs, under the recorded policy, and the
         # result page says so. The short probe answer settles it without a control.
-        (False, False, "recorded", 2),
+        (False, False, "recorded", 2, None),
         # Ollama is named at the consent step, so no generation probe is sent at all.
-        (False, True, "recorded", 1),
+        (False, True, "recorded", 1, None),
     ],
 )
 async def test_textual_worker_executes_a_real_localhost_sse_replay(
@@ -1423,6 +1426,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
     answers_as_ollama: bool,
     expected_policy: str,
     expected_posts: int,
+    tool_choice: ToolChoice | None,
 ) -> None:
     manifest_path = write_replay_workload(tmp_path / "workload", name="Textual localhost test")
     output_dir = tmp_path / "results"
@@ -1446,6 +1450,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
                 endpoint_model="local-test-model",
                 api_key_env=api_key_env,
                 client_backend="python",
+                tool_choice=tool_choice,
             ),
         )
         async with app.run_test(size=(96, 30)) as pilot:
@@ -1482,6 +1487,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
     request_json = parse_json_object(replay_post.body, "captured TUI request")
     assert request_json.get("model") == "local-test-model"
     assert request_json.get("ignore_eos", False) is (expected_policy == "exact")
+    assert request_json.get("tool_choice") == tool_choice
     # The chosen folder holds exactly one fresh run folder with the flat report
     # layout the packaging and bundle commands consume.
     (run_dir,) = tuple(output_dir.iterdir())

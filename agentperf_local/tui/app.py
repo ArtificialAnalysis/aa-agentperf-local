@@ -66,6 +66,7 @@ from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
 from agentperf_local.deployment.model_cache import default_model_cache_root
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS, collect_source_provenance
 from agentperf_local.provenance.context import below_benchmark_context, context_is_reduced
+from agentperf_local.replay.config import ToolChoice
 from agentperf_local.replay.runner import RunStartedBoundary, TurnCompletedBoundary, TurnStartedBoundary
 from agentperf_local.reports.progress import (
     RunProgress,
@@ -120,6 +121,7 @@ from agentperf_local.tui.inputs import (
     ReplayWorkloadSelect,
     RunPage,
     SubmitCheckbox,
+    ToolChoiceSelect,
     WelcomeChoice,
 )
 from agentperf_local.tui.labels import (
@@ -208,6 +210,10 @@ MINIMUM_SUPPORTED_WIDTH = 48
 MINIMUM_SUPPORTED_HEIGHT = 16
 SHORT_LAYOUT_HEIGHT = 24
 UNAVAILABLE_FRAMEWORK_VALUE = "unavailable"
+# A Select needs a string for every option, so the server default gets a value that is not a real tool_choice.
+SERVER_DEFAULT_TOOL_CHOICE_VALUE = "server-default"
+SERVER_DEFAULT_TOOL_CHOICE_LABEL = "Server default"
+NO_TOOL_CHOICE_LABEL = "none · recommended for vLLM"
 SETUP_UNUSABLE_MESSAGE = (
     "[b]Can't use this setup.[/b]\n"
     "Check the replay, results folder, server URL, model name, and API key environment variable."
@@ -468,6 +474,7 @@ class TuiDefaults(BaseModel, frozen=True):
     endpoint_model: str | None = None
     api_key_env: str | None = None
     client_backend: ClientBackend = "python"
+    tool_choice: ToolChoice | None = None
     model_cache_root: Path = Field(default_factory=default_model_cache_root)
     deployment_port: int = DEFAULT_DEPLOYMENT_PORT
     deployment_startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS
@@ -724,6 +731,18 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                     allow_blank=False,
                     compact=True,
                     id="client-backend-select",
+                )
+            with Horizontal(id="tool-choice-row", classes="field-row disclosed"):
+                yield Label("Tool choice")
+                yield ToolChoiceSelect(
+                    (
+                        (SERVER_DEFAULT_TOOL_CHOICE_LABEL, SERVER_DEFAULT_TOOL_CHOICE_VALUE),
+                        (NO_TOOL_CHOICE_LABEL, "none"),
+                    ),
+                    value=self.defaults.tool_choice or SERVER_DEFAULT_TOOL_CHOICE_VALUE,
+                    allow_blank=False,
+                    compact=True,
+                    id="tool-choice-select",
                 )
             with Horizontal(classes="actions"):
                 yield Button("Review setup", id="config-continue", flat=True, compact=True)
@@ -1015,6 +1034,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         status.display = candidate is not None
         # A managed server never takes a key, so the always-empty disabled row only adds noise.
         self.query_one("#api-key-row", Horizontal).display = candidate is None
+        # A managed run sets tool_choice from its framework, so only an attached server offers the choice.
+        self.query_one("#tool-choice-row", Horizontal).set_class(candidate is not None, "-inapplicable")
         for endpoint_input in (base_url, endpoint_model, api_key_env):
             endpoint_input.disabled = candidate is not None
         if candidate is None:
@@ -1668,6 +1689,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                     endpoint_model=endpoint_model,
                     api_key_env=api_key_env_value or None,
                     client_backend=client_backend,
+                    tool_choice=None if managed_deployment is not None else self._selected_tool_choice(),
                     selection_kind=selection.kind,
                     catalog_profile_id=selection.profile_id,
                     catalog_digest=selection.catalog_digest,
@@ -1806,6 +1828,15 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if value == "rust":
             return "rust"
         raise ValueError("measured client selection is invalid")
+
+    def _selected_tool_choice(self) -> ToolChoice | None:
+        """Return the closed tool_choice selection; the server default sends no field."""
+        value = self.query_one("#tool-choice-select", ToolChoiceSelect).value
+        if value == SERVER_DEFAULT_TOOL_CHOICE_VALUE:
+            return None
+        if value == "none":
+            return "none"
+        raise ValueError("tool choice selection is invalid")
 
     def _controller_for(self, request: ReplayRequest) -> ReplayController | ManagedReplayController:
         """Return the controller that owns this request's server: attached, or the app's own."""

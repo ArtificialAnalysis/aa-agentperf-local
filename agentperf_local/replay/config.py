@@ -55,6 +55,8 @@ def read_api_key_env(name: str) -> SecretStr | None:
 type OutputTokenPolicy = Literal["exact", "recorded", "fixed"]
 OUTPUT_TOKEN_POLICIES: tuple[OutputTokenPolicy, ...] = ("exact", "recorded", "fixed")
 type SamplingPreset = Literal["standard", "custom"]
+type ToolChoice = Literal["none"]
+TOOL_CHOICES: tuple[ToolChoice, ...] = ("none",)
 type ToolReplayMode = Literal["none", "recorded", "live"]
 
 
@@ -97,7 +99,7 @@ class RunConfig(BaseModel, frozen=True):
     top_p: float | None = None
     top_k: int | None = None
     min_p: float | None = None
-    tool_choice: str | None = None
+    tool_choice: ToolChoice | None = None
     reasoning_effort: str | None = None
     cache_isolation: bool = True
     cache_namespace: str | None = None
@@ -140,7 +142,7 @@ class RunConfig(BaseModel, frozen=True):
             raise ValueError("top_k must be positive")
         if self.min_p is not None and not 0 <= self.min_p <= 1:
             raise ValueError("min_p must be between zero and one")
-        if self.tool_choice not in {None, "none"}:
+        if self.tool_choice is not None and self.tool_choice not in TOOL_CHOICES:
             raise ValueError("tool_choice must be none or null")
         if self.reasoning_effort is not None and not self.reasoning_effort:
             raise ValueError("reasoning_effort must not be empty")

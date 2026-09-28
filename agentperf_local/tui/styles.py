@@ -467,6 +467,11 @@ Sparkline > .sparkline--max-color {
     display: none;
 }
 
+/* A disclosed option that does not apply to the current selection stays hidden. */
+.page.-expanded .disclosed.-inapplicable {
+    display: none;
+}
+
 .field-row Select {
     width: 1fr;
     max-width: $field-value-max-width;

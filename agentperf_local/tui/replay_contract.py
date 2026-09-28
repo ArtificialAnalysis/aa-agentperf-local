@@ -48,7 +48,7 @@ from agentperf_local.provenance.benchmark import (
 )
 from agentperf_local.provenance.context import below_benchmark_context
 from agentperf_local.provenance.hardware import HardwareSnapshot
-from agentperf_local.replay.config import API_KEY_ENV_PATTERN, OutputTokenPolicy, read_api_key_env
+from agentperf_local.replay.config import API_KEY_ENV_PATTERN, OutputTokenPolicy, ToolChoice, read_api_key_env
 from agentperf_local.reports.reporting import (
     ArtifactPaths,
     validate_run_artifact_output,
@@ -244,6 +244,8 @@ class ReplayRequest(BaseModel, frozen=True):
     endpoint_model: str
     api_key_env: str | None = None
     client_backend: ClientBackend = "python"
+    # Only an attached run reads this; a managed run picks tool_choice from its own framework.
+    tool_choice: ToolChoice | None = None
     selection_kind: SelectionKind = SelectionKind.CUSTOM_ENDPOINT
     catalog_profile_id: str | None = None
     catalog_digest: str | None = None

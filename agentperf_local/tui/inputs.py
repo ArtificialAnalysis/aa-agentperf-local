@@ -182,6 +182,10 @@ class ClientBackendSelect(FieldSelect):
     """Select one measured streaming client with a concrete runtime type."""
 
 
+class ToolChoiceSelect(FieldSelect):
+    """Select whether an attached run sends tool_choice none or leaves the server default."""
+
+
 class ReplayWorkloadSelect(FieldSelect):
     """Select one bundled replay or a custom manifest."""
 
