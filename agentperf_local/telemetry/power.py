@@ -13,9 +13,9 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from agentperf_local.common.durable_files import NewFile, read_bounded_file, write_new_file
 from agentperf_local.common.identity import sha256_bytes, validate_digest, validate_run_id
@@ -106,7 +106,7 @@ class PhaseClockObserver:
 class PowerPhaseSummary(BaseModel, frozen=True):
     """Store the phase aggregates a private audit carries; no samples, no timestamps."""
 
-    phase_id: str
+    phase_id: Annotated[str, Field(min_length=1)]
     phase_duration_ms: float
     requested_interval_ms: int
     minimum_coverage: float
@@ -129,8 +129,6 @@ class PowerPhaseSummary(BaseModel, frozen=True):
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Reject a phase that claims valid energy without an energy value."""
-        if not self.phase_id:
-            raise ValueError("phase_id must not be empty")
         if self.sampled_power_energy_valid and self.sampled_power_energy_joules is None:
             raise ValueError("a valid energy phase must carry its energy value")
         measures = (

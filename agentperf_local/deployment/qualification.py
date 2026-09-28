@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 import orjson
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError, CompletionResult
@@ -111,14 +111,12 @@ _PRIVACY_BLOCK: JsonObject = {
 class ExpectedCall(BaseModel, frozen=True):
     """Describe one exact synthetic tool call."""
 
-    name: str
+    name: Annotated[str, Field(min_length=1)]
     arguments: tuple[tuple[str, str], ...]
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Reject empty call expectations."""
-        if not self.name:
-            raise ValueError("expected call name must not be empty")
         if any(not key or not value for key, value in self.arguments):
             raise ValueError("expected call arguments must not be empty")
         return self

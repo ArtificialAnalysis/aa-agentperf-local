@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from agentperf_local.common.identity import sha256_bytes, validate_digest
 from agentperf_local.common.json_fields import (
@@ -210,7 +210,7 @@ class SanitizedTurn(BaseModel, frozen=True):
     turn_ordinal: int
     task_ordinal: int
     turn_in_task: int
-    finish_reason: str
+    finish_reason: Annotated[str, Field(min_length=1)]
     response_chunks: int
     response_action_count: int
     recorded_action_count: int
@@ -224,8 +224,6 @@ class SanitizedTurn(BaseModel, frozen=True):
         """Validate ordinal, action, and pacing evidence."""
         if self.turn_ordinal < 0 or self.task_ordinal < 0 or self.turn_in_task < 0:
             raise ValueError("sanitized ordinals must be non-negative")
-        if not self.finish_reason:
-            raise ValueError("sanitized finish reason must not be empty")
         if self.response_chunks <= 0 or self.response_chunks > MAX_RESPONSE_CHUNKS_PER_TURN:
             raise ValueError("response chunk count must be within the per-turn limit")
         action_counts = (self.response_action_count, self.recorded_action_count)
@@ -265,7 +263,7 @@ class SanitizedEvidence(BaseModel, frozen=True):
     aggregate_payload_digest: str
     source_turns_digest: str
     rows_digest: str
-    turns: tuple[SanitizedTurn, ...]
+    turns: Annotated[tuple[SanitizedTurn, ...], Field(min_length=1)]
     normalization_policy_id: str = OUTPUT_LENGTH_NORMALIZATION_POLICY
     version: int = SANITIZED_EVIDENCE_VERSION
 
@@ -279,8 +277,6 @@ class SanitizedEvidence(BaseModel, frozen=True):
             raise ValueError("sanitized evidence version is not supported")
         if self.normalization_policy_id != OUTPUT_LENGTH_NORMALIZATION_POLICY:
             raise ValueError("sanitized normalization policy is not supported")
-        if not self.turns:
-            raise ValueError("sanitized evidence must contain turns")
         if len(self.turns) > MAX_SANITIZED_TURNS:
             raise ValueError("sanitized evidence exceeds the turn limit")
         if tuple(turn.turn_ordinal for turn in self.turns) != tuple(range(len(self.turns))):

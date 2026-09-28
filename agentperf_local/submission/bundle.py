@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Self
 
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, PositiveInt, model_validator
 
 from agentperf_local.common.durable_files import (
     PUBLIC_FILE_PERMISSIONS,
@@ -171,15 +171,13 @@ class BundleArtifact(BaseModel, frozen=True):
     media_type: str
     schema_id: str
     privacy_profile: str
-    byte_size: int
+    byte_size: PositiveInt
     file_digest: str
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Validate one fixed bundle artifact record."""
         validate_digest(self.file_digest, "file_digest")
-        if self.byte_size <= 0:
-            raise ValueError("bundle artifact byte size must be positive")
         if self.media_type != JSON_MEDIA_TYPE:
             raise ValueError("bundle artifacts must use the JSON media type")
         return self
