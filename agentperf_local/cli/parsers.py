@@ -31,7 +31,11 @@ from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
 )
 from agentperf_local.replay.cache_isolation import CACHE_NAMESPACE_ENV
-from agentperf_local.replay.config import DEFAULT_LIVE_TOOL_TIMEOUT_SECONDS, DEFAULT_REQUEST_TIMEOUT_SECONDS
+from agentperf_local.replay.config import (
+    DEFAULT_LIVE_TOOL_TIMEOUT_SECONDS,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    TOOL_CHOICES,
+)
 from agentperf_local.submission.client import (
     SUBMIT_BASE_URL,
     SUBMIT_TOKEN_ENV,
@@ -71,6 +75,18 @@ def _add_streaming_flags(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="render AA progress frames to stderr after response streams close",
+    )
+
+
+def _add_tool_choice_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--tool-choice",
+        choices=TOOL_CHOICES,
+        help=(
+            "send tool_choice none so the server applies no tool-call grammar; vLLM with auto tool choice "
+            "stops a turn at the first parsed call, and llama.cpp can fail an exact-length request when "
+            "the grammar ends before the recorded length"
+        ),
     )
 
 
@@ -180,14 +196,7 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     parser.add_argument("--top-k", type=int, help="override top-k sampling")
     parser.add_argument("--min-p", type=float, help="override min-p sampling")
     parser.add_argument("--reasoning-effort", help="optional endpoint reasoning-effort label")
-    parser.add_argument(
-        "--tool-choice",
-        choices=("none",),
-        help=(
-            "send tool_choice none so the server applies no tool-call grammar; llama.cpp can fail "
-            "an exact-length request when the grammar ends before the recorded length"
-        ),
-    )
+    _add_tool_choice_flag(parser)
     parser.add_argument(
         "--cache-isolation",
         action=argparse.BooleanOptionalAction,
@@ -278,6 +287,7 @@ def _add_tui_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         default=None,
         help="index of the detected accelerator to use when this app starts the model",
     )
+    _add_tool_choice_flag(parser)
     parser.add_argument("--submit-base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
     parser.add_argument(
         "--submit-token-env",

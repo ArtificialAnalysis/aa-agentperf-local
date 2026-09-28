@@ -47,8 +47,10 @@ from agentperf_local.replay.config import (
     DEFAULT_OUTPUT_TOKEN_MARGIN,
     DEFAULT_TOOL_DELAY_SCALE,
     OUTPUT_TOKEN_POLICIES,
+    TOOL_CHOICES,
     OutputTokenPolicy,
     SamplingPreset,
+    ToolChoice,
     ToolReplayMode,
     read_api_key_env,
 )
@@ -134,6 +136,12 @@ def read_message_source(namespace: argparse.Namespace) -> MessageSource:
 
 def read_client_backend(namespace: argparse.Namespace) -> ClientBackend:
     return one_of(read_string(namespace, "client"), CLIENT_BACKENDS, "--client")
+
+
+def read_tool_choice(namespace: argparse.Namespace) -> ToolChoice | None:
+    """Return the tool_choice the user passed, or None to leave the server default."""
+    tool_choice = read_optional_string(namespace, "tool_choice")
+    return None if tool_choice is None else one_of(tool_choice, TOOL_CHOICES, "--tool-choice")
 
 
 def read_requested_output_token_policy(namespace: argparse.Namespace) -> OutputTokenPolicy | None:

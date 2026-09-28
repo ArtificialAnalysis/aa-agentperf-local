@@ -24,6 +24,7 @@ from agentperf_local.cli.options import (
     read_replay_manifest_path,
     read_requested_output_token_policy,
     read_sampling_preset,
+    read_tool_choice,
     read_tool_delay_scale,
     read_tool_mode,
     require_fresh_output_dir,
@@ -150,7 +151,7 @@ def _run_config(namespace: argparse.Namespace, output_token_policy: OutputTokenP
         top_p=read_optional_number(namespace, "top_p"),
         top_k=read_optional_integer(namespace, "top_k"),
         min_p=read_optional_number(namespace, "min_p"),
-        tool_choice=read_optional_string(namespace, "tool_choice"),
+        tool_choice=read_tool_choice(namespace),
         reasoning_effort=read_optional_string(namespace, "reasoning_effort"),
         cache_isolation=read_boolean(namespace, "cache_isolation"),
         cache_namespace=read_optional_string(namespace, "cache_namespace"),
@@ -489,6 +490,7 @@ def tui_command(namespace: argparse.Namespace) -> int:
             submit_token_env=read_string(namespace, "submit_token_env"),
             deployment_startup_timeout_seconds=read_number(namespace, "startup_timeout_seconds"),
             device_index=read_optional_integer(namespace, "device"),
+            tool_choice=read_tool_choice(namespace),
         ),
     )
     outcome = app.run()

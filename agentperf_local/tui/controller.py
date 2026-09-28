@@ -102,6 +102,7 @@ async def _execute_validated_replay(
         api_key=api_key,
         client_backend=request.client_backend,
         output_token_policy=output_token_policy,
+        tool_choice=request.tool_choice,
     )
     # Preflight stays offline; the only pre-replay contact is the /models probe whose
     # outcome arrives here, so the observation is bound before the run.
