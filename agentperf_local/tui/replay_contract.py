@@ -13,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.client.endpoint import normalize_base_url, url_is_cleartext_remote, url_names_loopback_host
@@ -327,7 +327,7 @@ class ValidatedReplayInputs(BaseModel, frozen=True):
     required_context_tokens: int | None
 
 
-def require_api_key_value(name: str) -> str:
+def require_api_key_value(name: str) -> SecretStr:
     """Return the named API key value, or reject the setup when it cannot be sent."""
     value = read_api_key_env(name)
     if value is None:

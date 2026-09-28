@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 import orjson
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend
 from agentperf_local.common.argparse_fields import (
@@ -115,7 +115,7 @@ def nonempty_path(value: str) -> Path:
     return Path(value)
 
 
-def read_api_key(namespace: argparse.Namespace) -> str | None:
+def read_api_key(namespace: argparse.Namespace) -> SecretStr | None:
     """Read one explicitly named endpoint secret."""
     name = read_optional_string(namespace, "api_key_env")
     if name is None:

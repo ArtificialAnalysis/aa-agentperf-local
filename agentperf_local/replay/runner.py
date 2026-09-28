@@ -399,7 +399,7 @@ def _create_client(config: RunConfig) -> CompletionClient:
     return streaming_client(
         config.client_backend,
         base_url=config.base_url,
-        api_key=config.api_key_text,
+        api_key=config.api_key,
         timeout_seconds=config.request_timeout_seconds,
         max_connections=SEQUENTIAL_MAX_CONNECTIONS,
     )
