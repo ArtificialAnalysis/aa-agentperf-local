@@ -608,10 +608,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             yield WelcomeChoice(
                 "Use existing server", "Connect to Ollama, LM Studio, llama.cpp, or another API.", id="welcome-existing"
             )
-            yield Static(
-                "Review the setup before anything starts. Results are saved locally; sharing is optional.",
-                classes="lede",
-            )
             yield Static("Arrow keys to move · Enter or click to choose", classes="key-hint")
 
     def _model_page(self) -> ComposeResult:
