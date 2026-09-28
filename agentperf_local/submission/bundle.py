@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
 import orjson
-from pydantic import BaseModel, PositiveInt, model_validator
+from pydantic import BaseModel, Field, PositiveInt, model_validator
 
 from agentperf_local.common.durable_files import (
     PUBLIC_FILE_PERMISSIONS,
@@ -31,6 +31,7 @@ from agentperf_local.common.json_fields import (
 )
 from agentperf_local.common.json_records import json_field_names, json_record
 from agentperf_local.common.json_types import JsonObject, JsonValue, pretty_json_bytes
+from agentperf_local.common.models import read_object
 from agentperf_local.provenance.benchmark import (
     MEASUREMENT_BINDING_FILENAME,
     SourceProvenance,
@@ -49,7 +50,6 @@ from agentperf_local.submission.aggregate import (
     PUBLIC_SUBMISSION_VERSION,
     SELF_REPORTED_TRUST_TIER,
     ArtifactDigests,
-    PublicDistribution,
     PublicLatencyDistributions,
     PublicRunPolicy,
     PublicRunResult,
@@ -84,6 +84,8 @@ PUBLIC_SUBMISSION_SCHEMA_ID = "https://artificialanalysis.ai/schemas/agentperf-l
 SANITIZED_EVIDENCE_SCHEMA_ID = (
     "https://artificialanalysis.ai/schemas/agentperf-local/sanitized-turn-evidence-v1.schema.json"
 )
+# Text in a bundle artifact record is never empty.
+_NonEmptyText = Annotated[str, Field(min_length=1)]
 AGGREGATE_ROLE = "aggregate"
 SANITIZED_EVIDENCE_ROLE = "sanitized_turn_evidence"
 PRIVATE_AUDIT_ROLE = "private_audit"
@@ -166,13 +168,13 @@ _PUBLIC_POLICY_CONTEXT_KEYS = frozenset(("requested_tokens", "observed_tokens", 
 class BundleArtifact(BaseModel, frozen=True):
     """Bind one named bundle file to its exact bytes and schema."""
 
-    role: str
-    filename: str
-    media_type: str
-    schema_id: str
-    privacy_profile: str
+    role: _NonEmptyText
+    filename: _NonEmptyText
+    media_type: _NonEmptyText
+    schema_id: _NonEmptyText
+    privacy_profile: _NonEmptyText
     byte_size: PositiveInt
-    file_digest: str
+    file_digest: _NonEmptyText
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -185,20 +187,6 @@ class BundleArtifact(BaseModel, frozen=True):
     def to_json(self) -> JsonObject:
         """Return one exact-byte artifact record."""
         return json_record(self)
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> BundleArtifact:
-        """Parse one strict artifact record."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            role=required_string(data, "role", source),
-            filename=required_string(data, "filename", source),
-            media_type=required_string(data, "media_type", source),
-            schema_id=required_string(data, "schema_id", source),
-            privacy_profile=required_string(data, "privacy_profile", source),
-            byte_size=required_integer(data, "byte_size", source),
-            file_digest=required_string(data, "file_digest", source),
-        )
 
 
 class SubmissionBundleManifest(BaseModel, frozen=True):
@@ -253,7 +241,7 @@ class SubmissionBundleManifest(BaseModel, frozen=True):
         for index, value in enumerate(values):
             if not isinstance(value, dict):
                 raise ValueError(f"bundle_manifest.artifacts[{index}] must be an object")
-            parsed.append(BundleArtifact.from_json(value, f"bundle_manifest.artifacts[{index}]"))
+            parsed.append(read_object(BundleArtifact, value, f"bundle_manifest.artifacts[{index}]"))
         return cls(
             version=required_integer(data, "version", "bundle_manifest"),
             run_id=required_string(data, "run_id", "bundle_manifest"),
@@ -532,23 +520,16 @@ def validate_submission_bundle(bundle_dir: Path) -> ValidatedSubmissionBundle:
     if not isinstance(totals_data, dict) or not isinstance(latency_data, dict):
         raise ValueError("aggregate run totals and distributions must be objects")
     policy = _validate_public_policy(run)
-    require_exact_keys(totals_data, json_field_names(PublicTotals), "aggregate.payload.run.totals")
-    require_exact_keys(
-        latency_data, json_field_names(PublicLatencyDistributions), "aggregate.payload.run.latency_distributions_ms"
-    )
-    for name in json_field_names(PublicLatencyDistributions):
-        distribution = latency_data.get(name)
-        if not isinstance(distribution, dict):
-            raise ValueError(f"aggregate latency distribution {name} must be an object")
-        require_exact_keys(distribution, json_field_names(PublicDistribution), f"aggregate.latency.{name}")
     # The run result carries the public invariants, including the observer rule, so the
     # packaging gate and this validator apply exactly one rule set.
     aggregate_run = PublicRunResult(
         success=True,
         wall_duration_ms=required_number(run, "wall_duration_ms", "aggregate.payload.run"),
         observer_duration_ms=required_number(run, "observer_duration_ms", "aggregate.payload.run"),
-        totals=PublicTotals.from_json(totals_data),
-        latency_distributions_ms=PublicLatencyDistributions.from_json(latency_data),
+        totals=read_object(PublicTotals, totals_data, "aggregate.payload.run.totals"),
+        latency_distributions_ms=read_object(
+            PublicLatencyDistributions, latency_data, "aggregate.payload.run.latency_distributions_ms"
+        ),
         policy=policy,
     )
     payload_digest = required_string(aggregate_data, "payload_digest", "aggregate")

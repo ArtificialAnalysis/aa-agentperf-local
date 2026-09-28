@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import FrameType
-from typing import IO, Annotated, BinaryIO, Self
+from typing import IO, Annotated, BinaryIO, Literal, Self
 
 import orjson
 from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, model_validator
@@ -29,17 +29,10 @@ from agentperf_local.common.argparse_fields import (
 )
 from agentperf_local.common.durable_files import NEW_FILE_OPEN_FLAGS
 from agentperf_local.common.identity import validate_run_id
-from agentperf_local.common.json_fields import (
-    decode_json_object,
-    optional_number,
-    optional_string,
-    require_exact_keys,
-    required_boolean,
-    required_integer,
-)
-from agentperf_local.common.json_records import json_field_names, json_record
+from agentperf_local.common.json_fields import decode_json_object
+from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject
-from agentperf_local.common.models import error_text
+from agentperf_local.common.models import error_text, read_object, read_record
 
 # Version 2 added the run identifier to the header, the unparseable-line count to the
 # footer, and records a glitched sampler line as an all-missing sample.
@@ -122,12 +115,14 @@ class NvidiaSample(BaseModel, frozen=True):
     """Store one normalized sensor sample."""
 
     monotonic_ns: PositiveInt
-    gpu_utilization_percent: float | None
-    memory_used_mib: float | None
-    temperature_c: float | None
-    power_w: float | None
-    graphics_clock_mhz: float | None
-    memory_clock_mhz: float | None
+    # A sample line may omit a sensor the driver could not read, so each value defaults to missing.
+    gpu_utilization_percent: float | None = None
+    memory_used_mib: float | None = None
+    temperature_c: float | None = None
+    power_w: float | None = None
+    graphics_clock_mhz: float | None = None
+    memory_clock_mhz: float | None = None
+    kind: Literal["telemetry_sample"] = "telemetry_sample"
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -157,20 +152,6 @@ class NvidiaSample(BaseModel, frozen=True):
             power_w=None,
             graphics_clock_mhz=None,
             memory_clock_mhz=None,
-        )
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> NvidiaSample:
-        """Read one private sample record."""
-        values = {field: optional_number(data, field, source) for field in NORMALIZED_FIELDS}
-        return cls(
-            monotonic_ns=required_integer(data, "monotonic_ns", source),
-            gpu_utilization_percent=values["gpu_utilization_percent"],
-            memory_used_mib=values["memory_used_mib"],
-            temperature_c=values["temperature_c"],
-            power_w=values["power_w"],
-            graphics_clock_mhz=values["graphics_clock_mhz"],
-            memory_clock_mhz=values["memory_clock_mhz"],
         )
 
     @property
@@ -297,23 +278,11 @@ class TelemetryFooter(BaseModel, frozen=True):
     missing_value_count: int
     unparseable_line_count: int
     graceful: bool
-    failure_code: str | None
+    failure_code: Annotated[str, Field(min_length=1)] | None
 
     def to_json(self) -> JsonObject:
         """Return the closed completion record."""
         return json_record(self)
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> TelemetryFooter:
-        """Parse one strict completion record."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            sample_count=required_integer(data, "sample_count", source),
-            missing_value_count=required_integer(data, "missing_value_count", source),
-            unparseable_line_count=required_integer(data, "unparseable_line_count", source),
-            graceful=required_boolean(data, "graceful", source),
-            failure_code=optional_string(data, "failure_code", source),
-        )
 
 
 class TelemetryRecords(BaseModel, frozen=True):
@@ -345,11 +314,12 @@ def parse_nvidia_telemetry(encoded: bytes) -> TelemetryRecords:
         data = decode_json_object(line, f"telemetry line {index} is not a JSON object")
         kind = data.get("kind")
         if kind == "telemetry_sample" and footer is None:
-            samples.append(NvidiaSample.from_json(data, f"telemetry line {index}"))
+            # Sample lines have always tolerated keys this reader does not know.
+            samples.append(read_record(NvidiaSample, line, f"telemetry line {index}", unknown_keys="skip"))
             continue
         if kind == "telemetry_footer" and footer is None and index == len(lines) - 1:
             fields = {key: value for key, value in data.items() if key != "kind"}
-            footer = TelemetryFooter.from_json(fields, "telemetry_footer")
+            footer = read_object(TelemetryFooter, fields, "telemetry_footer")
             continue
         raise ValueError(f"telemetry line {index} is out of place")
     if footer is not None and footer.sample_count != len(samples):

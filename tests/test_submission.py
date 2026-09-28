@@ -348,6 +348,7 @@ def _qualification(run_id: str, *, endpoint_model: str = "secret-model-alias") -
     outcomes = tuple(
         ProbeOutcome(
             probe_id=probe_id,
+            status_code=None,
             passed=True,
             failure_codes=(),
             tool_names=(),

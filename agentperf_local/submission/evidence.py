@@ -21,6 +21,7 @@ from agentperf_local.common.json_fields import (
 )
 from agentperf_local.common.json_records import json_field_names, json_record
 from agentperf_local.common.json_types import JsonObject, JsonValue
+from agentperf_local.common.models import read_object
 from agentperf_local.provenance.benchmark import MEASUREMENT_BINDING_FILENAME, load_measurement_binding
 from agentperf_local.reports.reporting import (
     OUTPUT_LENGTH_NORMALIZATION_POLICY,
@@ -114,17 +115,6 @@ class SanitizedTiming(BaseModel, frozen=True):
     def to_json(self) -> JsonObject:
         """Return safe timing evidence."""
         return json_record(self)
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> SanitizedTiming:
-        """Parse one strict timing object."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            e2e_latency_ms=required_number(data, "e2e_latency_ms", source),
-            time_to_first_byte_ms=required_number(data, "time_to_first_byte_ms", source),
-            time_to_first_token_ms=required_number(data, "time_to_first_token_ms", source),
-            generation_ms=required_number(data, "generation_ms", source),
-        )
 
 
 class SanitizedTokens(BaseModel, frozen=True):
@@ -252,7 +242,7 @@ class SanitizedTurn(BaseModel, frozen=True):
             recorded_action_count=required_integer(data, "recorded_action_count", source),
             recorded_pacing_ms=required_number(data, "recorded_pacing_ms", source),
             replayed_pacing_ms=required_number(data, "replayed_pacing_ms", source),
-            timing=SanitizedTiming.from_json(required_object(data, "timing", source), f"{source}.timing"),
+            timing=read_object(SanitizedTiming, required_object(data, "timing", source), f"{source}.timing"),
             tokens=SanitizedTokens.from_json(required_object(data, "tokens", source), f"{source}.tokens"),
         )
 

@@ -1,6 +1,7 @@
 """Exercise the public synthetic runtime conformance pack."""
 
 import asyncio
+import re
 from pathlib import Path
 
 import orjson
@@ -11,6 +12,7 @@ from agentperf_local.client.backends import ClientBackend
 from agentperf_local.client.protocol import CompletionError, CompletionResult, RawRead
 from agentperf_local.client.request import CompletionRequest
 from agentperf_local.common.json_types import JsonObject, JsonValue
+from agentperf_local.common.models import read_object
 from agentperf_local.deployment.qualification import (
     CAPPED_PROBE_OUTPUT_TOKENS,
     MAX_FINISH_REASON_CHARACTERS,
@@ -19,6 +21,7 @@ from agentperf_local.deployment.qualification import (
     QUALIFICATION_FAILURE_CODES,
     SYNTHETIC_PACK_ID,
     UNNAMED_TOOL_NAME,
+    QualificationFile,
     RuntimeQualification,
     load_runtime_qualification,
     probe_pack_digest,
@@ -153,10 +156,12 @@ async def test_qualifies_structured_streams_without_storing_generated_values(tmp
     Draft202012Validator(SCHEMA_DOC).validate(written_report)
     assert written_report["run_id"] == RUN_ID
     assert load_runtime_qualification(output_path) == report
-    with pytest.raises(ValueError, match="unexpected endpoint_url"):
-        RuntimeQualification.from_json({**written_report, "endpoint_url": "http://secret"})
-    with pytest.raises(ValueError, match="does not match its outcomes"):
-        RuntimeQualification.from_json({**written_report, "passed": False})
+    with pytest.raises(ValueError, match=re.escape("qualification: endpoint_url: Extra inputs are not permitted")):
+        read_object(QualificationFile, {**written_report, "endpoint_url": "http://secret"}, "qualification").report()
+    with pytest.raises(
+        ValueError, match=re.escape("qualification: qualification pass state does not match its outcomes")
+    ):
+        read_object(QualificationFile, {**written_report, "passed": False}, "qualification").report()
     schema_failure_codes = SCHEMA_DOC["$defs"]["outcome"]["properties"]["failure_codes"]["items"]["enum"]
     assert tuple(schema_failure_codes) == QUALIFICATION_FAILURE_CODES
     assert SCHEMA_DOC["properties"]["profile_id"]["pattern"] == PROFILE_ID_PATTERN.pattern
