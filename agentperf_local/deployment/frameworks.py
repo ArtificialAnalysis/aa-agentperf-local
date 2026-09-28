@@ -48,6 +48,9 @@ FRAMEWORK_VERSION_TIMEOUT_SECONDS = 60.0
 
 
 MAX_FRAMEWORK_VERSION_CHARACTERS = 160
+# A vLLM plugin can log while `vllm --version` imports it, and vLLM writes log records to
+# standard output ahead of the version, as in "INFO 09-28 07:41:45 [__init__.py:112] ...".
+VLLM_LOG_RECORD_PATTERN = re.compile(r"^(?:\(\S+ pid=\d+\) )?(?:DEBUG|INFO|WARNING|ERROR) \d\d-\d\d \d\d:\d\d:\d\d ")
 
 
 type CommandFinder = Callable[[str], str | None]
@@ -258,9 +261,10 @@ def framework_offers(
 
 def _safe_version(encoded: bytes) -> str:
     decoded = encoded.decode("utf-8", errors="replace").splitlines()
-    if not decoded:
+    reported = [line for line in decoded if VLLM_LOG_RECORD_PATTERN.match(line) is None]
+    if not reported:
         return "unreported"
-    version = decoded[0].strip()
+    version = reported[0].strip()
     if (
         not version
         or len(version) > MAX_FRAMEWORK_VERSION_CHARACTERS

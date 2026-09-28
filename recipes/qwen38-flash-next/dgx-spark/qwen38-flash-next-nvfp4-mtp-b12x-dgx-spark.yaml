@@ -1,6 +1,6 @@
 profile_id: qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark
 as_of: '2026-09-28'
-display_name: Qwen3.8 Flash-Next NVFP4 MTP, DGX Spark vLLM (b12x)
+display_name: Qwen3.8 Flash-Next NVFP4 MTP, DGX Spark vLLM (b12x, 1794dcf18)
 hf_repository: local-inference-lab/Qwen3.8-Flash-Next-NVFP4
 hf_revision: 7c4f1bc1a2d6847e0cbc01ac6b823f00251de8dd
 devices:
@@ -172,6 +172,8 @@ deployment:
     constant_state_bytes: 117669888
     runtime_overhead_bytes: 26600000000
     lazy_read_bytes: 28865817884
+  runtime_versions:
+    vllm: 0.1.dev21510+g1794dcf18.d20260927
   vllm:
     arguments:
     - --trust-remote-code

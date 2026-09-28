@@ -28,9 +28,12 @@ SHA256_HEX_DIGITS = 64
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 RELEASE_VERSION_PARTS = 3
 # A development build is pinned by its exact version string: a base version, a commit count, and
-# the abbreviated commit it was built from. Examples are 0.1.dev20073+g8e685d198 and, for a vLLM
-# source install over a precompiled wheel, 0.30.1rc1.dev187+g066a1598f.precompiled.
-DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+(?:\.\d+)?(?:rc\d+)?\.dev\d+\+g[0-9a-f]{7,40}(?:\.precompiled)?$")
+# the abbreviated commit it was built from. Examples are 0.1.dev20073+g8e685d198; for a vLLM
+# source install over a precompiled wheel, 0.30.1rc1.dev187+g066a1598f.precompiled; and for a
+# build from a modified checkout, which setuptools-scm dates, 0.1.dev21510+g1794dcf18.d20260927.
+DEVELOPMENT_BUILD_PATTERN = re.compile(
+    r"^\d+\.\d+(?:\.\d+)?(?:rc\d+)?\.dev\d+\+g[0-9a-f]{7,40}(?:\.precompiled|\.d\d{8})?$"
+)
 PLE_TABLE_MEMORY_VARIABLE = "VLLM_PLE_TABLE_MEMORY"
 PLE_TABLE_ON_DISK = "disk"
 ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-Za-z0-9_])?$")
@@ -43,7 +46,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:11edf3a6c78b0dcb0618736eba1a7430a5794a394fcb00b702dc32faca376eef"
+BUNDLED_RECIPES_DIGEST = "sha256:d9960353272ca1482faa99a5badffe2c2419432a6b9aa3322e739b3edae060d1"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
