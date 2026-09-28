@@ -47,7 +47,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-09-21"
+    assert catalog.as_of == "2026-09-28"
     # Recipes load in recipes/<model>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
@@ -58,6 +58,9 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("gemma4-26b-a4b-q4-k-m-mtp-strix-halo", "c099eb48e663fd284577b04978a94ffccb261841"),
         ("gemma4-31b-it-nvfp4-dgx-spark", "4135a98a9b728a548947683219633b25682223ac"),
         ("gpt-oss-120b-mxfp4", "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"),
+        ("ling3-flash-q4-k-m", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
+        ("ling3-flash-q4-k-m-dspark-dgx-spark", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
+        ("ling3-flash-q4-k-m-dspark-strix-halo", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("muse-glimmer-30b-q4-k-m-dflash-rtx5090", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("muse-glimmer-30b-q4-k-m-dflash-strix-halo", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
@@ -87,11 +90,13 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 8
+    assert len(dgx_spark) == 9
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
-        assert candidate.deployment.frameworks == ("vllm",)
-        assert candidate.deployment.vllm is not None
+    # Ling 3.0 flash is the one DGX Spark recipe that llama.cpp serves; the rest run vLLM.
+    assert [model.profile_id for model in dgx_spark if model.deployment.vllm is None] == [
+        "ling3-flash-q4-k-m-dspark-dgx-spark"
+    ]
     # SGLang profiles share their qualified release. llama.cpp publishes no comparable
     # release version to pin.
     weights = [model.deployment for model in catalog.models if "sglang" in model.deployment.frameworks]
@@ -120,6 +125,13 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     draft = next(artifact for artifact in nemotron.artifacts if artifact.filename.startswith("dflash-"))
     assert draft.source_repository == "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF"
     assert draft.source_revision == "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
+    # Ling's target-only recipe drafts nothing; its DSpark recipes cap the checkpoints that copy the draft KV cache.
+    ling = _named(catalog, "ling3-flash-q4-k-m").deployment.llama_cpp
+    assert ling is not None
+    assert ling.speculative_tokens is None
+    ling_dspark = _named(catalog, "ling3-flash-q4-k-m-dspark-dgx-spark").deployment.llama_cpp
+    assert ling_dspark is not None
+    assert ling_dspark.context_checkpoints == 2
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
@@ -206,6 +218,8 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ),
         ("llama-negative-cache", "cache_ram_mib must be non-negative"),
         ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
+        ("llama-speculative-without-depth", "a speculative llama.cpp recipe must set speculative_tokens"),
+        ("llama-target-only-with-depth", "a target-only llama.cpp recipe must not set speculative_tokens"),
     ],
 )
 def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, message: str) -> None:
@@ -257,6 +271,10 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
             memory = deployment.get("memory")
             assert isinstance(memory, dict)
             memory["lazy_read_bytes"] = 1
+        elif case == "llama-speculative-without-depth":
+            del launch["speculative_tokens"]
+        elif case == "llama-target-only-with-depth":
+            metal["speculation_policy"] = "disabled-target-only-baseline"
         else:
             launch["cache_ram_mib"] = -1
         _write(root, METAL_RECIPE, metal)

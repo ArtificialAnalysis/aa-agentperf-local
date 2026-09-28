@@ -35,6 +35,7 @@ from agentperf_local.deployment.catalog import (
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
+    SpeculationPolicy,
     VllmLaunch,
     load_model_catalog,
 )
@@ -428,7 +429,13 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     assert plan.command[plan.command.index("--model") + 1] == str(snapshot_root / artifacts[0].filename)
 
 
-def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("speculation_policy", "spec_type"),
+    [("enabled-dflash-external-draft", "draft-dflash"), ("enabled-dspark-external-draft", "draft-dspark")],
+)
+def test_external_draft_recipe_launches_both_pinned_gguf_files(
+    tmp_path: Path, speculation_policy: SpeculationPolicy, spec_type: str
+) -> None:
     """A multi-file recipe must serve its target and pass its verified draft to llama.cpp."""
     target_bytes = b"target GGUF fixture"
     draft_bytes = b"draft GGUF fixture"
@@ -457,11 +464,12 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
             draft_model_filename=draft.filename,
             target_backend_sampling=True,
             draft_backend_sampling=True,
+            context_checkpoints=2,
         ),
     )
     candidate = replace_fields(
         base,
-        speculation_policy="enabled-dflash-external-draft",
+        speculation_policy=speculation_policy,
         deployment=deployment,
     )
 
@@ -493,8 +501,9 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(tmp_path: Path) -
 
     assert plan.command[plan.command.index("--model") + 1] == str(target_path)
     assert plan.command[plan.command.index("--model-draft") + 1] == str(draft_path)
-    assert plan.command[plan.command.index("--spec-type") + 1] == "draft-dflash"
+    assert plan.command[plan.command.index("--spec-type") + 1] == spec_type
     assert plan.command[plan.command.index("--spec-draft-n-max") + 1] == "7"
+    assert plan.command[plan.command.index("--ctx-checkpoints") + 1] == "2"
     assert plan.command[plan.command.index("--batch-size") + 1] == "2048"
     assert plan.command[plan.command.index("--ubatch-size") + 1] == "1024"
     assert "--backend-sampling" in plan.command
