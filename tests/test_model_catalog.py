@@ -19,7 +19,6 @@ from agentperf_local.deployment.catalog import (
     ModelDeployment,
     load_model_catalog,
 )
-from agentperf_local.deployment.context_policy import derived_minimum_memory_bytes
 
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
@@ -79,7 +78,6 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
-        ("qwen38-flash-next-iq4-nl-mtp-strix-halo", "ba5b0d696d6997d82fcc55ba3f8e6128db6e0311"),
     ]
     # The DGX Spark NVFP4 recipe is a safetensors weights repository served by vLLM on CUDA.
     qwen_weights = _named(catalog, "qwen38-27b-nvfp4-dgx-spark")
@@ -122,11 +120,6 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     draft = next(artifact for artifact in nemotron.artifacts if artifact.filename.startswith("dflash-"))
     assert draft.source_repository == "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF"
     assert draft.source_revision == "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
-    flash_next = _named(catalog, "qwen38-flash-next-iq4-nl-mtp-strix-halo").deployment
-    assert flash_next.llama_cpp is not None
-    assert flash_next.llama_cpp.lazy_mode == "on-direct"
-    # The lazily read per-layer-embedding table stays on disk, so the floor is below the download size.
-    assert derived_minimum_memory_bytes(flash_next, 65536) < flash_next.artifact_size_bytes
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
