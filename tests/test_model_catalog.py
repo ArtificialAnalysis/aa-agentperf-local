@@ -1,5 +1,6 @@
 """Exercise the recipe folder boundary."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -190,20 +191,26 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
 @pytest.mark.parametrize(
     ("case", "message"),
     [
-        ("unknown-model-field", "unexpected verified"),
-        ("missing-as-of", "missing as_of"),
+        ("unknown-model-field", f"{GEMMA_RECIPE.as_posix()}: verified: Extra inputs are not permitted"),
+        ("missing-as-of", f"{GEMMA_RECIPE.as_posix()}: as_of: Field required"),
         ("malformed-as-of", "as_of must be an ISO date"),
         ("unquoted-as-of", "quote dates"),
         ("misnamed-file", "must be named after its profile_id"),
-        ("model-alias", "unexpected model_alias"),
+        ("model-alias", f"{GEMMA_RECIPE.as_posix()}: deployment.model_alias: Extra inputs are not permitted"),
         ("stray-file", "recipes must be .yaml files"),
         ("flat-recipe", "may only hold folders"),
         ("device-order", "canonical subset of nvidia-cuda, amd-rocm, and apple-silicon"),
-        ("unknown-device", "devices\\[0\\] is not supported"),
+        (
+            "unknown-device",
+            f"{GEMMA_RECIPE.as_posix()}: devices.0: Input should be 'nvidia-cuda', 'amd-rocm' or 'apple-silicon'",
+        ),
         ("reduced-context", "context_tokens must be 65536"),
         ("multiline-display-name", "display_name must be short printable text"),
         ("llama-backend-device", "backend must match the recipe's devices"),
-        ("llama-threads-zero", "threads must be a positive integer"),
+        (
+            "llama-threads-zero",
+            f"{METAL_RECIPE.as_posix()}: deployment.llama_cpp.threads: Input should be greater than 0",
+        ),
         ("llama-negative-cache", "cache_ram_mib must be non-negative"),
         ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
     ],
@@ -263,7 +270,7 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
     if case not in ("unquoted-as-of", "misnamed-file", "stray-file", "flat-recipe"):
         _write(root, GEMMA_RECIPE, gemma)
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=re.escape(message)):
         load_model_catalog(root)
 
 

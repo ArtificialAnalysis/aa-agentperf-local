@@ -6,17 +6,23 @@
 - `error_text`: show an error to a person, without Pydantic's wrapper text.
 - `read_record`: parse one JSON document into a model, strictly, naming its source in errors.
 - `read_object`: the same for a JSON object that is already decoded.
+- `require_json_keys`: make a JSON document spell out keys whose fields have defaults.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Literal
 
 import orjson
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, ValidationInfo
+from pydantic.config import ExtraValues
 
 from agentperf_local.common.json_types import JsonObject
+
+# Whether a reader rejects keys its model does not declare, or skips them.
+type UnknownKeys = Literal["reject", "skip"]
 
 
 def replace_fields[Model: BaseModel](model: Model, **changes: object) -> Model:
@@ -74,23 +80,41 @@ def error_text(error: BaseException) -> str:
     return "\n".join(lines)
 
 
-def read_record[Model: BaseModel](model: type[Model], encoded: bytes | str, source: str) -> Model:
+def read_record[Model: BaseModel](
+    model: type[Model], encoded: bytes | str, source: str, *, unknown_keys: UnknownKeys = "reject"
+) -> Model:
     """Parse one JSON document into `model`, and name `source` in any error.
 
     Strict JSON mode accepts only the declared JSON type for each field: "5" is not
     an integer and true is not a number. An array fills a tuple field. An unknown
-    key is an error, so every reader keeps a closed key set.
+    key is an error unless the format lets readers skip keys they do not know.
     """
+    extra: ExtraValues = "forbid" if unknown_keys == "reject" else "ignore"
     try:
-        return model.model_validate_json(encoded, strict=True, extra="forbid")
+        return model.model_validate_json(encoded, strict=True, extra=extra)
     except ValidationError as error:
         raise ValueError("\n".join(f"{source}: {line}" for line in error_text(error).splitlines())) from error
 
 
-def read_object[Model: BaseModel](model: type[Model], data: JsonObject, source: str) -> Model:
+def read_object[Model: BaseModel](
+    model: type[Model], data: JsonObject, source: str, *, unknown_keys: UnknownKeys = "reject"
+) -> Model:
     """Parse one decoded JSON object into `model`, with the rules of `read_record`.
 
     Strict Python mode would reject a list for a tuple field, so the object is
     encoded again and read in JSON mode.
     """
-    return read_record(model, orjson.dumps(data), source)
+    return read_record(model, orjson.dumps(data), source, unknown_keys=unknown_keys)
+
+
+def require_json_keys(model: BaseModel, info: ValidationInfo, keys: tuple[str, ...]) -> None:
+    """Reject JSON that omits one of `keys`.
+
+    These fields have defaults so Python callers can leave them out. Files must
+    still spell them out, so a reader never guesses a format marker.
+    """
+    if info.mode != "json":
+        return
+    for key in keys:
+        if key not in model.model_fields_set:
+            raise ValueError(f"{key}: Field required")

@@ -8,6 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from agentperf_local.common.json_types import normalize_json_object
+from agentperf_local.common.models import read_object
 from agentperf_local.replay.runner import RunFinishedBoundary, RunStartedBoundary
 from agentperf_local.telemetry.power import (
     MEASURED_PHASE_ID,
@@ -141,12 +142,15 @@ def test_power_summary_rejects_relabeled_or_incomplete_records(tmp_path: Path) -
     summary = collector.summarize(_clock_around_a_sleep(0.01).measured_phase())
     data = summary.to_json()
 
-    with pytest.raises(ValueError, match="unexpected operator"):
-        PowerSummary.from_json({**data, "operator": "alice"})
+    with pytest.raises(ValueError, match="^power: operator: Extra inputs are not permitted$"):
+        read_object(PowerSummary, {**data, "operator": "alice"}, "power")
+    without_kind = {key: value for key, value in data.items() if key != "kind"}
+    with pytest.raises(ValueError, match="^power: kind: Field required$"):
+        read_object(PowerSummary, without_kind, "power")
     phases = data["phases"]
     assert isinstance(phases, list)
     phase = normalize_json_object(phases[0])
-    with pytest.raises(ValueError, match="measured phase"):
-        PowerSummary.from_json({**data, "phases": [{**phase, "phase_id": "warmup"}]})
-    with pytest.raises(ValueError, match="energy value"):
-        PowerSummary.from_json({**data, "phases": [{**phase, "sampled_power_energy_valid": True}]})
+    with pytest.raises(ValueError, match="^power: power summary phases must be unique and include the measured phase$"):
+        read_object(PowerSummary, {**data, "phases": [{**phase, "phase_id": "warmup"}]}, "power")
+    with pytest.raises(ValueError, match="^power: a valid energy phase must carry its energy value$"):
+        read_object(PowerSummary, {**data, "phases": [{**phase, "sampled_power_energy_valid": True}]}, "power")

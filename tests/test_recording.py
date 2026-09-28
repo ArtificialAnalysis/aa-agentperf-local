@@ -187,7 +187,27 @@ def test_trace_loader_rejects_invalid_quantities(tmp_path: Path, field: str, val
         load_trace(path)
 
 
-def test_manifest_loader_rejects_empty_tool_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("environment", "errors"),
+    [
+        (
+            {},
+            [
+                "tasks.0.tool_environment.image: Field required",
+                "tasks.0.tool_environment.cwd: Field required",
+                "tasks.0.tool_environment.interpreter: Field required",
+                "tasks.0.tool_environment.workspace_mount: Field required",
+            ],
+        ),
+        (
+            {"image": "image", "cwd": "/w", "network": "none", "interpreter": ["bash"], "workspace_mount": False},
+            ["type: Field required"],
+        ),
+    ],
+)
+def test_manifest_loader_rejects_incomplete_tool_environment(
+    tmp_path: Path, environment: JsonObject, errors: list[str]
+) -> None:
     document: JsonObject = {
         "name": "bad-environment",
         "source": "test",
@@ -201,15 +221,16 @@ def test_manifest_loader_rejects_empty_tool_environment(tmp_path: Path) -> None:
                 "model_calls": 1,
                 "tool_calls": 0,
                 "total_recorded_tool_delay_ms": 0.0,
-                "tool_environment": {},
+                "tool_environment": environment,
             }
         ],
     }
     path = tmp_path / "manifest.json"
     path.write_bytes(orjson.dumps(document))
 
-    with pytest.raises(ValueError, match="tool_environment.type"):
+    with pytest.raises(ValueError) as caught:
         load_manifest(path)
+    assert str(caught.value) == "\n".join(f"{path}: {error}" for error in errors)
 
 
 @pytest.mark.parametrize("task_id", ["../escape", "nested/task", r"nested\\task"])

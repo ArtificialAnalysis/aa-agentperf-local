@@ -7,26 +7,16 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 
 import orjson
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend, streaming_client
+from agentperf_local.client.backends import ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError, CompletionResult
 from agentperf_local.client.request import CompletionRequest
 from agentperf_local.common.durable_files import WrittenFile, read_bounded_file, write_digest_file
 from agentperf_local.common.identity import sha256_bytes, validate_digest, validate_run_id
-from agentperf_local.common.json_fields import (
-    decode_json_object,
-    one_of,
-    optional_integer,
-    optional_string,
-    require_exact_keys,
-    required_boolean,
-    required_integer,
-    required_string,
-    required_strings,
-)
-from agentperf_local.common.json_records import json_field_names, json_record
+from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject, normalize_json_object, pretty_json_bytes
+from agentperf_local.common.models import raising_validator_errors, read_record
 from agentperf_local.deployment.endpoint_probes import PROBE_MAX_CONNECTIONS, probe_request, stream_usage
 from agentperf_local.metrics.decode import decode_sse_reads
 from agentperf_local.metrics.response import ToolCall, parse_response_channels
@@ -34,7 +24,8 @@ from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS
 from agentperf_local.replay.fidelity import LENGTH_FINISH_REASON, ExpectedToolCall, evaluate_tool_fidelity
 
 # Version 2 added the run identifier that ties a report to one benchmark attempt.
-QUALIFICATION_VERSION = 2
+type QualificationVersion = Literal[2]
+QUALIFICATION_VERSION: QualificationVersion = 2
 QUALIFICATION_KIND = "runtime_qualification"
 QUALIFICATION_FILENAME = "qualification.json"
 MAX_QUALIFICATION_BYTES = 256 * 1024
@@ -85,21 +76,6 @@ QUALIFICATION_FAILURE_CODES: tuple[QualificationFailureCode, ...] = (
     "unexpected_generation_cap",
     "usage_missing",
     "request_error",
-)
-_REPORT_KEYS = frozenset(
-    (
-        "version",
-        "kind",
-        "run_id",
-        "profile_id",
-        "endpoint_model_digest",
-        "client_backend",
-        "synthetic_pack_id",
-        "pack_digest",
-        "passed",
-        "outcomes",
-        "privacy",
-    )
 )
 _PRIVACY_BLOCK: JsonObject = {
     "generated_text_included": False,
@@ -193,7 +169,7 @@ class ProbeOutcome(BaseModel, frozen=True):
     completion_tokens: int | None
     raw_read_count: int
     decoded_chunk_count: int
-    status_code: int | None = None
+    status_code: int | None
 
     # The endpoint chooses tool names and finish reasons, so the report caps them to its schema limits.
     @field_validator("tool_names")
@@ -204,8 +180,13 @@ class ProbeOutcome(BaseModel, frozen=True):
 
     @field_validator("finish_reason")
     @classmethod
-    def _bound_finish_reason(cls, finish_reason: str | None) -> str | None:
-        """Cap a server-chosen finish reason to the published limit."""
+    def _bound_finish_reason(cls, finish_reason: str | None, info: ValidationInfo) -> str | None:
+        """Cap a server-chosen finish reason to the published limit.
+
+        A written report never holds empty text: the writer stores it as null.
+        """
+        if finish_reason == "" and info.mode == "json":
+            raise ValueError("finish_reason must be non-empty text or null")
         return _bounded_finish_reason(finish_reason) if finish_reason is not None else None
 
     @model_validator(mode="after")
@@ -230,32 +211,6 @@ class ProbeOutcome(BaseModel, frozen=True):
         if self.status_code is not None and not 100 <= self.status_code <= 599:
             raise ValueError("qualification status code is outside the HTTP range")
         return self
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> ProbeOutcome:
-        """Parse one strict probe outcome."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            probe_id=one_of(required_string(data, "probe_id", source), QUALIFICATION_PROBE_IDS, f"{source}.probe_id"),
-            passed=required_boolean(data, "passed", source),
-            failure_codes=tuple(
-                one_of(name, QUALIFICATION_FAILURE_CODES, f"{source}.failure_codes")
-                for name in required_strings(data, "failure_codes", source)
-            ),
-            tool_names=required_strings(data, "tool_names", source),
-            tool_call_count=required_integer(data, "tool_call_count", source),
-            arguments_valid=required_boolean(data, "arguments_valid", source),
-            call_identifiers_present=required_boolean(data, "call_identifiers_present", source),
-            content_present=required_boolean(data, "content_present", source),
-            reasoning_present=required_boolean(data, "reasoning_present", source),
-            finish_reason=optional_string(data, "finish_reason", source),
-            usage_present=required_boolean(data, "usage_present", source),
-            prompt_tokens=optional_integer(data, "prompt_tokens", source),
-            completion_tokens=optional_integer(data, "completion_tokens", source),
-            raw_read_count=required_integer(data, "raw_read_count", source),
-            decoded_chunk_count=required_integer(data, "decoded_chunk_count", source),
-            status_code=optional_integer(data, "status_code", source),
-        )
 
     def to_json(self) -> JsonObject:
         """Return structural evidence without generated text or arguments."""
@@ -309,38 +264,53 @@ class RuntimeQualification(BaseModel, frozen=True):
             "privacy": dict(_PRIVACY_BLOCK),
         }
 
-    @classmethod
-    def from_json(cls, data: JsonObject) -> RuntimeQualification:
-        """Parse one strict qualification report."""
-        require_exact_keys(data, _REPORT_KEYS, "qualification")
-        if required_integer(data, "version", "qualification") != QUALIFICATION_VERSION:
-            raise ValueError("qualification version is not supported")
-        if data.get("kind") != QUALIFICATION_KIND or data.get("synthetic_pack_id") != SYNTHETIC_PACK_ID:
-            raise ValueError("qualification kind or synthetic pack is not supported")
-        if data.get("privacy") != _PRIVACY_BLOCK:
-            raise ValueError("qualification privacy declaration is not supported")
-        client_backend = one_of(
-            required_string(data, "client_backend", "qualification"), CLIENT_BACKENDS, "qualification.client_backend"
-        )
-        raw_outcomes = data.get("outcomes")
-        if not isinstance(raw_outcomes, list):
-            raise ValueError("qualification.outcomes must be an array")
-        outcomes: list[ProbeOutcome] = []
-        for index, value in enumerate(raw_outcomes):
-            if not isinstance(value, dict):
-                raise ValueError(f"qualification.outcomes[{index}] must be an object")
-            outcomes.append(ProbeOutcome.from_json(value, f"qualification.outcomes[{index}]"))
-        report = cls(
-            profile_id=required_string(data, "profile_id", "qualification"),
-            endpoint_model_digest=required_string(data, "endpoint_model_digest", "qualification"),
-            client_backend=client_backend,
-            pack_digest=required_string(data, "pack_digest", "qualification"),
-            outcomes=tuple(outcomes),
-            run_id=optional_string(data, "run_id", "qualification"),
-        )
-        if required_boolean(data, "passed", "qualification") != report.passed:
+
+class QualificationPrivacy(BaseModel, frozen=True):
+    """Declare that a written report holds no generated text, tool arguments, or endpoint URL."""
+
+    generated_text_included: Literal[False]
+    tool_arguments_included: Literal[False]
+    endpoint_url_included: Literal[False]
+
+
+class QualificationFile(BaseModel, frozen=True):
+    """Describe the JSON shape `RuntimeQualification.to_json` writes.
+
+    The report stores `passed` as a property, and the file adds constant keys,
+    so the file has its own model. Every key is required, as the writer emits each one.
+    """
+
+    version: QualificationVersion
+    kind: Literal["runtime_qualification"]
+    run_id: str | None
+    profile_id: str
+    endpoint_model_digest: str
+    client_backend: ClientBackend
+    synthetic_pack_id: Literal["aa-runtime-synthetic-v1"]
+    pack_digest: str
+    passed: bool
+    outcomes: tuple[ProbeOutcome, ...]
+    privacy: QualificationPrivacy
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Require a valid report whose written pass state matches its outcomes."""
+        with raising_validator_errors():
+            report = self.report()
+        if self.passed != report.passed:
             raise ValueError("qualification pass state does not match its outcomes")
-        return report
+        return self
+
+    def report(self) -> RuntimeQualification:
+        """Return the report this file holds."""
+        return RuntimeQualification(
+            profile_id=self.profile_id,
+            endpoint_model_digest=self.endpoint_model_digest,
+            client_backend=self.client_backend,
+            pack_digest=self.pack_digest,
+            outcomes=self.outcomes,
+            run_id=self.run_id,
+        )
 
 
 def _tool(name: str, description: str, properties: JsonObject, required: tuple[str, ...]) -> JsonObject:
@@ -573,6 +543,7 @@ def _evaluate_probe(
         completion_tokens=completion_tokens,
         raw_read_count=len(result.reads),
         decoded_chunk_count=len(chunks),
+        status_code=None,
     )
 
 
@@ -616,6 +587,7 @@ def _decode_error(probe: QualificationProbe, result: CompletionResult) -> ProbeO
         completion_tokens=None,
         raw_read_count=len(result.reads),
         decoded_chunk_count=0,
+        status_code=None,
     )
 
 
@@ -653,7 +625,7 @@ async def qualify_runtime(
 def load_runtime_qualification(path: Path) -> RuntimeQualification:
     """Read and validate one qualification report."""
     encoded = read_bounded_file(path, MAX_QUALIFICATION_BYTES, label="qualification report")
-    return RuntimeQualification.from_json(decode_json_object(encoded, f"invalid qualification JSON: {path}"))
+    return read_record(QualificationFile, encoded, str(path)).report()
 
 
 async def qualify_managed_endpoint(

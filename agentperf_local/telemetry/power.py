@@ -13,25 +13,15 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, ValidationInfo, model_validator
 
 from agentperf_local.common.durable_files import NewFile, read_bounded_file, write_new_file
 from agentperf_local.common.identity import sha256_bytes, validate_digest, validate_run_id
-from agentperf_local.common.json_fields import (
-    decode_json_object,
-    optional_number,
-    optional_string,
-    require_exact_keys,
-    required_boolean,
-    required_integer,
-    required_number,
-    required_object,
-    required_string,
-)
-from agentperf_local.common.json_records import json_field_names, json_record
+from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject, JsonValue, pretty_json_bytes
+from agentperf_local.common.models import read_record, require_json_keys
 from agentperf_local.common.units import NANOSECONDS_PER_MILLISECOND
 from agentperf_local.provenance.hardware import AcceleratorPlatform
 from agentperf_local.replay.runner import RunBoundaryEvent, RunFinishedBoundary, RunStartedBoundary
@@ -57,21 +47,8 @@ FIRST_SAMPLE_POLL_SECONDS = 0.05
 COLLECTOR_STOP_TIMEOUT_SECONDS = 10.0
 MAX_POWER_SUMMARY_BYTES = 64 * 1024
 SAMPLE_MARKER = b'"kind":"telemetry_sample"'
-_SUMMARY_KEYS = frozenset(
-    (
-        "version",
-        "kind",
-        "run_id",
-        "collector_id",
-        "device_ordinal",
-        "requested_interval_ms",
-        "telemetry_file",
-        "telemetry_digest",
-        "first_sample_before_phase",
-        "collection",
-        "phases",
-    )
-)
+# A power summary file must name these, although Python callers may leave them to their defaults.
+_SUMMARY_CONSTANT_KEYS = ("version", "kind", "collector_id", "telemetry_file")
 
 
 @dataclass(slots=True)
@@ -107,24 +84,24 @@ class PowerPhaseSummary(BaseModel, frozen=True):
     """Store the phase aggregates a private audit carries; no samples, no timestamps."""
 
     phase_id: Annotated[str, Field(min_length=1)]
-    phase_duration_ms: float
+    phase_duration_ms: FiniteFloat
     requested_interval_ms: int
-    minimum_coverage: float
+    minimum_coverage: FiniteFloat
     total_sample_count: int
     valid_power_sample_count: int
-    power_coverage: float
-    power_integration_coverage: float
-    largest_uncovered_gap_ms: float
-    power_w_maximum: float | None
-    power_w_median: float | None
-    power_w_time_weighted_mean: float | None
-    sampled_power_energy_joules: float | None
+    power_coverage: FiniteFloat
+    power_integration_coverage: FiniteFloat
+    largest_uncovered_gap_ms: FiniteFloat
+    power_w_maximum: FiniteFloat | None
+    power_w_median: FiniteFloat | None
+    power_w_time_weighted_mean: FiniteFloat | None
+    sampled_power_energy_joules: FiniteFloat | None
     sampled_power_energy_valid: bool
-    gpu_utilization_percent_time_weighted_mean: float | None
-    memory_used_mib_maximum: float | None
-    temperature_c_maximum: float | None
-    graphics_clock_mhz_median: float | None
-    memory_clock_mhz_median: float | None
+    gpu_utilization_percent_time_weighted_mean: FiniteFloat | None
+    memory_used_mib_maximum: FiniteFloat | None
+    temperature_c_maximum: FiniteFloat | None
+    graphics_clock_mhz_median: FiniteFloat | None
+    memory_clock_mhz_median: FiniteFloat | None
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -183,34 +160,6 @@ class PowerPhaseSummary(BaseModel, frozen=True):
         """Return the closed phase record."""
         return json_record(self)
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> PowerPhaseSummary:
-        """Parse one strict phase record."""
-        require_exact_keys(data, json_field_names(cls), source)
-        return cls(
-            phase_id=required_string(data, "phase_id", source),
-            phase_duration_ms=required_number(data, "phase_duration_ms", source),
-            requested_interval_ms=required_integer(data, "requested_interval_ms", source),
-            minimum_coverage=required_number(data, "minimum_coverage", source),
-            total_sample_count=required_integer(data, "total_sample_count", source),
-            valid_power_sample_count=required_integer(data, "valid_power_sample_count", source),
-            power_coverage=required_number(data, "power_coverage", source),
-            power_integration_coverage=required_number(data, "power_integration_coverage", source),
-            largest_uncovered_gap_ms=required_number(data, "largest_uncovered_gap_ms", source),
-            power_w_maximum=optional_number(data, "power_w_maximum", source),
-            power_w_median=optional_number(data, "power_w_median", source),
-            power_w_time_weighted_mean=optional_number(data, "power_w_time_weighted_mean", source),
-            sampled_power_energy_joules=optional_number(data, "sampled_power_energy_joules", source),
-            sampled_power_energy_valid=required_boolean(data, "sampled_power_energy_valid", source),
-            gpu_utilization_percent_time_weighted_mean=optional_number(
-                data, "gpu_utilization_percent_time_weighted_mean", source
-            ),
-            memory_used_mib_maximum=optional_number(data, "memory_used_mib_maximum", source),
-            temperature_c_maximum=optional_number(data, "temperature_c_maximum", source),
-            graphics_clock_mhz_median=optional_number(data, "graphics_clock_mhz_median", source),
-            memory_clock_mhz_median=optional_number(data, "memory_clock_mhz_median", source),
-        )
-
 
 class PowerSummary(BaseModel, frozen=True):
     """Store one run's reduced power evidence and how it was collected."""
@@ -222,11 +171,20 @@ class PowerSummary(BaseModel, frozen=True):
     first_sample_before_phase: bool
     collection: TelemetryFooter
     phases: tuple[PowerPhaseSummary, ...]
-    version: int = POWER_SUMMARY_VERSION
+    version: Literal[1] = POWER_SUMMARY_VERSION
+    # The constant keys below are fields so a strict read checks them; the writer emits them as constants.
+    # They have defaults so Python callers can leave them out, but a file must spell each one out.
+    kind: Literal["nvidia_power_summary"] = POWER_SUMMARY_KIND
+    collector_id: Literal["aa-nvidia-smi-v1"] = COLLECTOR_ID
+    telemetry_file: Literal["telemetry.jsonl"] = TELEMETRY_FILENAME
 
     @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        """Validate identifiers and require the measured phase."""
+    def check_invariants(self, info: ValidationInfo) -> Self:
+        """Validate identifiers and require the measured phase.
+
+        JSON input must carry every constant key, so a reader never assumes a format marker.
+        """
+        require_json_keys(self, info, _SUMMARY_CONSTANT_KEYS)
         validate_run_id(self.run_id, "run_id")
         if self.telemetry_digest is not None:
             validate_digest(self.telemetry_digest, "telemetry_digest")
@@ -258,35 +216,6 @@ class PowerSummary(BaseModel, frozen=True):
             "collection": self.collection.to_json(),
             "phases": phases,
         }
-
-    @classmethod
-    def from_json(cls, data: JsonObject) -> PowerSummary:
-        """Parse one strict power summary."""
-        require_exact_keys(data, _SUMMARY_KEYS, "power")
-        if required_integer(data, "version", "power") != POWER_SUMMARY_VERSION:
-            raise ValueError("power summary version is not supported")
-        if data.get("kind") != POWER_SUMMARY_KIND or data.get("collector_id") != COLLECTOR_ID:
-            raise ValueError("power summary kind or collector is not supported")
-        if data.get("telemetry_file") != TELEMETRY_FILENAME:
-            raise ValueError("power summary names an unexpected telemetry file")
-        collection = required_object(data, "collection", "power")
-        raw_phases = data.get("phases")
-        if not isinstance(raw_phases, list):
-            raise ValueError("power.phases must be an array")
-        phases: list[PowerPhaseSummary] = []
-        for index, value in enumerate(raw_phases):
-            if not isinstance(value, dict):
-                raise ValueError(f"power.phases[{index}] must be an object")
-            phases.append(PowerPhaseSummary.from_json(value, f"power.phases[{index}]"))
-        return cls(
-            run_id=required_string(data, "run_id", "power"),
-            device_ordinal=required_integer(data, "device_ordinal", "power"),
-            requested_interval_ms=required_integer(data, "requested_interval_ms", "power"),
-            telemetry_digest=optional_string(data, "telemetry_digest", "power"),
-            first_sample_before_phase=required_boolean(data, "first_sample_before_phase", "power"),
-            collection=TelemetryFooter.from_json(collection, "power.collection"),
-            phases=tuple(phases),
-        )
 
 
 @dataclass(slots=True, kw_only=True)
@@ -430,7 +359,7 @@ def write_power_summary(path: Path, summary: PowerSummary) -> None:
 def load_power_summary(path: Path) -> PowerSummary:
     """Read and validate one private power summary."""
     encoded = read_bounded_file(path, MAX_POWER_SUMMARY_BYTES, label="power summary")
-    return PowerSummary.from_json(decode_json_object(encoded, f"invalid power summary JSON: {path}"))
+    return read_record(PowerSummary, encoded, str(path))
 
 
 def nvidia_power_collector(

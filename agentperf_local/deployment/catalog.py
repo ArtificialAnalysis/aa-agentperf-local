@@ -9,29 +9,12 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 
 import yaml
-from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, model_validator
+from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, ValidationInfo, field_validator, model_validator
 
 from agentperf_local.common.durable_files import read_bounded_file
 from agentperf_local.common.identity import sha256_bytes, validate_identifier
-from agentperf_local.common.json_fields import (
-    one_of,
-    optional_boolean,
-    optional_integer,
-    optional_non_negative_integer,
-    optional_object,
-    optional_string,
-    require_allowed_keys,
-    require_exact_keys,
-    required_boolean,
-    required_integer,
-    required_list,
-    required_non_negative_integer,
-    required_object,
-    required_string,
-    required_strings,
-)
-from agentperf_local.common.json_records import json_field_names, required_json_field_names
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
+from agentperf_local.common.models import read_object
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
 
@@ -108,20 +91,6 @@ ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set",
 REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
 
 
-def _optional_positive_integer(data: JsonObject, key: str, source: str) -> int | None:
-    value = data.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise ValueError(f"{source}.{key} must be a positive integer or null")
-    return value
-
-
-def _require_recipe_fields(data: JsonObject, cls: type[BaseModel], source: str) -> None:
-    """Require every field of one record that has no default; a recipe may leave out the rest."""
-    require_allowed_keys(data, required_json_field_names(cls), json_field_names(cls), source)
-
-
 def _revision(value: str, field: str) -> str:
     if len(value) != HF_REVISION_HEX_DIGITS or value != value.lower():
         raise ValueError(f"{field} must be 40 lowercase hexadecimal digits")
@@ -150,6 +119,27 @@ def release_version(value: str, field: str) -> tuple[int, int, int]:
 def is_development_build(value: str) -> bool:
     """Return whether a runtime pin names one exact development build instead of a release."""
     return DEVELOPMENT_BUILD_PATTERN.fullmatch(value) is not None
+
+
+def _pairs_without_object(value: object, info: ValidationInfo, field: str) -> object:
+    """Handle a pairs field whose input is not a JSON object.
+
+    A recipe writes the field as an object, or leaves it out or null for no pairs.
+    Any other JSON value is an error. A Python caller passes the pairs itself.
+    """
+    if value is None:
+        return ()
+    if info.mode == "json":
+        raise ValueError(f"{field} must be an object or null")
+    return value
+
+
+def _framework_rank(name: object) -> int:
+    """Return a framework's canonical position; an unknown name sorts last and fails validation."""
+    for rank, framework in enumerate(DEPLOYMENT_FRAMEWORK_ORDER):
+        if name == framework:
+            return rank
+    return len(DEPLOYMENT_FRAMEWORK_ORDER)
 
 
 def validate_artifact_path(value: str, field: str) -> str:
@@ -186,18 +176,6 @@ class DeploymentArtifact(BaseModel, frozen=True):
             _revision(self.source_revision, "artifact.source_revision")
         return self
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> DeploymentArtifact:
-        """Read one pinned artifact record."""
-        _require_recipe_fields(data, cls, source)
-        return cls(
-            filename=validate_artifact_path(required_string(data, "filename", source), f"{source}.filename"),
-            sha256=_sha256(required_string(data, "sha256", source), f"{source}.sha256"),
-            size_bytes=required_integer(data, "size_bytes", source),
-            source_repository=optional_string(data, "source_repository", source),
-            source_revision=optional_string(data, "source_revision", source),
-        )
-
 
 class LlamaCppLaunch(BaseModel, frozen=True):
     """Pin llama.cpp loading, batching, and speculative decoding."""
@@ -211,10 +189,16 @@ class LlamaCppLaunch(BaseModel, frozen=True):
     backend: LlamaCppBackend | None = None
     load_mode: LlamaCppLoadMode | None = None
     lazy_mode: LlamaCppLazyMode | None = None
-    threads: int | None = None
+    threads: PositiveInt | None = None
     flash_attention: bool = False
     disable_fit: bool = False
     cache_ram_mib: int | None = None
+
+    @field_validator("flash_attention", "disable_fit", mode="before")
+    @classmethod
+    def _null_is_off(cls, value: object) -> object:
+        """Read a null switch as off, as a recipe may write it."""
+        return False if value is None else value
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -231,8 +215,6 @@ class LlamaCppLaunch(BaseModel, frozen=True):
             raise ValueError("llama.cpp load_mode must be none or mmap")
         if self.lazy_mode is not None and self.lazy_mode not in LLAMA_CPP_LAZY_MODES:
             raise ValueError("llama.cpp lazy_mode must be on-direct")
-        if self.threads is not None and self.threads <= 0:
-            raise ValueError("llama.cpp threads must be positive")
         if self.cache_ram_mib is not None and self.cache_ram_mib < 0:
             raise ValueError("llama.cpp cache_ram_mib must be non-negative")
         return self
@@ -248,40 +230,20 @@ class LlamaCppLaunch(BaseModel, frozen=True):
             return "MTL0"
         return None
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> LlamaCppLaunch:
-        """Read one pinned llama.cpp launch configuration."""
-        _require_recipe_fields(data, cls, source)
-        draft_model_filename = optional_string(data, "draft_model_filename", source)
-        backend = optional_string(data, "backend", source)
-        load_mode = optional_string(data, "load_mode", source)
-        lazy_mode = optional_string(data, "lazy_mode", source)
-        return cls(
-            batch_size=required_integer(data, "batch_size", source),
-            ubatch_size=required_integer(data, "ubatch_size", source),
-            speculative_tokens=required_integer(data, "speculative_tokens", source),
-            draft_model_filename=(
-                validate_artifact_path(draft_model_filename, f"{source}.draft_model_filename")
-                if draft_model_filename is not None
-                else None
-            ),
-            target_backend_sampling=required_boolean(data, "target_backend_sampling", source),
-            draft_backend_sampling=required_boolean(data, "draft_backend_sampling", source),
-            backend=one_of(backend, LLAMA_CPP_BACKENDS, f"{source}.backend") if backend is not None else None,
-            load_mode=one_of(load_mode, LLAMA_CPP_LOAD_MODES, f"{source}.load_mode") if load_mode is not None else None,
-            lazy_mode=one_of(lazy_mode, LLAMA_CPP_LAZY_MODES, f"{source}.lazy_mode") if lazy_mode is not None else None,
-            threads=_optional_positive_integer(data, "threads", source),
-            flash_attention=optional_boolean(data, "flash_attention", source) or False,
-            disable_fit=optional_boolean(data, "disable_fit", source) or False,
-            cache_ram_mib=optional_integer(data, "cache_ram_mib", source),
-        )
-
 
 class VllmLaunch(BaseModel, frozen=True):
     """Pin extra vLLM arguments and environment variables for one recipe."""
 
     arguments: tuple[str, ...]
     environment: tuple[tuple[str, str], ...] = ()
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def _environment_pairs(cls, value: object, info: ValidationInfo) -> object:
+        """Read the recipe's name-to-value object as pairs sorted by name."""
+        if isinstance(value, dict):
+            return tuple(sorted(value.items()))
+        return _pairs_without_object(value, info, "deployment.vllm.environment")
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -296,25 +258,6 @@ class VllmLaunch(BaseModel, frozen=True):
                 raise ValueError("vLLM environment must use uppercase names and printable values")
         return self
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> VllmLaunch:
-        """Read one pinned vLLM launch configuration."""
-        _require_recipe_fields(data, cls, source)
-        raw_arguments = required_list(data, "arguments", source)
-        arguments: list[str] = []
-        for index, value in enumerate(raw_arguments):
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"{source}.arguments[{index}] must be non-empty text")
-            arguments.append(value)
-        raw_environment = optional_object(data, "environment", source) or {}
-        environment: list[tuple[str, str]] = []
-        for name, value in raw_environment.items():
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"{source}.environment.{name} must be non-empty text")
-            environment.append((name, value))
-        environment.sort()
-        return cls(arguments=tuple(arguments), environment=tuple(environment))
-
 
 class DeploymentMemory(BaseModel, frozen=True):
     """Describe how one model's resident memory grows with the served context.
@@ -326,24 +269,30 @@ class DeploymentMemory(BaseModel, frozen=True):
     # Full and sliding layers can hold different head shapes: a Gemma 4 global layer
     # keeps one or two wide heads while its sliding layers keep eight narrow ones, so
     # one shape for both classes would misprice the cache by several gigabytes.
-    full_attention_layers: int
-    full_kv_heads: int
-    full_kv_head_dimension: int
-    sliding_attention_layers: int
-    sliding_kv_heads: int
-    sliding_kv_head_dimension: int
+    full_attention_layers: NonNegativeInt
+    full_kv_heads: NonNegativeInt
+    full_kv_head_dimension: NonNegativeInt
+    sliding_attention_layers: NonNegativeInt
+    sliding_kv_heads: NonNegativeInt
+    sliding_kv_head_dimension: NonNegativeInt
     # Tokens each sliding-attention layer keeps. This is the runtime's choice, not
     # only the model's window: llama.cpp pads the window, while SGLang sizes a share
     # of the token pool, so the pinned value is read from the runtime.
-    sliding_cached_tokens: int
+    sliding_cached_tokens: NonNegativeInt
     kv_bytes_per_scalar: PositiveInt
     recurrent_state_slots: NonNegativeInt
-    constant_state_bytes: int
+    constant_state_bytes: NonNegativeInt
     runtime_overhead_bytes: int
     # Artifact bytes the runtime reads from disk on demand and never holds resident,
     # such as a per-layer-embedding table served by llama.cpp lazy reads. The memory
     # floor leaves them out.
     lazy_read_bytes: NonNegativeInt = 0
+
+    @field_validator("lazy_read_bytes", mode="before")
+    @classmethod
+    def _null_is_zero(cls, value: object) -> object:
+        """Read a null lazy byte count as zero, as a recipe may write it."""
+        return 0 if value is None else value
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -370,46 +319,6 @@ class DeploymentMemory(BaseModel, frozen=True):
             raise ValueError("recurrent state slots and constant state bytes must both be set or both be zero")
         return self
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> DeploymentMemory:
-        """Read one memory-shape record."""
-        _require_recipe_fields(data, cls, source)
-        return cls(
-            full_attention_layers=required_non_negative_integer(data, "full_attention_layers", source),
-            full_kv_heads=required_non_negative_integer(data, "full_kv_heads", source),
-            full_kv_head_dimension=required_non_negative_integer(data, "full_kv_head_dimension", source),
-            sliding_attention_layers=required_non_negative_integer(data, "sliding_attention_layers", source),
-            sliding_kv_heads=required_non_negative_integer(data, "sliding_kv_heads", source),
-            sliding_kv_head_dimension=required_non_negative_integer(data, "sliding_kv_head_dimension", source),
-            sliding_cached_tokens=required_non_negative_integer(data, "sliding_cached_tokens", source),
-            kv_bytes_per_scalar=required_integer(data, "kv_bytes_per_scalar", source),
-            recurrent_state_slots=required_non_negative_integer(data, "recurrent_state_slots", source),
-            constant_state_bytes=required_non_negative_integer(data, "constant_state_bytes", source),
-            runtime_overhead_bytes=required_integer(data, "runtime_overhead_bytes", source),
-            lazy_read_bytes=optional_non_negative_integer(data, "lazy_read_bytes", source) or 0,
-        )
-
-
-def _optional_moe_runner_backend(data: JsonObject, source: str) -> MoeRunnerBackend | None:
-    """Read the fused-expert kernel a recipe names, or None when it names none."""
-    value = optional_string(data, "moe_runner_backend", source)
-    if value is None:
-        return None
-    return one_of(value, MOE_RUNNER_BACKENDS, f"{source}.moe_runner_backend")
-
-
-def _runtime_versions_from_json(data: JsonObject, source: str) -> tuple[tuple[DeploymentFramework, str], ...]:
-    """Read the per-framework runtime pins as canonical-ordered (framework, version) pairs."""
-    raw = optional_object(data, "runtime_versions", source) or {}
-    pairs: list[tuple[DeploymentFramework, str]] = []
-    for key, value in raw.items():
-        framework = one_of(key, DEPLOYMENT_FRAMEWORK_ORDER, f"{source}.runtime_versions key '{key}'")
-        if not isinstance(value, str):
-            raise ValueError(f"{source}.runtime_versions.{key} must be text")
-        pairs.append((framework, value))
-    pairs.sort(key=lambda pair: DEPLOYMENT_FRAMEWORK_ORDER.index(pair[0]))
-    return tuple(pairs)
-
 
 class ModelDeployment(BaseModel, frozen=True):
     """Describe one exact managed model artifact set and its runtimes."""
@@ -431,6 +340,14 @@ class ModelDeployment(BaseModel, frozen=True):
     model_filename: str | None = None
     llama_cpp: LlamaCppLaunch | None = None
     vllm: VllmLaunch | None = None
+
+    @field_validator("runtime_versions", mode="before")
+    @classmethod
+    def _runtime_version_pairs(cls, value: object, info: ValidationInfo) -> object:
+        """Read the recipe's framework-to-version object as pairs in canonical framework order."""
+        if isinstance(value, dict):
+            return tuple(sorted(value.items(), key=lambda pair: _framework_rank(pair[0])))
+        return _pairs_without_object(value, info, "deployment.runtime_versions")
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
@@ -522,47 +439,6 @@ class ModelDeployment(BaseModel, frozen=True):
                 return version
         return None
 
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> ModelDeployment:
-        """Read one exact managed-deployment record."""
-        _require_recipe_fields(data, cls, source)
-        raw_frameworks = data.get("frameworks")
-        if not isinstance(raw_frameworks, list):
-            raise ValueError(f"{source}.frameworks must be an array")
-        frameworks: list[DeploymentFramework] = []
-        for index, value in enumerate(raw_frameworks):
-            if not isinstance(value, str):
-                raise ValueError(f"{source}.frameworks[{index}] must be text")
-            frameworks.append(one_of(value, DEPLOYMENT_FRAMEWORK_ORDER, f"{source}.frameworks[{index}]"))
-        raw_artifacts = data.get("artifacts")
-        if not isinstance(raw_artifacts, list):
-            raise ValueError(f"{source}.artifacts must be an array")
-        artifacts: list[DeploymentArtifact] = []
-        for index, raw_artifact in enumerate(raw_artifacts):
-            if not isinstance(raw_artifact, dict):
-                raise ValueError(f"{source}.artifacts[{index}] must be an object")
-            artifacts.append(DeploymentArtifact.from_json(raw_artifact, f"{source}.artifacts[{index}]"))
-        raw_llama_cpp = optional_object(data, "llama_cpp", source)
-        raw_vllm = optional_object(data, "vllm", source)
-        return cls(
-            artifact_kind=one_of(
-                required_string(data, "artifact_kind", source),
-                ARTIFACT_KINDS,
-                f"{source}.artifact_kind",
-            ),
-            artifacts=tuple(artifacts),
-            context_tokens=required_integer(data, "context_tokens", source),
-            frameworks=tuple(frameworks),
-            memory=DeploymentMemory.from_json(required_object(data, "memory", source), f"{source}.memory"),
-            runtime_versions=_runtime_versions_from_json(data, source),
-            moe_runner_backend=_optional_moe_runner_backend(data, source),
-            model_filename=optional_string(data, "model_filename", source),
-            llama_cpp=(
-                LlamaCppLaunch.from_json(raw_llama_cpp, f"{source}.llama_cpp") if raw_llama_cpp is not None else None
-            ),
-            vllm=VllmLaunch.from_json(raw_vllm, f"{source}.vllm") if raw_vllm is not None else None,
-        )
-
 
 class ModelCandidate(BaseModel, frozen=True):
     """Describe one recipe: what to download, where it runs, and how to launch it."""
@@ -585,7 +461,9 @@ class ModelCandidate(BaseModel, frozen=True):
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
         _iso_date(self.as_of, "as_of")
-        if len(self.display_name) > MAX_DISPLAY_NAME_CHARACTERS or not self.display_name.isprintable():
+        if not self.display_name or len(self.display_name) > MAX_DISPLAY_NAME_CHARACTERS:
+            raise ValueError("display_name must be short printable text")
+        if not self.display_name.isprintable():
             raise ValueError("display_name must be short printable text")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")
@@ -605,44 +483,6 @@ class ModelCandidate(BaseModel, frozen=True):
             if llama_cpp.draft_model_filename is not None:
                 raise ValueError("an MTP self-draft policy must not name an external draft model")
         return self
-
-    @classmethod
-    def from_json(cls, data: JsonObject, source: str) -> ModelCandidate:
-        """Read one closed recipe record."""
-        require_exact_keys(data, json_field_names(cls), source)
-        devices = tuple(
-            one_of(value, DEVICE_IDS, f"{source}.devices[{index}]")
-            for index, value in enumerate(required_strings(data, "devices", source))
-        )
-        return cls(
-            profile_id=required_string(data, "profile_id", source),
-            as_of=required_string(data, "as_of", source),
-            display_name=required_string(data, "display_name", source),
-            hf_repository=required_string(data, "hf_repository", source),
-            hf_revision=_revision(required_string(data, "hf_revision", source), f"{source}.hf_revision"),
-            devices=devices,
-            tool_call_parser=one_of(
-                required_string(data, "tool_call_parser", source),
-                TOOL_CALL_PARSERS,
-                f"{source}.tool_call_parser",
-            ),
-            reasoning_parser=one_of(
-                required_string(data, "reasoning_parser", source),
-                REASONING_PARSERS,
-                f"{source}.reasoning_parser",
-            ),
-            thinking_policy=one_of(
-                required_string(data, "thinking_policy", source),
-                THINKING_POLICIES,
-                f"{source}.thinking_policy",
-            ),
-            speculation_policy=one_of(
-                required_string(data, "speculation_policy", source),
-                SPECULATION_POLICIES,
-                f"{source}.speculation_policy",
-            ),
-            deployment=ModelDeployment.from_json(required_object(data, "deployment", source), f"{source}.deployment"),
-        )
 
 
 class ModelCatalog(BaseModel, frozen=True):
@@ -731,7 +571,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
         encoded = read_bounded_file(path, MAX_RECIPE_BYTES, label="recipe")
-        model = ModelCandidate.from_json(_parse_recipe(encoded, relative), relative)
+        model = read_object(ModelCandidate, _parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
         models.append(model)

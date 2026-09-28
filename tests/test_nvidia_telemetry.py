@@ -10,10 +10,13 @@ from jsonschema import Draft202012Validator
 
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
 from agentperf_local.telemetry.nvidia import (
+    COLLECTOR_ID,
     NORMALIZED_FIELDS,
+    TELEMETRY_VERSION,
     CollectorConfig,
     collect_nvidia_telemetry,
     parse_nvidia_csv_line,
+    parse_nvidia_telemetry,
 )
 from tests.fake_executable import write_python_executable
 from tests.file_modes import has_mode
@@ -53,6 +56,22 @@ def test_parses_supported_and_missing_nvidia_fields() -> None:
         parse_nvidia_csv_line("1, 2", monotonic_ns=SAMPLE_TIME_NS)
     with pytest.raises(ValueError, match="exceed"):
         parse_nvidia_csv_line("101, 2, 3, 4, 5, 6", monotonic_ns=SAMPLE_TIME_NS)
+
+
+def test_a_sample_line_with_an_unknown_key_is_still_read() -> None:
+    header: JsonObject = {
+        "kind": "telemetry_header",
+        "version": TELEMETRY_VERSION,
+        "collector_id": COLLECTOR_ID,
+        "fields": list(NORMALIZED_FIELDS),
+    }
+    sample: JsonObject = {"kind": "telemetry_sample", "monotonic_ns": SAMPLE_TIME_NS, "power_w": 418.2, "extra": 1}
+
+    records = parse_nvidia_telemetry(orjson.dumps(header) + b"\n" + orjson.dumps(sample))
+
+    assert len(records.samples) == 1
+    assert records.samples[0].power_w == 418.2
+    assert records.footer is None
 
 
 def test_collects_normalized_jsonl_without_raw_device_identifiers(tmp_path: Path) -> None:

@@ -14,9 +14,11 @@ from pydantic import BaseModel, model_validator
 from agentperf_local.common.identity import validate_digest, validate_run_id
 from agentperf_local.common.json_fields import optional_object, require_exact_keys, required_object, required_string
 from agentperf_local.common.json_types import JsonObject
+from agentperf_local.common.models import read_object
 from agentperf_local.deployment.managed import DEPLOYMENT_RECORD_FILENAME, DeploymentRecord, load_deployment_record
 from agentperf_local.deployment.qualification import (
     QUALIFICATION_FILENAME,
+    QualificationFile,
     RuntimeQualification,
     load_runtime_qualification,
 )
@@ -129,9 +131,11 @@ class PrivateAudit(BaseModel, frozen=True):
                 else DeploymentRecord.from_audit_json(deployment_data, "private_audit.deployment")
             ),
             runtime_qualification=(
-                None if qualification_data is None else RuntimeQualification.from_json(qualification_data)
+                None
+                if qualification_data is None
+                else read_object(QualificationFile, qualification_data, "private_audit.runtime_qualification").report()
             ),
-            power=None if power_data is None else PowerSummary.from_json(power_data),
+            power=None if power_data is None else read_object(PowerSummary, power_data, "private_audit.power"),
         )
 
 
