@@ -22,7 +22,7 @@
 `agentperf-local` measures how fast your machine serves an AI agent. It replays
 recorded agent conversations against an OpenAI-compatible model server and
 reports throughput and latency. Each request carries the full conversation so
-far, as a real agent's would. It measures speed, not answer quality.
+far, as a real agent's would. It measures speed without measuring output quality.
 
 It can benchmark a server you already run, or it can download a pinned model,
 start the server, and benchmark it for you.
@@ -72,7 +72,7 @@ uv run agentperf-local managed-run \
 `managed-run` downloads the pinned model into the Hugging Face cache, checks
 every file's SHA-256, starts the server on localhost, runs the replay, and
 stops the server. Every recipe it can run is a YAML file in
-[`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model and then hardware.
+[`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model then hardware.
 
 ## The default run
 
@@ -89,9 +89,9 @@ A full run needs a 65,536-token context at batch size 1. Every catalog profile
 launches at that context. An attached server that serves more, such as
 131,072 tokens, also counts as full.
 
-The default replay's largest turn needs about 58,000 tokens, so it never runs
-below 65,536. A smaller context only serves a replay whose floor allows it,
-such as `aa-mini-v1`: pass `--context-tokens 32768` to `managed-run`, or choose
+The default replay's largest turn needs about 58,000 tokens, so it requires a
+65,536 budget. A smaller context window will only work with a smaller replay, e.g.
+such as `aa-mini-v1`. To use this, pass `--context-tokens 32768` to `managed-run`, or choose
 a smaller context in the TUI. That run is marked `reduced: true` and is not
 comparable with full-context results. An attached server's context is read
 from the server at the start of the run.
@@ -163,8 +163,7 @@ Live-tool runs cannot be submitted.
 
 ## Rust client (experimental)
 
-Python is the default client. An optional Rust client is available for
-high-concurrency benchmarking. It needs a [Rust toolchain](https://rustup.rs):
+Python is the default client. An optional Rust client is also available. It needs a [Rust toolchain](https://rustup.rs):
 
 ```console
 uv sync --extra rust
@@ -180,7 +179,7 @@ metrics.
 Submitting is optional and nothing is uploaded unless you ask.
 `prepare-submission` builds a bundle, `submit` sends it, and
 `submission-status` reads it back. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
-what is sent and what stays private.
+details on what is sent to Artificial Analysis.
 
 ## Commands
 
@@ -188,7 +187,7 @@ what is sent and what stays private.
 | --- | --- |
 | `tui` | Open the guided full-screen app. |
 | `run` | Replay a workload against a server you run. |
-| `managed-run` | Download a catalog model, serve it, and benchmark it. |
+| `managed-run` | Download a catalog model, serve and benchmark it. |
 | `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |
@@ -216,7 +215,7 @@ results/my-server/
 `summary.json` holds the headline numbers: output tokens per second and median
 and p95 first-token and turn times. It is written last, so a crashed run has
 no summary. A managed run also writes the server log and deployment record.
-[FORMATS.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/FORMATS.md) describes every file.
+[FORMATS.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/FORMATS.md) describes each file.
 
 The results are private. They can contain paths, model labels, and errors.
 Starting a run sends the recorded prompts to the model server, so a remote URL
@@ -235,7 +234,7 @@ CI runs these checks and the Python and Rust client equivalence tests. See
 
 ## Documentation
 
-- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes): every managed-run recipe, and how to add one.
+- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes): managed-run recipes and instructions for adding more.
 - [Textual TUI](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/TEXTUAL_TUI.md): options, keys, and screens.
 - [Architecture](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/ARCHITECTURE.md): measurement rules, evidence boundary,
   and package layout.

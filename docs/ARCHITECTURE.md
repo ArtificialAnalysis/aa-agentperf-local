@@ -103,7 +103,7 @@ context. Each turn has an authored 256-token target. Its results are not
 comparable.
 
 Custom datasets use the manifest and JSONL trace format in
-[FORMATS.md](FORMATS.md). agent recordings are conversion inputs only.
+[FORMATS.md](FORMATS.md). Agent recordings are conversion inputs only.
 
 ## Models and recipes
 
