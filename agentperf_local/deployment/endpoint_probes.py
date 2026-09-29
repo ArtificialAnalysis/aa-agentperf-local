@@ -28,9 +28,7 @@ from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.replay.config import OutputTokenPolicy
 from agentperf_local.replay.fidelity import generated_whole_budget
 
-# The tool probes need room for a thinking model to reason before its call. At 128 a
-# Qwen3.6 35B-A3B run on a DGX Spark spent the whole budget reasoning and the call's
-# arguments were cut off, so a correct runtime failed the probe by chance.
+# The tool probes need room for a thinking model to reason before its call.
 DEFAULT_PROBE_OUTPUT_TOKENS = 1024
 # Probes send one request at a time.
 PROBE_MAX_CONNECTIONS = 1
