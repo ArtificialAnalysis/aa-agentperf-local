@@ -519,6 +519,7 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
     (
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "AMD", "ROCm", "ROCm0", "none", "16", "2", "2048"),
         ("qwen36-35b-a3b-q4-k-m-mtp-strix-halo", "AMD", "ROCm", "Vulkan0", "none", "16", "2", "512"),
+        ("qwen35-9b-q4-k-m-mtp-m5-pro", "Apple", "Metal", "MTL0", "mmap", "6", "2", "512"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "Apple", "Metal", "MTL0", "mmap", "6", "4", "512"),
     ),
 )
