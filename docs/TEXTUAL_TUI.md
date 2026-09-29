@@ -59,9 +59,10 @@ Choose a model & config → Setup → Confirm → Running → Result
 ```
 
 **Use existing server** on the welcome screen goes directly to Setup. Back returns
-to the route you came from, and keeps your field values. After the server check
-or managed-run confirmation, focus moves to **Run benchmark**. Sharing is optional;
-Up from Run reaches the submission checkbox.
+to the route you came from, and keeps your field values. Ticking the run
+confirmation for a managed run keeps focus on it. For your own server, focus moves
+to the optional submission checkbox once the server answers its check. Down from
+the submission checkbox reaches **Run benchmark**.
 
 - Up and Down choose an option.
 - Left and Right move between controls, including the welcome choices and model details.

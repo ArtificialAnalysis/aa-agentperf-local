@@ -1605,7 +1605,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if self.request.managed_deployment is not None:
             # This app starts that server itself, so there is nothing to ask yet.
             run.disabled = False
-            self._focus_run()
             return
         run.disabled = True
         self.preflight_probe = None
@@ -1645,8 +1644,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self._update_reduced_context_notice(message.request)
         self.query_one("#run-start", Button).disabled = not reachable
         if reachable and self._page_focus() is consent:
-            # Offer Run where the user is waiting; a control they moved to meanwhile keeps focus.
-            self._focus_run()
+            # Move on to the optional submit box, not past it to Run; a control the user
+            # moved to during the check keeps focus.
+            self._focus_on_page(TuiStep.PREFLIGHT, "#submit-checkbox")
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Reveal the custom path, or rebind the managed launch to another device."""
@@ -1991,10 +1991,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def _submit_token(self) -> str | None:
         """Return the submit token from the configured variable, or None when it is unset or blank."""
         return read_submit_token(self.defaults.submit_token_env)
-
-    def _focus_run(self) -> None:
-        """Focus the primary action after confirmation; sharing remains optional."""
-        self._focus_on_page(TuiStep.PREFLIGHT, "#run-start")
 
     def _reset_submit_controls(self, enabled: bool) -> None:
         """Offer the submit checkbox for every setup that is ready to run."""

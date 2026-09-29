@@ -169,7 +169,8 @@ async def test_primary_flow_is_keyboard_first(tmp_path: Path) -> None:
         await _settle_until(pilot, lambda: app.focused is app.query_one("#endpoint-consent-checkbox", Checkbox))
 
         await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        await _settle_until(pilot, lambda: app.focused is app.query_one("#submit-checkbox", Checkbox))
+        await _arrow_down_to_run(app, pilot)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
         assert app.step is TuiStep.RESULT
@@ -650,10 +651,18 @@ async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
     await pilot.press("enter")
 
 
+async def _arrow_down_to_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Arrow down to Run once it is offered; focus never jumps past the submit box on its own."""
+    run = app.query_one("#run-start", Button)
+    await _settle_until(pilot, lambda: not run.disabled)
+    while app.focused is not run:
+        await pilot.press("down")
+
+
 async def _confirm_and_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
     """Tick the consent box on the confirm page, arrow down to Run, and press it."""
     await pilot.press("space")
-    await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+    await _arrow_down_to_run(app, pilot)
     await pilot.press("enter")
 
 
@@ -705,8 +714,7 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         assert not consent.value
         assert str(consent.label) == CONSENT_ATTACHED_LABEL
         await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
-        assert not app.query_one("#run-start", Button).disabled
+        await _arrow_down_to_run(app, pilot)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
@@ -823,7 +831,8 @@ async def test_managed_candidate_selects_a_compatible_framework_and_saves_eviden
         assert consent.region.height >= 2
         consent.value = True
         await pilot.pause()
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+        assert app.focused is consent
         app.query_one("#run-start", Button).press()
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -1294,7 +1303,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         assert endpoint_consent.region.right <= 72
         assert endpoint_consent.region.height == 1
         await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        await _arrow_down_to_run(app, pilot)
         submit = app.query_one("#submit-checkbox", Checkbox)
         notice = app.query_one("#submit-notice", Static)
         panel = app.query_one("#submit-panel", Vertical)
@@ -1335,7 +1344,7 @@ async def test_remote_custom_run_is_service_latency_only_and_hides_private_run_f
         assert app.evidence.partition is ResultPartition.SERVICE_LATENCY_ONLY
         _assert_render_omits(app, planted_private_values)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+        await _arrow_down_to_run(app, pilot)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         await pilot.pause(0.2)
@@ -1469,7 +1478,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
             assert app.step is TuiStep.PREFLIGHT
             await app.workers.wait_for_complete()
             app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-            await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+            await _arrow_down_to_run(app, pilot)
             assert app.query_one("#preflight-ollama", Static).display is answers_as_ollama
             await pilot.press("enter")
             await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
@@ -2247,8 +2256,8 @@ async def test_consent_checks_the_server_before_run_is_offered(
         assert app.query_one("#preflight-reduced", Static).display is reduced_shown
         reduced_recorded = EligibilityReason.REDUCED_CONTEXT in app.evidence.ineligibility_reasons
         assert reduced_recorded is (probe.observed_tokens is None or probe.observed_tokens < 65_536)
-        if run_offered:
-            await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        expected_focus = "#submit-checkbox" if run_offered else "#endpoint-consent-checkbox"
+        await _settle_until(pilot, lambda: app.focused is app.query_one(expected_focus, Checkbox))
 
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = False
         await _settle_until(pilot, lambda: run.disabled and not server_check.display)
