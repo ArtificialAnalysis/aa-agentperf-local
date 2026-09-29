@@ -12,9 +12,15 @@ from pydantic import BaseModel
 from agentperf_local.common.json_types import JsonValue
 from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.frameworks import available_accelerator_memory
-from agentperf_local.provenance.accelerator_probes import NVIDIA_SMI_COMMAND, ROCMINFO_COMMAND
+from agentperf_local.provenance.accelerator_probes import (
+    INTEL_PCI_VENDOR_ID,
+    NVIDIA_SMI_COMMAND,
+    OPENCL_DEVICE_TYPE_GPU,
+    ROCMINFO_COMMAND,
+)
 from agentperf_local.provenance.hardware import (
     HardwareSnapshot,
+    accelerator_platform,
     collect_hardware_snapshot,
     hardware_snapshot_from_json,
     public_hardware_profile,
@@ -134,6 +140,120 @@ def _amd_probe(command_name: str, payload: JsonValue) -> FakeSystemProbe:
         command_name=command_name,
         result=CommandResult(returncode=0, stdout=orjson.dumps(payload), stderr=b""),
     )
+
+
+# CL_DEVICE_TYPE_CPU in the OpenCL headers.
+OPENCL_DEVICE_TYPE_CPU = 1 << 1
+
+
+# Shaped like `clinfo --json` on a host with Intel's compute runtime and Mesa's rusticl
+# installed. clinfo prints raw property names and prints the vendor ID 0x8086 as 32902.
+def _clinfo_device(
+    name: str, global_memory_bytes: int, unified: bool, *, device_type: int = OPENCL_DEVICE_TYPE_GPU
+) -> JsonValue:
+    return {
+        "CL_DEVICE_NAME": name,
+        "CL_DEVICE_VENDOR": "Intel(R) Corporation",
+        "CL_DEVICE_VENDOR_ID": INTEL_PCI_VENDOR_ID,
+        "CL_DEVICE_VERSION": "OpenCL 3.0 NEO ",
+        "CL_DRIVER_VERSION": "24.35.30872.22",
+        "CL_DEVICE_TYPE": {
+            "raw": device_type,
+            "type": ["CL_DEVICE_TYPE_GPU" if device_type == OPENCL_DEVICE_TYPE_GPU else "CL_DEVICE_TYPE_CPU"],
+        },
+        "CL_DEVICE_UUID_KHR": "must-never-leave-this-machine",
+        "CL_DEVICE_PCI_BUS_INFO_KHR": "PCI-E, private-pci-address",
+        "CL_DEVICE_GLOBAL_MEM_SIZE": global_memory_bytes,
+        "CL_DEVICE_HOST_UNIFIED_MEMORY": unified,
+    }
+
+
+def _clinfo_output(*intel_devices: JsonValue) -> bytes:
+    return orjson.dumps(
+        {
+            "platforms": [
+                {"CL_PLATFORM_NAME": "Intel(R) OpenCL Graphics", "CL_PLATFORM_VENDOR": "Intel(R) Corporation"},
+                {"CL_PLATFORM_NAME": "rusticl", "CL_PLATFORM_VENDOR": "Mesa/X.org"},
+            ],
+            "devices": [
+                {"online": list(intel_devices)},
+                # rusticl lists the same card again; only the Intel runtime's list is read.
+                {"online": [_clinfo_device("Intel(R) Arc(tm) A770 Graphics (DG2)", 16_225_243_136, False)]},
+            ],
+            "icd_loader": {"CL_ICDL_NAME": "OpenCL ICD Loader", "_detected_version": "3.0"},
+        }
+    )
+
+
+def _clinfo_probe(command_name: str, returncode: int, stdout: bytes) -> FakeSystemProbe:
+    return FakeSystemProbe(
+        system="Linux",
+        cpu="Intel Core Ultra test CPU",
+        command_name=command_name,
+        result=CommandResult(returncode=returncode, stdout=stdout, stderr=b"private-host"),
+    )
+
+
+ARC_A770 = _clinfo_device("Intel(R) Arc(TM) A770 Graphics", 16_225_243_136, False)
+ARC_A770_FACTS = ("Intel(R) Arc(TM) A770 Graphics", 16_225_243_136, False, "24.35.30872.22")
+# An integrated GPU reports a global memory size that is a share of host memory.
+METEOR_LAKE = _clinfo_device("Intel(R) Arc(TM) Graphics", 30_064_771_072, True)
+# The Intel CPU runtime lists the processor under the same vendor ID.
+INTEL_CPU = _clinfo_device("Intel(R) Core(TM) Ultra 7 155H", 67_108_864_000, True, device_type=OPENCL_DEVICE_TYPE_CPU)
+
+
+@pytest.mark.parametrize(
+    ("probe", "expected_accelerators", "expected_warnings"),
+    [
+        (_clinfo_probe("clinfo", 0, _clinfo_output(ARC_A770, INTEL_CPU)), (ARC_A770_FACTS,), ()),
+        (
+            _clinfo_probe("clinfo", 0, _clinfo_output(METEOR_LAKE)),
+            (("Intel(R) Arc(TM) Graphics", None, True, "24.35.30872.22"),),
+            (),
+        ),
+        (_clinfo_probe("clinfo", 0, orjson.dumps({"platforms": []})), (), ("no_supported_accelerator",)),
+        (_clinfo_probe("not-installed", 0, b""), (), ("no_supported_accelerator",)),
+        (_clinfo_probe("clinfo", 1, b""), (), ("clinfo_failed", "no_supported_accelerator")),
+        (
+            _clinfo_probe("clinfo", 0, b"Number of platforms 1\n"),
+            (),
+            ("clinfo_unparseable", "no_supported_accelerator"),
+        ),
+        (
+            _clinfo_probe("clinfo", 0, _clinfo_output(ARC_A770, _clinfo_device("Intel GPU @ rack-3", 1, False))),
+            (ARC_A770_FACTS,),
+            ("clinfo_unparseable",),
+        ),
+    ],
+    ids=("discrete", "integrated", "no-platforms", "missing", "failing", "unparseable", "dropped-row"),
+)
+def test_intel_gpus_come_from_the_intel_runtime_in_clinfo(
+    probe: FakeSystemProbe,
+    expected_accelerators: tuple[tuple[str, int | None, bool, str], ...],
+    expected_warnings: tuple[str, ...],
+) -> None:
+    snapshot = collect_hardware_snapshot(probe)
+    encoded = orjson.dumps(snapshot.to_json())
+
+    assert (
+        tuple(
+            (accelerator.name, accelerator.memory_bytes, accelerator.memory_is_unified, accelerator.driver_version)
+            for accelerator in snapshot.accelerators
+        )
+        == expected_accelerators
+    )
+    assert all((accelerator.vendor, accelerator.api) == ("Intel", "OpenCL") for accelerator in snapshot.accelerators)
+    assert snapshot.warnings == expected_warnings
+    assert b"must-never-leave-this-machine" not in encoded
+    assert b"private-pci-address" not in encoded
+    assert b"private-host" not in encoded
+
+
+def test_managed_serving_refuses_an_intel_gpu_by_name() -> None:
+    snapshot = collect_hardware_snapshot(_clinfo_probe("clinfo", 0, _clinfo_output(ARC_A770)))
+
+    with pytest.raises(ValueError, match="does not support Intel GPUs"):
+        accelerator_platform(snapshot)
 
 
 @pytest.mark.parametrize("memory_kind", ["APU", "DISCRETE"])

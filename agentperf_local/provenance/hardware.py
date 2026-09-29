@@ -17,7 +17,13 @@ from agentperf_local.common.json_types import JsonObject, JsonValue
 from agentperf_local.common.units import (
     BYTES_PER_GIB,
 )
-from agentperf_local.provenance.accelerator_probes import inspect_amd, inspect_macos, inspect_nvidia
+from agentperf_local.provenance.accelerator_probes import (
+    INTEL_VENDOR,
+    inspect_amd,
+    inspect_intel,
+    inspect_macos,
+    inspect_nvidia,
+)
 from agentperf_local.provenance.hardware_facts import (
     AcceleratorSnapshot,
     HardwareWarningCode,
@@ -168,6 +174,10 @@ def accelerator_platform(snapshot: HardwareSnapshot) -> AcceleratorPlatform:
         return "amd-rocm"
     if accelerator.vendor == "Apple" and accelerator.api == "Metal":
         return "apple-metal"
+    if accelerator.vendor == INTEL_VENDOR:
+        raise ValueError(
+            "managed serving does not support Intel GPUs yet; start your own server and measure it with run"
+        )
     raise ValueError("detected accelerator does not expose CUDA, ROCm, or Apple Metal")
 
 
@@ -190,6 +200,10 @@ def collect_hardware_snapshot(probe: SystemProbe | None = None) -> HardwareSnaps
             warnings.append(warning)
         if not accelerators:
             accelerators, warning = inspect_amd(selected_probe)
+            if warning is not None:
+                warnings.append(warning)
+        if not accelerators:
+            accelerators, warning = inspect_intel(selected_probe)
             if warning is not None:
                 warnings.append(warning)
 

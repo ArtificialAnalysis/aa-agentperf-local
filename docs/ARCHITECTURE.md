@@ -188,7 +188,7 @@ untrusted input. Docker reduces the risk but is not a security boundary.
 
 | Component | Behavior |
 | --- | --- |
-| Hardware doctor | Reports local facts without hostnames, serials, UUIDs, PCI addresses, or raw command output. Exits nonzero unless exactly one accelerator is found. |
+| Hardware doctor | Reports local facts without hostnames, serials, UUIDs, PCI addresses, or raw command output. Reads NVIDIA GPUs from `nvidia-smi`, AMD GPUs from `amd-smi` or `rocm-smi`, Intel GPUs on Linux from `clinfo` with Intel's compute runtime, and Mac GPUs from `system_profiler`. Exits nonzero unless exactly one accelerator is found. |
 | Benchmark binding | Hashes the workload before a run and binds it to the suite, model, runtime, and hardware fields. |
 | Runtime qualification | Runs five synthetic endpoint probes after the managed server is ready and before the replay. It records structure only, not generated text or URLs. Passing is necessary, not sufficient. |
 | NVIDIA telemetry | A child-process collector that runs around the replay on NVIDIA hosts. The power summary stays private and travels only in the private audit file. |
