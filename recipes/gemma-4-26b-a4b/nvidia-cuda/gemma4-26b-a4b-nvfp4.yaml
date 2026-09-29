@@ -1,6 +1,7 @@
 profile_id: gemma4-26b-a4b-nvfp4
 as_of: '2026-09-21'
-display_name: Google Gemma 4 26B A4B NVFP4, NVIDIA export
+model_name: Gemma 4 26B A4B
+quantization: NVFP4
 model_release_slug: gemma-4-26b-a4b
 hf_repository: nvidia/Gemma-4-26B-A4B-NVFP4
 hf_revision: a19cfe00be84568a6867111c9a68c9c44fdcffe6

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Sequence
 from functools import cache
@@ -13,12 +14,13 @@ from textual.containers import Vertical
 from textual.timer import Timer
 from textual.widgets import Digits, ProgressBar, RichLog, Static
 
-from agentperf_local.common.statistics import P50_PERCENTILE, P90_PERCENTILE, percentile
+from agentperf_local.common.statistics import P25_PERCENTILE, P50_PERCENTILE, P75_PERCENTILE, percentile
 from agentperf_local.reports.progress import PERCENT_SCALE, request_size_text
 from agentperf_local.tui.branding import (
     AA_LIME,
     AA_NEUTRAL_50,
     AA_NEUTRAL_500,
+    AA_NEUTRAL_700,
     AA_ORANGE,
     AA_PURPLE,
     AA_PURPLE_LIGHT,
@@ -35,25 +37,27 @@ FAILED_MARK = "✗"
 WARNING_MARK = "⚠"
 MARK_COLORS = {DONE_MARK: AA_LIME, FAILED_MARK: AA_RED, WARNING_MARK: AA_ORANGE}
 # Eighth-block steps from empty to full; index n draws a bar n/8 of a cell tall.
-BAR_STEPS = (" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
-EIGHTHS_PER_ROW = len(BAR_STEPS) - 1
-DEFAULT_BIN_COUNT = 8
-DEFAULT_CHART_ROWS = 3
-BAR_WIDTH = 3
-BAR_GAP = 1
+# A range chart is a title, a one-line box plot, and a line of labels under it.
+RANGE_PLOT_CELLS = 41
+RANGE_PLOT_CENTER = RANGE_PLOT_CELLS // 2
+CHART_WIDTH = RANGE_PLOT_CELLS
+# The plot centers on the median and reaches a fixed ratio either side of it on a log
+# scale, so its width shows spread relative to the median, not to the unit. Decode speed
+# varies far less than latency, which grows with each task's context.
+SPEED_PLOT_EDGE_RATIO = 2.0
+LATENCY_PLOT_EDGE_RATIO = 10.0
+PLOT_TRACK = "·"
+PLOT_LOW_CAP = "├"
+PLOT_HIGH_CAP = "┤"
+PLOT_LOW_CLIPPED = "‹"
+PLOT_HIGH_CLIPPED = "›"
+PLOT_WHISKER = "─"
+PLOT_BOX = "█"
 EMPTY_CHART_MESSAGE = "waiting for the first turn…"
 LIVE_TICK_SECONDS = 0.1
 COUNT_UP_SECONDS = 0.6
 COUNT_UP_STEPS = 12
 ACTIVITY_LOG_MAX_LINES = 500
-# The context gauge draws one filled bar between two thin end caps. A compact
-# layout loses the bar's tail and the window size to keep the line on one row.
-CONTEXT_BAR_WIDTH = 20
-CONTEXT_BAR_COMPACT_WIDTH = 10
-CONTEXT_BAR_FILLED = "█"
-CONTEXT_BAR_EMPTY = "░"
-CONTEXT_BAR_LEFT_CAP = "▕"
-CONTEXT_BAR_RIGHT_CAP = "▏"
 CONTEXT_WINDOW_UNKNOWN = "context length not reported"
 
 
@@ -125,68 +129,93 @@ class Kitty(Static):
         self._show_frame()
 
 
-def chart_width(bins: int = DEFAULT_BIN_COUNT) -> int:
-    """Return the cell width of a histogram with this many bins."""
-    return bins * (BAR_WIDTH + BAR_GAP) - BAR_GAP
+class RangeSummary(BaseModel, frozen=True):
+    """Store the extremes and quartiles one range chart draws, from the package's one percentile definition."""
+
+    minimum: float
+    p25: float
+    median: float
+    p75: float
+    maximum: float
 
 
-class Histogram(BaseModel, frozen=True):
-    """Store binned counts of one metric with the bounds and percentiles the chart labels."""
-
-    bins: tuple[int, ...]
-    low: float
-    high: float
-    p50: float
-    p90: float
-    count: int
-
-    @property
-    def median_bin(self) -> int:
-        """Return the index of the bin that holds the median."""
-        return _bin_index(self.p50, self.low, self.high, len(self.bins))
-
-
-def _bin_index(value: float, low: float, high: float, bins: int) -> int:
-    if high <= low:
-        return bins // 2
-    return min(int((value - low) / (high - low) * bins), bins - 1)
-
-
-def build_histogram(values: Sequence[float], bins: int = DEFAULT_BIN_COUNT) -> Histogram | None:
-    """Bin values evenly between their minimum and maximum, or return None without values."""
-    ordered = tuple(sorted(values))
-    if not ordered:
+def summarize_range(values: Sequence[float]) -> RangeSummary | None:
+    """Return the extremes and quartiles of values, or None without values."""
+    p25 = percentile(values, P25_PERCENTILE)
+    median = percentile(values, P50_PERCENTILE)
+    p75 = percentile(values, P75_PERCENTILE)
+    if p25 is None or median is None or p75 is None:
         return None
-    low, high = ordered[0], ordered[-1]
-    counts = [0] * bins
-    for value in ordered:
-        counts[_bin_index(value, low, high, bins)] += 1
-    p50 = percentile(ordered, P50_PERCENTILE)
-    p90 = percentile(ordered, P90_PERCENTILE)
-    if p50 is None or p90 is None:
-        return None
-    return Histogram(bins=tuple(counts), low=low, high=high, p50=p50, p90=p90, count=len(ordered))
+    return RangeSummary(minimum=min(values), p25=p25, median=median, p75=p75, maximum=max(values))
 
 
-def histogram_rows(histogram: Histogram, rows: int = DEFAULT_CHART_ROWS) -> tuple[str, ...]:
-    """Render the bars top row first, each bin BAR_WIDTH cells wide, scaled so the tallest bin fills the rows."""
-    tallest = max(histogram.bins)
-    heights = tuple(round(count / tallest * rows * EIGHTHS_PER_ROW) if tallest else 0 for count in histogram.bins)
-    lines: list[str] = []
-    for row in range(rows - 1, -1, -1):
-        cells: list[str] = []
-        for eighths in heights:
-            visible = min(max(eighths - row * EIGHTHS_PER_ROW, 0), EIGHTHS_PER_ROW)
-            cells.append(BAR_STEPS[visible] * BAR_WIDTH)
-        lines.append((" " * BAR_GAP).join(cells))
-    return tuple(lines)
+def _plot_cell(value: float, median: float, edge_ratio: float) -> int:
+    """Place one value on the median-centered log scale, clamped to the plot."""
+    if median <= 0:
+        return RANGE_PLOT_CENTER
+    if value <= 0:
+        return 0
+    offset = round(math.log(value / median, edge_ratio) * RANGE_PLOT_CENTER)
+    return min(max(RANGE_PLOT_CENTER + offset, 0), RANGE_PLOT_CELLS - 1)
 
 
-class DistributionChart(Static):
-    """Draw a small block-character histogram of one per-turn metric with its p50 and p90.
+def range_plot(summary: RangeSummary, edge_ratio: float) -> Text:
+    """Draw a one-line box plot: whiskers at the extremes, the box from p25 to p75, the median lit.
 
-    The bin holding the median is lit in the success color so the center of the
-    distribution reads without a legend.
+    It is a sketch, not to scale: the box always shows a cell either side of the
+    median and each whisker at least one cell beyond the box, so a tight run still
+    reads as a box. A whisker past the plot's edge ends in an arrow.
+    """
+    median = summary.median
+    # The box stops a cell short of each edge, so a clipped whisker always has room for its arrow.
+    box_low = max(min(_plot_cell(summary.p25, median, edge_ratio), RANGE_PLOT_CENTER - 1), 1)
+    box_high = min(max(_plot_cell(summary.p75, median, edge_ratio), RANGE_PLOT_CENTER + 1), RANGE_PLOT_CELLS - 2)
+    whisker_low = max(min(_plot_cell(summary.minimum, median, edge_ratio), box_low - 1), 0)
+    whisker_high = min(max(_plot_cell(summary.maximum, median, edge_ratio), box_high + 1), RANGE_PLOT_CELLS - 1)
+    plot = Text()
+    for cell in range(RANGE_PLOT_CELLS):
+        if cell == RANGE_PLOT_CENTER:
+            plot.append(PLOT_BOX, style=AA_LIME)
+        elif box_low <= cell <= box_high:
+            plot.append(PLOT_BOX, style=AA_PURPLE)
+        elif cell == whisker_low:
+            clipped = summary.minimum < median / edge_ratio
+            plot.append(PLOT_LOW_CLIPPED if clipped else PLOT_LOW_CAP, style=AA_NEUTRAL_500)
+        elif cell == whisker_high:
+            clipped = summary.maximum > median * edge_ratio
+            plot.append(PLOT_HIGH_CLIPPED if clipped else PLOT_HIGH_CAP, style=AA_NEUTRAL_500)
+        elif whisker_low < cell < whisker_high:
+            plot.append(PLOT_WHISKER, style=AA_NEUTRAL_500)
+        else:
+            plot.append(PLOT_TRACK, style=AA_NEUTRAL_700)
+    return plot
+
+
+def range_labels(summary: RangeSummary, format_value: Callable[[float], str]) -> Text:
+    """Label the plot: min at its left, the median under its center, where the median sits, and max at its right.
+
+    When the numbers are too long to spread out, they fall back to one run separated by gaps.
+    """
+    parts = (
+        ("min ", format_value(summary.minimum)),
+        ("median ", format_value(summary.median)),
+        ("max ", format_value(summary.maximum)),
+    )
+    low, middle, high = (len(word) + len(number) for word, number in parts)
+    middle_start = min(max(RANGE_PLOT_CENTER - middle // 2, low + 1), RANGE_PLOT_CELLS - high - middle - 1)
+    gaps = (" " * max(middle_start - low, 1), " " * max(RANGE_PLOT_CELLS - high - middle_start - middle, 1), "")
+    labels = Text()
+    for (word, number), gap in zip(parts, gaps, strict=True):
+        labels.append(word, style=AA_NEUTRAL_500)
+        labels.append(number, style=AA_NEUTRAL_50)
+        labels.append(gap)
+    return labels
+
+
+class RangeChart(Static):
+    """Show one per-turn metric as a one-line box plot labeled with its min, median, and max.
+
+    Every rendition is three lines, so a repaint never needs a layout pass.
     """
 
     def __init__(
@@ -195,62 +224,45 @@ class DistributionChart(Static):
         unit: str,
         *,
         format_value: Callable[[float], str],
-        rows: int = DEFAULT_CHART_ROWS,
-        bins: int = DEFAULT_BIN_COUNT,
+        edge_ratio: float,
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
         self.title = title
         self.unit = unit
         self.format_value = format_value
-        self.rows = rows
-        self.bins = bins
-        self.histogram: Histogram | None = None
+        self.edge_ratio = edge_ratio
+        self.summary: RangeSummary | None = None
         self.update(self._render_text())
 
     def update_samples(self, values: Sequence[float]) -> None:
         """Rebuild the chart from every value seen so far."""
-        self.histogram = build_histogram(values, self.bins)
-        # Every rendition has the same row count and width, so a repaint never needs a layout pass.
+        self.summary = summarize_range(values)
         self.update(self._render_text(), layout=False)
 
     def _render_text(self) -> Text:
-        width = chart_width(self.bins)
+        summary = self.summary
         text = Text()
         text.append(self.title, style=f"bold {AA_PURPLE_LIGHT}")
+        text.append(f" · {self.unit}".ljust(CHART_WIDTH - len(self.title)), style=AA_NEUTRAL_500)
         text.append("\n")
-        histogram = self.histogram
-        if histogram is None:
-            text.append(EMPTY_CHART_MESSAGE, style=AA_NEUTRAL_500)
-            text.append("\n")
-            for _ in range(self.rows):
-                text.append(" " * width + "\n")
-            text.append(" " * width)
+        if summary is None:
+            text.append(EMPTY_CHART_MESSAGE.ljust(CHART_WIDTH), style=AA_NEUTRAL_500)
+            text.append("\n" + " " * CHART_WIDTH)
             return text
-        text.append(
-            f"p50 {self.format_value(histogram.p50)} · p90 {self.format_value(histogram.p90)} {self.unit}",
-            style=AA_NEUTRAL_50,
-        )
+        text.append_text(range_plot(summary, self.edge_ratio))
         text.append("\n")
-        median_start = histogram.median_bin * (BAR_WIDTH + BAR_GAP)
-        for row in histogram_rows(histogram, self.rows):
-            text.append(row[:median_start], style=AA_PURPLE)
-            text.append(row[median_start : median_start + BAR_WIDTH], style=AA_LIME)
-            text.append(row[median_start + BAR_WIDTH :], style=AA_PURPLE)
-            text.append("\n")
-        low = self.format_value(histogram.low)
-        high = self.format_value(histogram.high)
-        gap = max(width - len(low) - len(high), 1)
-        text.append(f"{low}{' ' * gap}{high}", style=AA_NEUTRAL_500)
+        text.append_text(range_labels(summary, self.format_value))
         return text
 
 
 class ContextGauge(Static):
-    """Show the size of the request about to be sent and how much of the context window it fills.
+    """Say in words how much of the context window the request about to be sent fills.
 
-    The size is the one the recording counted, because nothing has tokenized the prompt
-    yet, so it is worded as approximate. Without a served context length there is no
-    honest denominator, and the bar is left out.
+    It is words rather than a bar, so it never reads as a second progress bar. The size
+    is the one the recording counted, because nothing has tokenized the prompt yet, so
+    it is worded as approximate. Without a served context length there is no honest
+    denominator, and the share is left out.
     """
 
     def __init__(self, *, id: str | None = None, classes: str | None = None) -> None:
@@ -263,23 +275,18 @@ class ContextGauge(Static):
         if tokens is None:
             self.clear()
             return
-        width = CONTEXT_BAR_COMPACT_WIDTH if compact else CONTEXT_BAR_WIDTH
         line = Text()
-        line.append("Next · " if compact else "Next request · ", style=AA_NEUTRAL_500)
-        line.append(request_size_text(tokens), style=AA_NEUTRAL_50)
+        line.append("Next request · " if compact else "Context for next request · ", style=AA_NEUTRAL_500)
         if context_tokens is None or context_tokens <= 0:
+            line.append(request_size_text(tokens), style=AA_NEUTRAL_50)
             line.append(f" · {CONTEXT_WINDOW_UNKNOWN}", style=AA_NEUTRAL_500)
         else:
             fraction = tokens / context_tokens
-            filled = min(round(fraction * width), width)
-            # A request larger than the window will not fit, so the bar says so in the warning color.
-            fill_style = AA_ORANGE if fraction > 1 else AA_PURPLE
-            line.append(f" {CONTEXT_BAR_LEFT_CAP}", style=AA_NEUTRAL_500)
-            line.append(CONTEXT_BAR_FILLED * filled, style=fill_style)
-            line.append(CONTEXT_BAR_EMPTY * (width - filled), style=AA_NEUTRAL_500)
-            line.append(CONTEXT_BAR_RIGHT_CAP, style=AA_NEUTRAL_500)
-            window = "" if compact else f" of {context_tokens:,}"
-            line.append(f" {fraction * PERCENT_SCALE:.0f}%{window}", style=AA_NEUTRAL_500)
+            # A request larger than the window will not fit, so its size says so in the warning color.
+            size_style = AA_ORANGE if fraction > 1 else AA_NEUTRAL_50
+            unit = "" if compact else " tokens"
+            line.append(f"about {tokens:,} of {context_tokens:,}{unit}", style=size_style)
+            line.append(f" ({fraction * PERCENT_SCALE:.0f}%)", style=AA_NEUTRAL_500)
         self.plain_text = line.plain
         self.display = True
         self.update(line)

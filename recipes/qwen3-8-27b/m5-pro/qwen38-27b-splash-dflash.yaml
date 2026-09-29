@@ -1,6 +1,7 @@
 profile_id: qwen38-27b-splash-dflash
 as_of: '2026-09-23'
-display_name: Qwen3.8 27B Splash 4-bit, Apple Silicon DFlash 2
+model_name: Qwen3.8 27B
+quantization: 4-bit
 model_release_slug: qwen3-8-27b
 hf_repository: incoai/Qwen3.8-27B-Splash
 hf_revision: 9d27070b71f7142c6b6025f03ac011d70a73cb48

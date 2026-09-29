@@ -29,7 +29,7 @@ from agentperf_local.tui.app import (
     AgentPerfLocalApp,
     TuiDefaults,
 )
-from agentperf_local.tui.evidence import EndpointScope
+from agentperf_local.tui.evidence import EndpointScope, SelectionKind
 from agentperf_local.tui.labels import PATH_WRAP_BREAK
 from agentperf_local.tui.replay_contract import (
     ReplayExecution,
@@ -229,10 +229,10 @@ async def _render(output_dir: Path, size: tuple[int, int]) -> tuple[Path, ...]:
         # The prefilled served model highlights the custom endpoint; the model page previews
         # a catalog card first, then the flow continues with the endpoint.
         model_list = app.query_one("#model-list", OptionList)
-        model_list.highlighted = 0
+        model_list.action_first()
         await pilot.pause()
         rendered.append(_save_screen(app, output_dir, "model.svg"))
-        model_list.highlighted = len(app.catalog.models)
+        model_list.highlighted = model_list.get_option_index(SelectionKind.CUSTOM_ENDPOINT.value)
         app.query_one("#model-continue", Button).focus()
         await pilot.press("enter")
         await pilot.pause()

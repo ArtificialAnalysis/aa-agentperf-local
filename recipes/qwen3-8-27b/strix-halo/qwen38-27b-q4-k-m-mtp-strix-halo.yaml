@@ -1,6 +1,7 @@
 profile_id: qwen38-27b-q4-k-m-mtp-strix-halo
 as_of: '2026-09-21'
-display_name: Qwen3.8 27B Q4_K_M, Strix Halo ROCm
+model_name: Qwen3.8 27B
+quantization: Q4_K_M
 model_release_slug: qwen3-8-27b
 hf_repository: unsloth/Qwen3.8-27B-GGUF
 hf_revision: f1bfb127c64f7072bdd2cad55f258b9c8b2910fe

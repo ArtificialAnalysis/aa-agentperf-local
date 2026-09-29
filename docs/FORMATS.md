@@ -168,7 +168,7 @@ and reason codes.
 
 | Schema | Produced or consumed by |
 | --- | --- |
-| [`recipe-v1`](schemas/recipe-v1.schema.json) | One managed-run recipe in [`recipes/`](../recipes) |
+| [`recipe-v2`](schemas/recipe-v2.schema.json) | One managed-run recipe in [`recipes/`](../recipes) |
 | [`private-nvidia-telemetry-v2`](schemas/private-nvidia-telemetry-v2.schema.json) | The NVIDIA collector; carries the run identifier and records glitched lines as all-missing samples |
 | [`runtime-qualification-v1`](schemas/runtime-qualification-v1.schema.json) | Superseded by v2; kept only because the checked-in MLX evidence uses it |
 | [`runtime-qualification-v2`](schemas/runtime-qualification-v2.schema.json) | Every run; adds the run identifier |

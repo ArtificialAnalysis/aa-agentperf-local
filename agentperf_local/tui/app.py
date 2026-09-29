@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from rich.markup import escape
 from rich.text import Text
 from textual import events, work
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, ScreenStackError
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -31,7 +31,6 @@ from textual.widgets import (
     Sparkline,
     Static,
 )
-from textual.widgets.option_list import Option
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.common.json_fields import one_of
@@ -95,6 +94,7 @@ from agentperf_local.tui.branding import (
     AA_NEUTRAL_500,
     AA_PURPLE,
     COMPACT_LAYOUT_WIDTH,
+    RUN_COMPACT_LAYOUT_WIDTH,
     PixelLogo,
     key_value_block,
     spinner_frame,
@@ -126,11 +126,13 @@ from agentperf_local.tui.inputs import (
 )
 from agentperf_local.tui.labels import (
     BLOCK_CODE_MESSAGES,
+    accelerator_summary_text,
     artifact_kind_text,
     block_code_message,
     count,
     framework_text,
     gib_suffix,
+    hardware_target_text,
     home_relative_path_text,
     integer_label,
     memory_need_gib,
@@ -138,8 +140,13 @@ from agentperf_local.tui.labels import (
     output_policy_activity_text,
     platform_suffix,
     probe_activity_text,
+    recipe_build_text,
+    recipe_frameworks_text,
+    recipe_title_text,
     result_path_text,
     seconds_label,
+    standing_headline_text,
+    standing_reason_text,
     turn_live_text,
     turn_record_text,
     unit_text,
@@ -163,8 +170,16 @@ from agentperf_local.tui.messages import (
     UploadFailedMessage,
     UploadProgressMessage,
 )
+from agentperf_local.tui.model_list import (
+    ListedRecipe,
+    model_list_options,
+    ordered_recipes,
+    standing_mark,
+    table_width,
+)
 from agentperf_local.tui.replay_contract import (
     DEVICE_SELECTION_REQUIRED_MESSAGE,
+    RECIPE_STANDING_ORDER,
     EndpointProblem,
     ManagedDeploymentChoice,
     ManagedDeviceOption,
@@ -183,16 +198,18 @@ from agentperf_local.tui.replay_contract import (
     next_run_directory,
 )
 from agentperf_local.tui.steps import ESCAPE_ACTION_STEPS, TuiOutcome, TuiStep
-from agentperf_local.tui.styles import APP_CSS, RESULT_CHARTS_MIN_WIDTH
+from agentperf_local.tui.styles import APP_CSS, MODEL_LIST_CHROME_WIDTH
 from agentperf_local.tui.widgets import (
     DONE_MARK,
     FAILED_MARK,
+    LATENCY_PLOT_EDGE_RATIO,
+    SPEED_PLOT_EDGE_RATIO,
     WARNING_MARK,
     ActivityLog,
     ContextGauge,
-    DistributionChart,
     HeadlineDigits,
     Kitty,
+    RangeChart,
     SpinnerLine,
     scroll_log_to_end,
 )
@@ -251,8 +268,8 @@ RUN_THROUGHPUT_WAITING = "tokens per second · waiting for the first turn"
 SERVER_LOG_MAX_LINES = 2_000
 # Below these terminal heights the metrics column drops its lowest-value rows so the
 # decode-speed chart, the one a benchmark is about, always stays whole.
-RUN_TREND_MIN_HEIGHT = 34
-RUN_SECOND_CHART_MIN_HEIGHT = 27
+RUN_TREND_MIN_HEIGHT = 28
+RUN_SECOND_CHART_MIN_HEIGHT = 21
 PREFLIGHT_CHECKING_MESSAGE = "Checking files, client, and hardware…"
 PREFLIGHT_READY_HERO = "Ready to run?"
 PREFLIGHT_BLOCKED_HERO = "Check the setup"
@@ -288,7 +305,6 @@ RESULT_RECORDED_POLICY_MESSAGE = (
     "e2e is reported as a normalized estimate · not directly comparable to exact-policy results"
 )
 RESULT_EYEBROW = "RESULT"
-AA_CATALOG_RUNTIME_PROVENANCE = "Artificial Analysis catalog · results not leaderboard-qualified yet"
 EXTERNAL_CATALOG_PROVENANCE = "External catalog · not from Artificial Analysis"
 CUSTOM_ENDPOINT_DETAIL = (
     "[b]Other model or server[/b]\n\n"
@@ -445,7 +461,7 @@ class BenchmarkSelection(BaseModel, frozen=True):
                 if catalog.is_bundled_snapshot
                 else SelectionKind.EXTERNAL_CATALOG_ENTRY
             ),
-            display_name=candidate.display_name,
+            display_name=recipe_title_text(candidate, catalog.hardware_of(candidate)),
             endpoint_model=candidate.hf_repository,
             profile_id=candidate.profile_id,
             catalog_digest=catalog.digest,
@@ -538,10 +554,14 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.step = TuiStep.WELCOME
         self.setup_return_step = TuiStep.MODEL
         self._information_bookmark: _NavigationBookmark | None = None
+        # Bundled replay manifests are tiny package files; their declared context
+        # demand is read once and reused by every context-ladder rebuild.
+        self.replay_floor_cache: dict[str, int | None] = {}
+        self.listed_recipes = self._listed_recipes()
         self.selection = (
             BenchmarkSelection.custom(self.defaults.endpoint_model)
             if self.defaults.endpoint_model is not None
-            else BenchmarkSelection.from_candidate(catalog.models[0], catalog)
+            else BenchmarkSelection.from_candidate(self._default_candidate(), catalog)
         )
         self.request: ReplayRequest | None = None
         self.pending_preflight: ReplayRequest | None = None
@@ -570,9 +590,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.run_context_probe: ContextProbeResult | None = None
         self.preflight_spinner_timer: Timer | None = None
         self.preflight_spinner_tick = 0
-        # Bundled replay manifests are tiny package files; their declared context
-        # demand is read once and reused by every context-ladder rebuild.
-        self.replay_floor_cache: dict[str, int | None] = {}
 
     def compose(self) -> ComposeResult:
         """Compose the permanent shell and all stateful pages."""
@@ -605,30 +622,20 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                 "and measure response speed and latency.",
                 classes="lede",
             )
-            yield WelcomeChoice("Choose a model", "Download and start a supported model here.", id="welcome-start")
+            yield WelcomeChoice(
+                "Choose a model & config", "Download and start a supported model here.", id="welcome-start"
+            )
             yield WelcomeChoice(
                 "Use existing server", "Connect to Ollama, LM Studio, llama.cpp, or another API.", id="welcome-existing"
-            )
-            yield Static(
-                "Review the setup before anything starts. Results are saved locally; sharing is optional.",
-                classes="lede",
             )
             yield Static("Arrow keys to move · Enter or click to choose", classes="key-hint")
 
     def _model_page(self) -> ComposeResult:
-        options = tuple(
-            # A Text prompt is not parsed as markup; the list's CSS truncates long names.
-            Option(Text(candidate.display_name), id=candidate.profile_id)
-            for candidate in self.catalog.models
-        ) + (
-            Option(
-                "Other model or server",
-                id=SelectionKind.CUSTOM_ENDPOINT.value,
-            ),
-        )
+        # Text prompts are not parsed as markup; the list's CSS truncates long rows.
+        options = model_list_options(self.listed_recipes, self._computer_text())
         with FormPage(id=TuiStep.MODEL.value, classes="page"):
             yield Static("STEP 1 OF 4 · MODEL", id="model-intro", classes="eyebrow")
-            yield Static("Choose a model", classes="hero")
+            yield Static("Choose a model & config", classes="hero")
             yield Static(
                 "↑ ↓ browse · ← → move between controls · Enter or click to select",
                 id="model-list-hint",
@@ -637,7 +644,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             with Horizontal(id="model-layout"):
                 yield ModelList(*options, id="model-list")
                 with ModelDetailPane(id="model-detail-pane"):
-                    yield Static(self._candidate_detail(self.catalog.models[0]), id="model-detail")
+                    yield Static(self._candidate_detail(self._default_candidate()), id="model-detail")
             with Horizontal(classes="actions"):
                 yield Button("Select", id="model-continue", flat=True, compact=True)
                 yield Button("Back", id="model-back", flat=True, compact=True)
@@ -799,8 +806,20 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                 with VerticalScroll(id="run-metrics-column"):
                     yield HeadlineDigits(id="run-throughput")
                     yield Static(RUN_THROUGHPUT_WAITING, id="run-throughput-caption")
-                    yield DistributionChart("DECODE SPEED", "tok/s", format_value=integer_label, id="run-decode-chart")
-                    yield DistributionChart("FIRST TOKEN", "ms", format_value=integer_label, id="run-ttft-chart")
+                    yield RangeChart(
+                        "DECODE SPEED",
+                        "tok/s",
+                        format_value=integer_label,
+                        edge_ratio=SPEED_PLOT_EDGE_RATIO,
+                        id="run-decode-chart",
+                    )
+                    yield RangeChart(
+                        "FIRST TOKEN",
+                        "ms",
+                        format_value=integer_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="run-ttft-chart",
+                    )
                     yield Static("TREND · tok/s per turn", id="run-trend-title", classes="section-label")
                     yield Sparkline([], id="run-trend")
             yield Button("Cancel", id="run-cancel", flat=True, compact=True)
@@ -826,12 +845,28 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             yield DisclosureButton("Result details", id="result-details-toggle")
             with Vertical(id="result-details", classes="disclosed"):
                 yield Static("", id="result-metrics-detail", classes="status-row")
-                with Horizontal(id="result-charts"):
-                    yield DistributionChart("FIRST TOKEN", "ms", format_value=integer_label, id="result-ttft-chart")
-                    yield DistributionChart(
-                        "DECODE SPEED", "tok/s", format_value=integer_label, id="result-decode-chart"
+                with Vertical(id="result-charts"):
+                    yield RangeChart(
+                        "FIRST TOKEN",
+                        "ms",
+                        format_value=integer_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="result-ttft-chart",
                     )
-                    yield DistributionChart("TURN TIME", "s", format_value=seconds_label, id="result-e2e-chart")
+                    yield RangeChart(
+                        "DECODE SPEED",
+                        "tok/s",
+                        format_value=integer_label,
+                        edge_ratio=SPEED_PLOT_EDGE_RATIO,
+                        id="result-decode-chart",
+                    )
+                    yield RangeChart(
+                        "TURN TIME",
+                        "s",
+                        format_value=seconds_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="result-e2e-chart",
+                    )
             yield CleanSelectStatic("", id="result-upload", classes="card")
             yield ProgressBar(total=1, show_eta=False, id="result-upload-progress")
             with Horizontal(classes="actions"):
@@ -901,19 +936,20 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def on_mount(self) -> None:
         """Seed the model list and initial detail panel."""
         self._show_result_throughput(None)
-        self.query_one("#result-charts", Horizontal).add_class("-empty")
+        self.query_one("#result-charts", Vertical).add_class("-empty")
         self.query_one("#manifest-row", Horizontal).display = self._uses_custom_manifest()
         self.query_one("#preflight-reduced", Static).display = False
         self.query_one("#preflight-ollama", Static).display = False
         self.query_one("#result-reduced", Static).display = False
         self.query_one("#result-policy", Static).display = False
         device_sync_pending = self._apply_default_device()
-        initial_index = len(self.catalog.models) if self.defaults.endpoint_model is not None else 0
-        model_list = self.query_one("#model-list", OptionList)
-        model_list.highlighted = initial_index
-        option = model_list.get_option_at_index(initial_index)
-        if option.id is not None:
-            self._render_option_detail(option.id)
+        initial_option_id = (
+            SelectionKind.CUSTOM_ENDPOINT.value
+            if self.defaults.endpoint_model is not None or self._first_recipe_here() is None
+            else self._default_candidate().profile_id
+        )
+        self.query_one("#model-list", OptionList).highlighted = self._model_option_index(initial_option_id)
+        self._render_option_detail(initial_option_id)
         if not device_sync_pending:
             # Syncing twice would run the whole framework-availability probe twice at startup.
             self._sync_managed_deployment_controls()
@@ -932,17 +968,22 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#content", ContentSwitcher).display = not too_small
         compact = width < COMPACT_LAYOUT_WIDTH
         self.query_one("#model-layout", Horizontal).set_class(compact, "compact")
+        # Beside the detail, the list never narrows below its table; stacked, it spans the page anyway.
+        self.query_one("#model-list", OptionList).styles.min_width = (
+            None if compact else table_width(self.listed_recipes) + MODEL_LIST_CHROME_WIDTH
+        )
         run_page = self.query_one(f"#{TuiStep.RUN.value}", Vertical)
         run_page.set_class(height < RUN_TREND_MIN_HEIGHT, "short-run")
         run_page.set_class(height < RUN_SECOND_CHART_MIN_HEIGHT, "shorter-run")
         for page in self.query(".page"):
             page.set_class(compact, "compact")
             page.set_class(height < SHORT_LAYOUT_HEIGHT, "short")
-        if compact and self._showing_server_log():
+        run_compact = width < RUN_COMPACT_LAYOUT_WIDTH
+        run_page.set_class(run_compact, "compact")
+        if run_compact and self._showing_server_log():
             # A compact page shows either the log or the details; keep the log the user opened.
             run_page.remove_class("show-details")
-        self.query_one("#result", VerticalScroll).set_class(width < RESULT_CHARTS_MIN_WIDTH, "stack-charts")
-        # The gauge draws a narrower bar once the run page carries the compact class.
+        # The context line shortens once the run page carries the compact class.
         self._render_context_gauge()
         self._sync_kitty()
         if restored_supported_size:
@@ -956,6 +997,64 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if self.selection.profile_id is None:
             return None
         return self._candidate(self.selection.profile_id)
+
+    def _listed_recipes(self) -> tuple[ListedRecipe, ...]:
+        return ordered_recipes(self.catalog, self._listing_availability)
+
+    def _first_recipe_here(self) -> ModelCandidate | None:
+        """Return the first listed recipe for this computer, or None when every recipe needs other hardware."""
+        return next((recipe.candidate for recipe in self.listed_recipes if not recipe.for_other_hardware), None)
+
+    def _default_candidate(self) -> ModelCandidate:
+        """Return the recipe the model screen opens on: the first for this computer, else the first listed."""
+        return self._first_recipe_here() or self.listed_recipes[0].candidate
+
+    def _model_option_index(self, option_id: str) -> int:
+        return self.query_one("#model-list", OptionList).get_option_index(option_id)
+
+    def _computer_text(self) -> str | None:
+        """Name this computer's accelerator for the model list, or None without hardware detection."""
+        if self.managed_controller is None:
+            return None
+        return accelerator_summary_text(self.managed_controller.hardware_summary())
+
+    def _listing_availability(self, candidate: ModelCandidate) -> ManagedModelAvailability | None:
+        """Return what the model screen shows for one recipe at its full context.
+
+        The full context, not the setup picker's choice for some earlier recipe, keeps one
+        recipe's mark from depending on what was looked at before; a smaller context the
+        replay allows still counts, as a reduced-only fit. With several accelerators and
+        none chosen yet, the best device's result stands for the computer, because the
+        device is picked only on the next screen.
+        """
+        controller = self.managed_controller
+        if controller is None:
+            return None
+        device_index = self._selected_device_index()
+        if device_index is not None or len(self.device_options) <= 1:
+            device_indexes: tuple[int | None, ...] = (device_index,)
+        else:
+            device_indexes = tuple(option.index for option in self.device_options)
+        results = tuple(self._device_availability(controller, candidate, index) for index in device_indexes)
+        return min(results, key=lambda availability: RECIPE_STANDING_ORDER.index(availability.standing))
+
+    def _device_availability(
+        self,
+        controller: ManagedReplayController,
+        candidate: ModelCandidate,
+        device_index: int | None,
+    ) -> ManagedModelAvailability:
+        """Return one device's availability, counting a device no framework can serve as other hardware.
+
+        Binding an accelerator the app cannot classify, such as integrated graphics,
+        raises; the model screen must still open so an existing server stays reachable.
+        """
+        try:
+            return controller.availability(
+                candidate, device_index=device_index, replay_floor_tokens=self._replay_context_floor()
+            )
+        except ValueError as error:
+            return ManagedModelAvailability(hardware=controller.hardware_summary(), offers=(), reason=error_text(error))
 
     def _managed_availability(
         self,
@@ -997,8 +1096,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         """Return one setup dropdown's chosen text, or None while it is unmounted or blank."""
         try:
             value = self.query_one(selector, kind).value
-        except NoMatches:
-            # The model detail renders during compose, before the setup form mounts.
+        except (NoMatches, ScreenStackError):
+            # The model list is ordered at construction and its detail renders during
+            # compose, both before the setup form mounts.
             return None
         return value if isinstance(value, str) else None
 
@@ -1021,7 +1121,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             "MODEL SERVER · started for you" if candidate is not None else "YOUR SERVER"
         )
         self.query_one("#config-selection", Static).update(
-            escape(candidate.display_name)
+            escape(recipe_title_text(candidate, self.catalog.hardware_of(candidate)))
             if candidate is not None
             else "Use the URL and model name shown by your server."
         )
@@ -1111,8 +1211,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         A custom manifest is read off-thread at preflight; this render path stays free
         of user file I/O, so its demand is unknown here.
         """
-        replay_id = self._select_text("#replay-workload-select", ReplayWorkloadSelect)
-        if replay_id is None or replay_id == CUSTOM_REPLAY_ID:
+        # Before the setup form mounts, the replay is the one the app opens with.
+        replay_id = self._select_text("#replay-workload-select", ReplayWorkloadSelect) or self.defaults.replay_id
+        if replay_id == CUSTOM_REPLAY_ID:
             return None
         replay = find_bundled_replay(replay_id)
         if replay is None:
@@ -1177,8 +1278,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             )
 
     def _candidate_detail(self, candidate: ModelCandidate) -> str:
-        # Detail values stay short enough for one line beside their key at the full-size
-        # panel width; anything longer (a refusal reason) gets its own full-width line.
+        # Short keys keep each value on one line beside its key at the full-size panel
+        # width; the standing's reason gets its own full-width line above them.
         artifact_gib = candidate.deployment.artifact_size_bytes / BYTES_PER_GIB
         selected_context_tokens = self._chosen_context_tokens(candidate.deployment)
         minimum_memory_need = memory_need_gib(
@@ -1189,40 +1290,35 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             if selected_context_tokens < candidate.deployment.context_tokens
             else f"{candidate.deployment.context_tokens:,} tokens"
         )
-        frameworks = " / ".join(candidate.deployment.frameworks)
-        availability = self._managed_availability(candidate, self._selected_device_index(), selected_context_tokens)
-        availability_note = ""
-        if availability is None:
-            local_status = ("This computer", "checked when the app starts")
-        elif availability.can_deploy:
-            local_frameworks = " / ".join(offer.display_name for offer in availability.deployable_offers)
-            local_status = ("This computer", f"can start this model · {local_frameworks}")
-        else:
-            reason = availability.reason or "no compatible framework is installed"
-            local_status = ("This computer", "cannot start this model")
-            availability_note = f"\n{escape(reason)}"
+        frameworks = recipe_frameworks_text(candidate)
         rows = (
-            local_status,
+            ("Built for", hardware_target_text(candidate, self.catalog.hardware_of(candidate))),
             ("Runs with", f"{frameworks} · needs {minimum_memory_need} GiB"),
-            ("Benchmark context", context_value),
+            ("Context", context_value),
             (
                 "Download",
                 f"{artifact_kind_text(candidate.deployment.artifact_kind)} · {artifact_gib:.1f} GiB · SHA-256 checked",
             ),
-            ("Hugging Face", candidate.hf_repository),
+            ("HF repo", candidate.hf_repository),
+        )
+        external_note = (
+            "" if self.catalog.is_bundled_snapshot else f"\n\n[{AA_NEUTRAL_500}]{EXTERNAL_CATALOG_PROVENANCE}[/]"
         )
         return (
-            f"[b]{escape(candidate.display_name)}[/b]\n"
+            f"[b]{escape(candidate.model_name)}[/b] · {escape(recipe_build_text(candidate))}\n"
+            f"{self._standing_detail(candidate)}\n\n"
             f"{key_value_block(rows)}"
-            f"{availability_note}"
-            f"\n\n[{AA_NEUTRAL_500}]{self._catalog_provenance()}[/]"
+            f"{external_note}"
         )
 
-    def _catalog_provenance(self) -> str:
-        """Say where the loaded recipes come from and that their results are not leaderboard-qualified yet."""
-        if not self.catalog.is_bundled_snapshot:
-            return EXTERNAL_CATALOG_PROVENANCE
-        return AA_CATALOG_RUNTIME_PROVENANCE
+    def _standing_detail(self, candidate: ModelCandidate) -> str:
+        """Lead the detail pane with a marked standing and, when the recipe cannot start, the reason."""
+        availability = self._listing_availability(candidate)
+        if availability is None:
+            return f"[{AA_NEUTRAL_500}]This computer is checked when the app starts.[/]"
+        headline = f"{standing_mark(availability.standing).markup} {escape(standing_headline_text(availability))}"
+        reason = standing_reason_text(candidate, availability)
+        return headline if reason is None else f"{headline}\n{escape(reason)}"
 
     def _show(self, step: TuiStep) -> None:
         information_steps = {TuiStep.PRIVACY, TuiStep.METHODOLOGY}
@@ -1240,8 +1336,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             self._restore_run_metrics()
         self.step = step
         if step is TuiStep.MODEL:
-            # A context picked on the setup screen changes the detail card, so
-            # returning to the model page renders the highlighted option again.
+            # A context or device picked on the setup screen changes what fits, so
+            # returning to the model page re-sorts the list and renders the detail again.
+            self._refresh_model_list()
             self._refresh_model_detail()
         self.query_one("#content", ContentSwitcher).current = step.value
         self._sync_kitty()
@@ -1256,6 +1353,18 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             kitty.start()
         else:
             kitty.settle()
+
+    def _refresh_model_list(self) -> None:
+        """Rebuild the list when a setup change moved a recipe, keeping the highlighted option."""
+        listed_recipes = self._listed_recipes()
+        if listed_recipes == self.listed_recipes:
+            return
+        self.listed_recipes = listed_recipes
+        model_list = self.query_one("#model-list", OptionList)
+        highlighted = None if model_list.highlighted is None else model_list.get_option_at_index(model_list.highlighted)
+        model_list.set_options(model_list_options(listed_recipes, self._computer_text()))
+        if highlighted is not None and highlighted.id is not None:
+            model_list.highlighted = model_list.get_option_index(highlighted.id)
 
     def _refresh_model_detail(self) -> None:
         """Render the highlighted option's detail from the current form state."""
@@ -1552,7 +1661,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if self.request.managed_deployment is not None:
             # This app starts that server itself, so there is nothing to ask yet.
             run.disabled = False
-            self._focus_run()
             return
         run.disabled = True
         self.preflight_probe = None
@@ -1592,8 +1700,10 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self._update_reduced_context_notice(message.request)
         self.query_one("#run-start", Button).disabled = not reachable
         if reachable and self._page_focus() is consent:
-            # Offer Run where the user is waiting; a control they moved to meanwhile keeps focus.
-            self._focus_run()
+            # A run on the user's own server is submitted from the command line, so its
+            # submit box is off and Run comes next; a control the user moved to during the
+            # check keeps focus.
+            self._focus_on_page(TuiStep.PREFLIGHT, "#run-start")
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Reveal the custom path, or rebind the managed launch to another device."""
@@ -1726,7 +1836,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             return
         self.selection = selection
         if downgrades_to_custom:
-            self.query_one("#model-list", OptionList).highlighted = len(self.catalog.models)
+            self.query_one("#model-list", OptionList).highlighted = self._model_option_index(
+                SelectionKind.CUSTOM_ENDPOINT.value
+            )
         self.request = None
         self.pending_preflight = request
         self.preflight_probe = None
@@ -1936,10 +2048,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def _submit_token(self) -> str | None:
         """Return the submit token from the configured variable, or None when it is unset or blank."""
         return read_submit_token(self.defaults.submit_token_env)
-
-    def _focus_run(self) -> None:
-        """Focus the primary action after confirmation; sharing remains optional."""
-        self._focus_on_page(TuiStep.PREFLIGHT, "#run-start")
 
     def _reset_submit_controls(self, enabled: bool) -> None:
         """Offer the submit checkbox for a managed setup that is ready to run.
@@ -2198,9 +2306,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                     WARNING_MARK,
                     f"Protocol checks recorded · {passed}/{total} passed · submission stays self-reported",
                 )
-        elif kind is RunActivityKind.POWER_UNAVAILABLE:
-            reason = "NVIDIA only" if activity.accelerator_platform != "nvidia-cuda" else "nvidia-smi not found"
-            log.record(WARNING_MARK, f"GPU power not sampled · {reason} · this run can not reach verified")
         elif kind is RunActivityKind.POWER_STARTED:
             log.record(DONE_MARK, "GPU power sampling started · nvidia-smi")
         elif kind is RunActivityKind.POWER_RECORDED:
@@ -2346,8 +2451,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         """Repaint the charts and the running headline from every closed turn so far."""
         samples = self.progress_state.samples
         series = _closed_turn_series(samples)
-        self.query_one("#run-ttft-chart", DistributionChart).update_samples(series.ttft_ms)
-        self.query_one("#run-decode-chart", DistributionChart).update_samples(series.decode_tokens_per_second)
+        self.query_one("#run-ttft-chart", RangeChart).update_samples(series.ttft_ms)
+        self.query_one("#run-decode-chart", RangeChart).update_samples(series.decode_tokens_per_second)
         self.query_one("#run-trend", Sparkline).data = list(series.decode_tokens_per_second)
         rate = cumulative_decode_tokens_per_second(samples)
         throughput = self.query_one("#run-throughput", HeadlineDigits)
@@ -2543,12 +2648,12 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         series = _closed_turn_series(self.progress_state.samples)
         self.query_one("#result-details-toggle", Button).display = True
         turn_seconds = tuple(e2e_ms / MILLISECONDS_PER_SECOND for e2e_ms in series.e2e_ms)
-        self.query_one("#result-charts", Horizontal).set_class(
+        self.query_one("#result-charts", Vertical).set_class(
             not (series.ttft_ms or series.decode_tokens_per_second or turn_seconds), "-empty"
         )
-        self.query_one("#result-ttft-chart", DistributionChart).update_samples(series.ttft_ms)
-        self.query_one("#result-decode-chart", DistributionChart).update_samples(series.decode_tokens_per_second)
-        self.query_one("#result-e2e-chart", DistributionChart).update_samples(turn_seconds)
+        self.query_one("#result-ttft-chart", RangeChart).update_samples(series.ttft_ms)
+        self.query_one("#result-decode-chart", RangeChart).update_samples(series.decode_tokens_per_second)
+        self.query_one("#result-e2e-chart", RangeChart).update_samples(turn_seconds)
 
     def _reveal_result(self) -> None:
         """Show the result page unless the user is reading an information page."""
@@ -2607,7 +2712,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.outcome = outcome
         self.query_one("#result-title", Static).set_classes("hero")
         self.query_one("#result-metrics-detail", Static).update("")
-        self.query_one("#result-charts", Horizontal).add_class("-empty")
+        self.query_one("#result-charts", Vertical).add_class("-empty")
         self.query_one("#result-details-toggle", Button).display = False
 
     def on_replay_failed_message(self, message: ReplayFailedMessage) -> None:

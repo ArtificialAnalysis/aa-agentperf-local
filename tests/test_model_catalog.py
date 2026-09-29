@@ -222,7 +222,10 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
             f"{GEMMA_RECIPE.as_posix()}: devices.0: Input should be 'nvidia-cuda', 'amd-rocm' or 'apple-silicon'",
         ),
         ("reduced-context", "context_tokens must be 65536"),
-        ("multiline-display-name", "display_name must be short printable text"),
+        ("multiline-model-name", "model_name must be short printable text"),
+        ("model-name-mismatch", "every recipe in gemma-4-12b must share the model_name Gemma 4 12B"),
+        ("hardware-field", f"{GEMMA_RECIPE.as_posix()}: hardware: Extra inputs are not permitted"),
+        ("same-shown-name", "would show the same name; give one a variant"),
         ("llama-backend-device", "backend must match the recipe's devices"),
         (
             "llama-threads-zero",
@@ -274,8 +277,22 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         deployment = gemma.get("deployment")
         assert isinstance(deployment, dict)
         deployment["context_tokens"] = 32768
-    elif case == "multiline-display-name":
-        gemma["display_name"] = "spoofed heading\nAA VERIFIED"
+    elif case == "multiline-model-name":
+        gemma["model_name"] = "spoofed heading\nAA VERIFIED"
+    elif case == "same-shown-name":
+        gemma["profile_id"] = "gemma4-12b-it-q4-0-twin"
+        _write(root, GEMMA_RECIPE.with_name("gemma4-12b-it-q4-0-twin.yaml"), gemma)
+        gemma = _read(root, GEMMA_RECIPE)
+    elif case == "hardware-field":
+        gemma["hardware"] = "rtx-5090"
+    elif case == "model-name-mismatch":
+        shutil.copytree(root / GEMMA_RECIPE.parent, root / "gemma-4-12b" / "nvidia-cuda")
+        sibling = root / "gemma-4-12b" / "nvidia-cuda" / GEMMA_RECIPE.name
+        sibling.rename(sibling.with_name("gemma4-12b-sibling.yaml"))
+        gemma["profile_id"] = "gemma4-12b-sibling"
+        gemma["model_name"] = "Gemma Four"
+        _write(root, Path("gemma-4-12b", "nvidia-cuda", "gemma4-12b-sibling.yaml"), gemma)
+        gemma = _read(root, GEMMA_RECIPE)
     elif case.startswith("llama-"):
         metal = _read(root, METAL_RECIPE)
         deployment = metal.get("deployment")

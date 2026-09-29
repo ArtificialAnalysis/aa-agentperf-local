@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.text import Text
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
-from textual.geometry import Size
+from textual.geometry import Region, Size
 from textual.reactive import reactive
 from textual.selection import Selection
 from textual.widgets import Button, Checkbox, Input, OptionList, Select, Static
@@ -130,9 +130,34 @@ class FieldInput(Input):
 
 
 class ModelList(OptionList):
-    """Name the list's enter action Select in the footer while it has focus."""
+    """Name the list's enter action Select in the footer while it has focus, and keep headings in view."""
 
     BINDINGS = (Binding("enter", "select", "Select"),)
+
+    def scroll_to_highlight(self, top: bool = False) -> None:
+        """Scroll the highlighted recipe into view together with the heading rows directly above it.
+
+        Headings are disabled rows the cursor skips, so scrolling back up to a recipe would
+        otherwise leave its part and model headings out of view and out of reach. When the
+        headings and the recipe do not fit the list's height, the recipe alone is shown.
+        """
+        highlighted = self.highlighted
+        if highlighted is None or not self.is_mounted:
+            return
+        first = highlighted
+        while first > 0 and self.options[first - 1].disabled:
+            first -= 1
+        # The line map is OptionList's own; Textual is pinned below 9, where it has this shape.
+        top_line = self._index_to_line.get(first)
+        highlight_line = self._index_to_line.get(highlighted)
+        if top_line is None or highlight_line is None:
+            return
+        bottom_line = highlight_line + self._heights[highlighted]
+        if first == highlighted or bottom_line - top_line > self.scrollable_content_region.height:
+            super().scroll_to_highlight(top)
+            return
+        region = Region(0, top_line, self.scrollable_content_region.width, bottom_line - top_line)
+        self.scroll_to_region(region, force=True, animate=False, top=top, immediate=True)
 
 
 class WelcomeChoice(Button):

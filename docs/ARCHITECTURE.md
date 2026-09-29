@@ -56,7 +56,7 @@ Each package imports only from packages above it in this table.
 | `telemetry` | The NVIDIA collector, the replay-scoped power collector, and post-phase reduction. |
 | `deployment` | The model catalog, context policy, framework selection, the pinned-file cache, endpoint probes, runtime qualification, the owned server, and the managed-run pipeline. |
 | `submission` | The typed body, the pinned spec check, the framework-commit lookup, and the upload client. |
-| `tui` | The Textual app, its stylesheet, inputs, messages, labels, widgets, branding, and the replay controller contract. |
+| `tui` | The Textual app, its stylesheet, inputs, model list, messages, labels, widgets, branding, and the replay controller contract. |
 | `cli` | The argument readers, the parser definitions, and one module per group of commands. |
 
 A package `__init__` exports nothing. Every name is imported from the module

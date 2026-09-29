@@ -120,7 +120,8 @@ def _candidate() -> ModelCandidate:
     return ModelCandidate(
         profile_id="fixture-q4-0",
         as_of="2026-09-21",
-        display_name="Fixture Q4_0",
+        model_name="Fixture",
+        quantization="Q4_0",
         model_release_slug="fixture",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
@@ -1403,7 +1404,7 @@ def _weights_candidate() -> ModelCandidate:
     return replace_fields(
         _candidate(),
         profile_id="fixture-nvfp4",
-        display_name="Fixture NVFP4",
+        quantization="NVFP4",
         hf_repository="example/model-nvfp4",
         tool_call_parser="qwen3_coder",
         reasoning_parser="qwen3",
@@ -1897,7 +1898,6 @@ def _splash_candidate() -> ModelCandidate:
     return replace_fields(
         _candidate(),
         profile_id="fixture-splash",
-        display_name="Fixture Splash",
         hf_repository=SPLASH_REPOSITORY,
         tool_call_parser="qwen3_coder",
         reasoning_parser="qwen3",

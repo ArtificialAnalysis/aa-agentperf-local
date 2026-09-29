@@ -171,6 +171,22 @@ class SafeHardwareSummary(BaseModel, frozen=True):
         )
 
 
+class RecipeStanding(StrEnum):
+    """Rank how close one recipe is to running on this computer, best first."""
+
+    READY = "ready"
+    NEEDS_SETUP = "needs-setup"
+    REDUCED_ONLY = "reduced-only"
+    TOO_LARGE = "too-large"
+    OTHER_HARDWARE = "other-hardware"
+
+
+RECIPE_STANDING_ORDER: tuple[RecipeStanding, ...] = tuple(RecipeStanding)
+# No framework of the recipe serves this accelerator family: a plain platform mismatch,
+# as opposed to an accelerator the app could not classify at all.
+PLATFORM_MISMATCH_REASON = "None of this model's frameworks support the detected accelerator."
+
+
 class ManagedModelAvailability(BaseModel, frozen=True):
     """Describe managed deployment choices for one model on this computer."""
 
@@ -178,6 +194,8 @@ class ManagedModelAvailability(BaseModel, frozen=True):
     offers: tuple[FrameworkOffer, ...]
     reason: str | None
     device_selection_required: bool = False
+    # When the requested context does not fit, the largest smaller one the replay allows that does.
+    reduced_context_tokens: int | None = None
 
     @property
     def deployable_offers(self) -> tuple[FrameworkOffer, ...]:
@@ -188,6 +206,23 @@ class ManagedModelAvailability(BaseModel, frozen=True):
     def can_deploy(self) -> bool:
         """Return whether at least one framework is ready for a verified launch attempt."""
         return bool(self.deployable_offers)
+
+    @property
+    def standing(self) -> RecipeStanding:
+        """Classify the result: ready, fixable here, only at a reduced context, too large, or other hardware.
+
+        No offers means no framework of the recipe serves this accelerator family, which
+        also covers a computer whose accelerator could not be classified at all.
+        """
+        if self.can_deploy:
+            return RecipeStanding.READY
+        if self.device_selection_required:
+            return RecipeStanding.NEEDS_SETUP
+        if not self.offers:
+            return RecipeStanding.OTHER_HARDWARE
+        if all(offer.memory_fit is False for offer in self.offers):
+            return RecipeStanding.TOO_LARGE if self.reduced_context_tokens is None else RecipeStanding.REDUCED_ONLY
+        return RecipeStanding.NEEDS_SETUP
 
 
 class ManagedDeploymentChoice(BaseModel, frozen=True):

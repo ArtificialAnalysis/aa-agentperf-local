@@ -1,7 +1,7 @@
 """Hold the Textual stylesheet and the geometry constants it interpolates."""
 
 from agentperf_local.tui.branding import AA_BRAND_CSS_VARIABLES
-from agentperf_local.tui.widgets import chart_width
+from agentperf_local.tui.widgets import CHART_WIDTH
 
 # The metrics column is exactly as wide as its charts plus the panel padding and its rule.
 RUN_METRICS_COLUMN_PADDING = 2
@@ -9,8 +9,12 @@ RUN_METRICS_COLUMN_RULE_WIDTH = 1
 # The column scrolls once the details view overflows a short terminal; a reserved
 # one-cell gutter keeps the charts at full width whether or not the bar is showing.
 RUN_METRICS_COLUMN_SCROLLBAR_WIDTH = 1
+# The model list's side padding and scrollbar, which its table must fit inside.
+MODEL_LIST_PADDING = 1
+MODEL_LIST_SCROLLBAR_WIDTH = 1
+MODEL_LIST_CHROME_WIDTH = 2 * MODEL_LIST_PADDING + MODEL_LIST_SCROLLBAR_WIDTH
 RUN_METRICS_COLUMN_WIDTH = (
-    chart_width() + 2 * RUN_METRICS_COLUMN_PADDING + RUN_METRICS_COLUMN_RULE_WIDTH + RUN_METRICS_COLUMN_SCROLLBAR_WIDTH
+    CHART_WIDTH + 2 * RUN_METRICS_COLUMN_PADDING + RUN_METRICS_COLUMN_RULE_WIDTH + RUN_METRICS_COLUMN_SCROLLBAR_WIDTH
 )
 # Setup-form geometry. The label column and value cap are the two chosen numbers; the
 # status indent and its wrap width are derived from them so the columns cannot drift.
@@ -19,9 +23,6 @@ FIELD_LABEL_GAP = 1
 FIELD_VALUE_MAX_WIDTH = 60
 FIELD_STATUS_INDENT = FIELD_LABEL_WIDTH + FIELD_LABEL_GAP
 FIELD_STATUS_MAX_WIDTH = FIELD_STATUS_INDENT + FIELD_VALUE_MAX_WIDTH
-RESULT_CHART_GAP = 2
-# Three charts, each with its gap, plus the page's two-cell padding on either side.
-RESULT_CHARTS_MIN_WIDTH = 3 * (chart_width() + RESULT_CHART_GAP) + 4
 
 # Every hex value lives in tui.branding, next to a comment naming its brand-kit source.
 APP_CSS = (
@@ -34,7 +35,8 @@ $field-status-indent: {FIELD_STATUS_INDENT};
 $field-status-max-width: {FIELD_STATUS_MAX_WIDTH};
 $run-metrics-column-width: {RUN_METRICS_COLUMN_WIDTH};
 $run-metrics-column-padding: {RUN_METRICS_COLUMN_PADDING};
-$result-chart-gap: {RESULT_CHART_GAP};
+$model-list-padding: {MODEL_LIST_PADDING};
+$model-list-scrollbar-width: {MODEL_LIST_SCROLLBAR_WIDTH};
 """
     + """
 Screen {
@@ -232,7 +234,7 @@ ContentSwitcher {
     margin-bottom: 1;
 }
 
-DistributionChart {
+RangeChart {
     height: auto;
     margin-bottom: 1;
 }
@@ -251,16 +253,11 @@ Sparkline > .sparkline--max-color {
     color: $aa-lime;
 }
 
+/* Range charts are too wide to sit three abreast, so they always stack. */
 #result-charts {
     height: auto;
     margin-top: 1;
     margin-bottom: 1;
-}
-
-#result-charts DistributionChart {
-    width: auto;
-    margin-right: $result-chart-gap;
-    margin-bottom: 0;
 }
 
 .page.compact #run-metrics-column {
@@ -294,14 +291,6 @@ Sparkline > .sparkline--max-color {
 
 #result-details {
     height: auto;
-}
-
-.page.stack-charts #result-charts {
-    layout: vertical;
-}
-
-.page.stack-charts #result-charts DistributionChart {
-    margin-bottom: 1;
 }
 
 #result-throughput {
@@ -616,16 +605,19 @@ Checkbox:focus > .toggle--label {
 }
 
 #model-list {
-    width: 43%;
+    width: 45%;
     height: 1fr;
+    padding: 0 $model-list-padding;
+    scrollbar-size-vertical: $model-list-scrollbar-width;
     background: transparent;
     border: none;
     text-wrap: nowrap;
     text-overflow: ellipsis;
 }
 
+/* The detail takes what the list leaves, since the list never narrows below its table. */
 #model-detail-pane {
-    width: 57%;
+    width: 1fr;
     height: 1fr;
     margin-left: 1;
     padding-left: 2;
@@ -635,6 +627,15 @@ Checkbox:focus > .toggle--label {
 
 #model-detail {
     height: auto;
+}
+
+/* Model list headings are disabled rows so the cursor skips them; they color their own text. */
+#model-list > .option-list--option-disabled {
+    color: $aa-text;
+}
+
+#model-list > .option-list--separator {
+    color: $aa-border;
 }
 
 OptionList > .option-list--option-highlighted {
@@ -677,20 +678,18 @@ PercentageStatus {
 
 #model-layout.compact {
     layout: vertical;
-    height: auto;
 }
 
 #model-layout.compact #model-list {
     width: 100%;
-    height: 7;
+    height: 70%;
 }
 
 #model-layout.compact #model-detail-pane {
     width: 100%;
-    height: 8;
+    height: 30%;
     margin-left: 0;
     padding-left: 0;
-    padding-top: 1;
     border-left: none;
     border-top: solid $aa-border;
 }
@@ -742,15 +741,6 @@ PercentageStatus {
 
 .page.short .hero, .page.short .lede, .page.short .welcome-choice {
     margin-bottom: 0;
-}
-
-/* The #model-layout prefix is what outranks the .compact heights above; do not drop it. */
-.page.short #model-layout #model-list {
-    height: 4;
-}
-
-.page.short #model-layout #model-detail-pane {
-    height: 6;
 }
 
 .page.short #run-progress-row, .page.short #run-context {

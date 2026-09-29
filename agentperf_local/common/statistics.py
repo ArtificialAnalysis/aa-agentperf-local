@@ -2,7 +2,9 @@
 
 from collections.abc import Sequence
 
+P25_PERCENTILE = 0.25
 P50_PERCENTILE = 0.50
+P75_PERCENTILE = 0.75
 P90_PERCENTILE = 0.90
 P95_PERCENTILE = 0.95
 

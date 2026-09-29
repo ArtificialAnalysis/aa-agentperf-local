@@ -14,7 +14,15 @@ from pathlib import Path
 from rich.markup import escape
 
 from agentperf_local.common.units import BYTES_PER_GIB, MILLISECONDS_PER_SECOND
-from agentperf_local.deployment.catalog import ArtifactKind, DeploymentFramework
+from agentperf_local.deployment.catalog import (
+    DEVICE_IDS,
+    SPECULATION_METHODS,
+    ArtifactKind,
+    DeploymentFramework,
+    DeviceId,
+    LlamaCppBackend,
+    ModelCandidate,
+)
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
@@ -25,15 +33,47 @@ from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.provenance.hardware import AcceleratorPlatform
 from agentperf_local.replay.runner import TurnCompletedBoundary
 from agentperf_local.reports.progress import RunTurnSample, rate_text
-from agentperf_local.tui.replay_contract import PreflightBlockCode
+from agentperf_local.tui.replay_contract import (
+    PLATFORM_MISMATCH_REASON,
+    ManagedModelAvailability,
+    PreflightBlockCode,
+    RecipeStanding,
+    SafeHardwareSummary,
+)
 from agentperf_local.tui.widgets import DONE_MARK, FAILED_MARK, WARNING_MARK
 
-RUN_SECOND_CHART_MIN_HEIGHT = 27
 RECORDED_POLICY_OUTCOME = "recorded policy · e2e reported as a normalized estimate, not comparable to exact runs"
 PLATFORM_DISPLAY_NAMES: dict[AcceleratorPlatform, str] = {
     "nvidia-cuda": "CUDA",
     "amd-rocm": "ROCm",
     "apple-metal": "Metal",
+}
+# Labels for the hardware folders the catalog ships; any other folder shows its own name.
+HARDWARE_TARGET_NAMES: dict[str, str] = {
+    "dgx-spark": "DGX Spark",
+    "m5-pro": "M5 Pro",
+    "rtx-5090": "RTX 5090",
+    "strix-halo": "Strix Halo",
+    "nvidia-cuda": "NVIDIA GPU",
+    "any": "Any GPU",
+}
+DEVICE_FAMILY_NAMES: dict[DeviceId, str] = {
+    "nvidia-cuda": "NVIDIA",
+    "amd-rocm": "AMD",
+    "apple-silicon": "Apple",
+}
+DEVICE_PLATFORM_NAMES: dict[DeviceId, str] = {
+    "nvidia-cuda": "NVIDIA (CUDA)",
+    "amd-rocm": "AMD (ROCm)",
+    "apple-silicon": "Apple silicon",
+}
+LLAMA_CPP_BACKEND_NAMES: dict[LlamaCppBackend, str] = {"rocm": "ROCm", "vulkan": "Vulkan", "metal": "Metal"}
+STANDING_HEADLINES: dict[RecipeStanding, str] = {
+    RecipeStanding.READY: "Runs on this computer",
+    RecipeStanding.NEEDS_SETUP: "Needs setup on this computer",
+    RecipeStanding.REDUCED_ONLY: "Fits only at a reduced context",
+    RecipeStanding.TOO_LARGE: "Too large for this computer",
+    RecipeStanding.OTHER_HARDWARE: "Made for other hardware",
 }
 # Textual wraps text only at whitespace and folds any overlong word mid-token. U+001F is
 # zero cells wide yet counts as whitespace to the wrapper, so a path carrying it after
@@ -121,6 +161,87 @@ def gib_suffix(size_bytes: int | None) -> str:
 def memory_need_gib(size_bytes: float) -> str:
     """Name a memory requirement in GiB, rounded up so the figure never undersells it."""
     return f"{math.ceil(size_bytes / BYTES_PER_GIB * 10) / 10:.1f}"
+
+
+def hardware_target_text(candidate: ModelCandidate, hardware: str) -> str:
+    """Name the hardware a recipe was built for.
+
+    A portable recipe that leaves out a GPU maker lists the makers it does support,
+    so "Any GPU" never appears on a recipe that cannot run on Apple silicon.
+    """
+    if hardware == "any" and candidate.devices != DEVICE_IDS:
+        return " or ".join(DEVICE_FAMILY_NAMES[device] for device in candidate.devices)
+    return HARDWARE_TARGET_NAMES.get(hardware, hardware)
+
+
+def speedup_text(candidate: ModelCandidate) -> str | None:
+    """Name a recipe's speculative decoding method, or return None for a target-only recipe."""
+    return SPECULATION_METHODS[candidate.speculation_policy]
+
+
+def quantization_text(candidate: ModelCandidate) -> str:
+    """Name a recipe's weight format, with its variant when it has one, such as NVFP4 · b12x."""
+    return candidate.quantization if candidate.variant is None else f"{candidate.quantization} · {candidate.variant}"
+
+
+def recipe_build_text(candidate: ModelCandidate) -> str:
+    """Name a recipe's weight format, variant, and speed-up, such as Q4_K_M · MTP."""
+    speedup = speedup_text(candidate)
+    quantization = quantization_text(candidate)
+    return quantization if speedup is None else f"{quantization} · {speedup}"
+
+
+def recipe_frameworks_text(candidate: ModelCandidate) -> str:
+    """Name the frameworks a recipe runs with, and llama.cpp's backend when the recipe pins one."""
+    launch = candidate.deployment.llama_cpp
+    names: list[str] = []
+    for framework in candidate.deployment.frameworks:
+        name = framework_display_name(framework)
+        backend = launch.backend if framework == "llama-cpp" and launch is not None else None
+        names.append(name if backend is None else f"{name} ({LLAMA_CPP_BACKEND_NAMES[backend]})")
+    return " / ".join(names)
+
+
+def recipe_title_text(candidate: ModelCandidate, hardware: str) -> str:
+    """Name one recipe in full: model, build, and the hardware it was built for."""
+    return f"{candidate.model_name} · {recipe_build_text(candidate)} · {hardware_target_text(candidate, hardware)}"
+
+
+def accelerator_summary_text(summary: SafeHardwareSummary) -> str:
+    """Name this computer's accelerator and memory, or count its accelerators when there are several."""
+    if summary.accelerator_name is None:
+        return count(summary.accelerator_count, "accelerator")
+    if summary.accelerator_memory_bytes is None:
+        return f"{summary.accelerator_name} · memory not reported"
+    return f"{summary.accelerator_name} · {summary.accelerator_memory_bytes / BYTES_PER_GIB:.0f} GiB"
+
+
+def standing_headline_text(availability: ManagedModelAvailability) -> str:
+    """Head the detail pane with the standing, naming the frameworks that can start a ready recipe."""
+    headline = STANDING_HEADLINES[availability.standing]
+    if availability.standing is not RecipeStanding.READY:
+        return headline
+    return f"{headline} · " + " / ".join(offer.display_name for offer in availability.deployable_offers)
+
+
+def standing_reason_text(candidate: ModelCandidate, availability: ManagedModelAvailability) -> str | None:
+    """Explain why a recipe cannot start here in one sentence, or return None when it can."""
+    standing = availability.standing
+    if standing is RecipeStanding.READY:
+        return None
+    reduced = availability.reduced_context_tokens
+    if standing is RecipeStanding.REDUCED_ONLY and reduced is not None:
+        return (
+            f"It fits at {reduced:,} tokens, not the full {candidate.deployment.context_tokens:,}. "
+            "Reduced runs are recorded separately from full-context results."
+        )
+    accelerator = availability.hardware.accelerator_name
+    # Only a plain platform mismatch is worded here; an accelerator the app could not
+    # classify keeps its own error, which says what is actually wrong.
+    if availability.reason == PLATFORM_MISMATCH_REASON and accelerator is not None:
+        platforms = " or ".join(DEVICE_PLATFORM_NAMES[device] for device in candidate.devices)
+        return f"It runs on {platforms}. This computer has {accelerator}."
+    return availability.reason or "This app cannot start models on this computer."
 
 
 def artifact_kind_text(artifact_kind: ArtifactKind) -> str:

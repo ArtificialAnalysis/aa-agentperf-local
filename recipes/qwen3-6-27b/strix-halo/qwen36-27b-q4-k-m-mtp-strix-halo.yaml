@@ -1,6 +1,7 @@
 profile_id: qwen36-27b-q4-k-m-mtp-strix-halo
 as_of: '2026-09-21'
-display_name: Qwen3.6-27B Q4_K_M MTP (RTX 5090), Strix Halo ROCm
+model_name: Qwen3.6 27B
+quantization: Q4_K_M
 model_release_slug: qwen3-6-27b
 hf_repository: unsloth/Qwen3.6-27B-MTP-GGUF
 hf_revision: 5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace

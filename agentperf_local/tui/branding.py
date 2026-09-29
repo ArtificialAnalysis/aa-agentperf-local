@@ -119,6 +119,9 @@ _PIXEL_LOGO_SMALL_GRID = (
 PIXEL_LOGO_SMALL = _render_half_blocks(_PIXEL_LOGO_SMALL_GRID)
 # Below this width the app switches to its compact layout.
 COMPACT_LAYOUT_WIDTH = 90
+# The run screen's range charts make its metrics column the widest side panel; below
+# this width the activity log beside it would wrap every turn, so the run screen stacks.
+RUN_COMPACT_LAYOUT_WIDTH = 100
 
 
 class PixelLogo(Static):

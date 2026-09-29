@@ -20,10 +20,27 @@ recipes/<model_release_slug>/<hardware>/<profile_id>.yaml
   `strix-halo`, or `m5-pro`.
 - The file name is the recipe's `profile_id`. You pass it to `--profile-id`.
 
-A recipe holds only what the run uses: the files to download, the devices it
-may run on, the memory shape for the memory check, and the server launch
-settings. The server serves the model as `<profile_id>-<nonce>`. Leave out an
-optional field, such as `vllm` or `moe_runner_backend`, when it does not apply.
+A recipe holds only what the run uses: its name, the files to download, the
+devices it may run on, the memory shape for the memory check, and the server
+launch settings. The server serves the model as `<profile_id>-<nonce>`. Leave
+out an optional field, such as `vllm` or `moe_runner_backend`, when it does not
+apply.
+
+The TUI names a recipe from two fields and its folder:
+
+- `model_name` is the base model, such as `Qwen3.8 27B`. Every recipe in one
+  model folder uses the same name.
+- `quantization` is the weight format the files use, such as `Q4_K_M`,
+  `UD-Q4_K_M`, or `NVFP4`.
+- `variant` is optional. It tells two builds apart that would otherwise show
+  the same name, such as two kernels for one NVFP4 model on the same hardware.
+  The loader rejects two recipes that would show the same name.
+- The hardware it was built for is its hardware folder, such as `rtx-5090` or
+  `any`; a recipe does not repeat it. The TUI shows a label for the folders the
+  catalog ships, set in [`labels.py`](../agentperf_local/tui/labels.py), and
+  the folder name for any other.
+
+The speed-up it shows, such as MTP or DFlash, comes from `speculation_policy`.
 
 ## Run a recipe
 
@@ -81,7 +98,7 @@ them as not from the Artificial Analysis catalog.
 6. Run it once with `managed-run` on the hardware. Put the result summary
    and your hardware in the pull request.
 
-[`recipe-v1.schema.json`](../docs/schemas/recipe-v1.schema.json) describes
+[`recipe-v2.schema.json`](../docs/schemas/recipe-v2.schema.json) describes
 every field. The loader in
 [`catalog.py`](../agentperf_local/deployment/catalog.py) is stricter than the
 schema. Its error messages name the field that is wrong.

@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.pilot import Pilot
 from textual.widgets import Button, Checkbox, Digits, Input, OptionList, ProgressBar, RichLog, Static
 
+from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_ROOT,
     ModelCandidate,
@@ -21,7 +23,7 @@ from agentperf_local.deployment.catalog import (
 )
 from agentperf_local.deployment.context_policy import derived_minimum_memory_bytes
 from agentperf_local.deployment.endpoint_probes import ContextProbeResult
-from agentperf_local.deployment.frameworks import FrameworkOffer
+from agentperf_local.deployment.frameworks import FrameworkOffer, framework_offers
 from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
 from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.provenance.hardware import HardwareSnapshot
@@ -559,15 +561,20 @@ class WedgedCleanupController:
 
 
 async def _highlight_profile(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome], profile_id: str) -> None:
-    """Move the model list onto one named catalog model, whatever its catalog position."""
-    index = next(position for position, model in enumerate(app.catalog.models) if model.profile_id == profile_id)
+    """Move the model list onto one named catalog model, whatever its list position."""
     model_list = app.query_one("#model-list", OptionList)
+    index = model_list.get_option_index(profile_id)
     model_list.focus()
     await pilot.press("home")
-    for _ in range(index):
+    while model_list.highlighted is not None and model_list.highlighted < index:
         await pilot.press("down")
     await pilot.pause()
     assert model_list.highlighted == index
+
+
+def _custom_endpoint_highlighted(app: AgentPerfLocalApp) -> bool:
+    model_list = app.query_one("#model-list", OptionList)
+    return model_list.highlighted == model_list.get_option_index(SelectionKind.CUSTOM_ENDPOINT.value)
 
 
 def _app(tmp_path: Path, controller: FakeReplayController) -> AgentPerfLocalApp:
@@ -641,10 +648,18 @@ async def _start_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
     await pilot.press("enter")
 
 
+async def _arrow_down_to_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
+    """Arrow down to Run once it is offered; focus never jumps past the submit box on its own."""
+    run = app.query_one("#run-start", Button)
+    await _settle_until(pilot, lambda: not run.disabled)
+    while app.focused is not run:
+        await pilot.press("down")
+
+
 async def _confirm_and_run(app: AgentPerfLocalApp, pilot: Pilot[TuiOutcome]) -> None:
-    """Tick the consent box on the confirm page and press Run once it takes focus."""
+    """Tick the consent box on the confirm page, arrow down to Run, and press it."""
     await pilot.press("space")
-    await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+    await _arrow_down_to_run(app, pilot)
     await pilot.press("enter")
 
 
@@ -673,7 +688,7 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         # Every catalog model carries a managed recipe, so a run against a server the
         # user already operates goes through the custom-endpoint entry.
         await pilot.click("#welcome-start")
-        assert app.query_one("#model-list", OptionList).highlighted == len(app.catalog.models)
+        assert _custom_endpoint_highlighted(app)
         assert "Other model or server" in str(app.query_one("#model-detail", Static).content)
         await pilot.click("#model-continue")
         assert app.selection.kind is SelectionKind.CUSTOM_ENDPOINT
@@ -696,8 +711,7 @@ async def test_keyboard_driven_candidate_run_preserves_honest_evidence(tmp_path:
         assert not consent.value
         assert str(consent.label) == CONSENT_ATTACHED_LABEL
         await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
-        assert not app.query_one("#run-start", Button).disabled
+        await _arrow_down_to_run(app, pilot)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
 
@@ -739,8 +753,8 @@ def _external_recipes(tmp_path: Path, old: bytes, new: bytes) -> Path:
 async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path: Path) -> None:
     external_path = _external_recipes(
         tmp_path,
-        b"display_name: Google Gemma 4 12B IT QAT Q4_0 GGUF",
-        b"display_name: '[red]User catalog spoof[/red] Q4_0 GGUF'",
+        b"model_name: Gemma 4 12B",
+        b"model_name: '[red]User catalog spoof[/red]'",
     )
     catalog = load_model_catalog(external_path)
     app = AgentPerfLocalApp(catalog, controller=FakeReplayController())
@@ -752,9 +766,30 @@ async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path:
         assert app.selection.kind is SelectionKind.EXTERNAL_CATALOG_ENTRY
         detail = str(app.query_one("#model-detail", Static).content)
         assert "\\[red]User catalog spoof\\[/red]" in detail
-        assert "Hugging Face" in detail
+        assert "HF repo" in detail
         assert "ARTIFICIAL ANALYSIS CATALOG" not in detail
         assert "QUALIFIED" not in detail
+
+
+DETAIL_READABLE_WIDTH = 25
+
+
+async def test_long_variant_leaves_the_detail_pane_readable(tmp_path: Path) -> None:
+    variant = "flashinfer-cutlass-with-bf16-accumulation"
+    old = b"quantization: Q4_0 QAT\n"
+    catalog = load_model_catalog(_external_recipes(tmp_path, old, old + f"variant: {variant}\n".encode()))
+    app = AgentPerfLocalApp(catalog, controller=FakeReplayController())
+
+    async with app.run_test(size=(90, 30)) as pilot:
+        await pilot.click("#welcome-start")
+        await pilot.pause()
+        model_list = app.query_one("#model-list", OptionList)
+        row = str(model_list.get_option_at_index(model_list.get_option_index("gemma4-12b-it-q4-0")).prompt)
+        pane = app.query_one("#model-detail-pane", VerticalScroll)
+        # Uncapped, this variant widened the list until the detail pane had no columns left.
+        assert pane.scrollable_content_region.width >= DETAIL_READABLE_WIDTH
+        assert variant not in row
+        assert variant in str(app.query_one("#model-detail", Static).content)
 
 
 async def test_managed_candidate_selects_a_compatible_framework_and_saves_evidence(
@@ -814,7 +849,8 @@ async def test_managed_candidate_selects_a_compatible_framework_and_saves_eviden
         assert consent.region.height >= 2
         consent.value = True
         await pilot.pause()
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+        assert app.focused is consent
         app.query_one("#run-start", Button).press()
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -853,8 +889,7 @@ async def test_managed_candidate_flags_incompatible_hardware_before_preflight(tm
         app.query_one("#model-list", OptionList).focus()
         await pilot.press("down", "down")
         detail = str(app.query_one("#model-detail", Static).content)
-        assert "This computer" in detail
-        assert "cannot start this model" in detail
+        assert "Too large for this computer" in detail
         assert "does not have enough memory" in detail
         await pilot.press("enter")
         await pilot.pause()
@@ -1031,7 +1066,7 @@ async def test_candidate_alias_edit_downgrades_to_custom_intent(tmp_path: Path) 
         await pilot.press("enter")
         app.query_one("#config-back", Button).focus()
         await pilot.press("enter")
-        assert app.query_one("#model-list", OptionList).highlighted == len(app.catalog.models)
+        assert _custom_endpoint_highlighted(app)
         assert "Other model or server" in str(app.query_one("#model-detail", Static).content)
 
 
@@ -1248,10 +1283,11 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         rendered = app.export_screenshot()
         assert "STEP&#160;1&#160;OF&#160;4" in rendered
         assert "Choose&#160;a&#160;model" in rendered
-        model_detail = app.query_one("#model-detail", Static)
+        # The detail scrolls inside its pane, so the pane's viewport is what must clear the actions.
+        model_detail_pane = app.query_one("#model-detail-pane", VerticalScroll)
         model_continue = app.query_one("#model-continue", Button)
-        assert model_detail.region.intersection(model_continue.region).area == 0
-        assert model_detail.region.height >= 5
+        assert model_detail_pane.region.intersection(model_continue.region).area == 0
+        assert model_detail_pane.scrollable_content_region.height >= 5
         await pilot.press("right")
         await _settle_until(pilot, lambda: app.focused is app.query_one("#model-detail-pane", VerticalScroll))
         await pilot.press("right")
@@ -1285,7 +1321,7 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         assert endpoint_consent.region.right <= 72
         assert endpoint_consent.region.height == 1
         await pilot.press("space")
-        await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        await _arrow_down_to_run(app, pilot)
         submit = app.query_one("#submit-checkbox", Checkbox)
         notice = app.query_one("#submit-notice", Static)
         panel = app.query_one("#submit-panel", Vertical)
@@ -1328,7 +1364,7 @@ async def test_remote_custom_run_is_service_latency_only_and_hides_private_run_f
         assert app.evidence.partition is ResultPartition.SERVICE_LATENCY_ONLY
         _assert_render_omits(app, planted_private_values)
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-        await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+        await _arrow_down_to_run(app, pilot)
         await pilot.press("enter")
         await _settle_until(pilot, lambda: app.step is TuiStep.RUN)
         await pilot.pause(0.2)
@@ -1462,7 +1498,7 @@ async def test_textual_worker_executes_a_real_localhost_sse_replay(
             assert app.step is TuiStep.PREFLIGHT
             await app.workers.wait_for_complete()
             app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-            await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+            await _arrow_down_to_run(app, pilot)
             assert app.query_one("#preflight-ollama", Static).display is answers_as_ollama
             await pilot.press("enter")
             await _settle_until(pilot, lambda: app.step is TuiStep.RESULT)
@@ -1848,6 +1884,129 @@ def _installed_llama_offer(
     )
 
 
+def _only_llama_server(command: str) -> str | None:
+    return "/usr/local/bin/llama-server" if command == "llama-server" else None
+
+
+@pytest.mark.parametrize(
+    ("hardware", "replay_id", "heading", "marks"),
+    [
+        # The default replay needs its full context, so a recipe that only fits smaller is too large.
+        (
+            _single_device_hardware(),
+            "agentperf-default-v1",
+            "THIS COMPUTER: NVIDIA GeForce RTX 5090 · 32 GiB",
+            {"qwen38-27b-q4-k-m-mtp": "●", "gemma4-26b-a4b-nvfp4": "▲", "qwen38-27b-nvfp4-dgx-spark": "✗"},
+        ),
+        # The mini replay allows a reduced context, which that recipe fits.
+        (
+            _single_device_hardware(),
+            "aa-mini-v1",
+            "THIS COMPUTER: NVIDIA GeForce RTX 5090 · 32 GiB",
+            {"qwen38-27b-q4-k-m-mtp": "●", "qwen38-27b-nvfp4-dgx-spark": "▲"},
+        ),
+        # With no device chosen yet, the best device stands for the computer.
+        (
+            _multi_device_hardware(),
+            "agentperf-default-v1",
+            "THIS COMPUTER: 3 accelerators",
+            {"qwen38-27b-q4-k-m-mtp": "●", "gemma4-26b-a4b-nvfp4": "▲", "qwen38-27b-nvfp4-dgx-spark": "▲"},
+        ),
+    ],
+)
+async def test_model_list_puts_what_this_computer_can_run_first(
+    tmp_path: Path,
+    hardware: HardwareSnapshot,
+    replay_id: str,
+    heading: str,
+    marks: dict[str, str],
+) -> None:
+    catalog = load_model_catalog(CATALOG_PATH)
+    app = AgentPerfLocalApp(
+        catalog,
+        controller=FakeReplayController(),
+        managed_controller=LocalManagedReplayController(
+            catalog_as_of=catalog.as_of,
+            hardware=hardware,
+            offer_collector=partial(framework_offers, command_finder=_only_llama_server),
+        ),
+        defaults=TuiDefaults(output_dir=tmp_path / "results", replay_id=replay_id),
+    )
+
+    async with app.run_test(size=(96, 30)) as pilot:
+        await pilot.click("#welcome-start")
+        model_list = app.query_one("#model-list", OptionList)
+        rows = tuple(model_list.get_option_at_index(index) for index in range(model_list.option_count))
+        prompts = tuple(str(row.prompt) for row in rows)
+        ids = tuple(row.id for row in rows)
+        other_hardware = prompts.index("OTHER HARDWARE")
+
+        assert prompts[0] == heading
+        assert ids.index(SelectionKind.CUSTOM_ENDPOINT.value) < other_hardware
+        for profile_id, mark in marks.items():
+            assert ids.index(profile_id) < other_hardware
+            assert prompts[ids.index(profile_id)].lstrip().startswith(mark)
+        assert ids.index("qwen38-27b-q4-k-m-mtp-m5-pro") > other_hardware
+
+        await _highlight_profile(app, pilot, "qwen38-27b-q4-k-m-mtp-m5-pro")
+        detail = str(app.query_one("#model-detail", Static).content)
+        assert "Made for other hardware" in detail
+        assert "It runs on Apple silicon." in detail
+
+        # Back at the first recipe, the headings above it scroll into view with it.
+        assert model_list.scroll_y > 0
+        await pilot.press("home")
+        await pilot.pause()
+        assert model_list.scroll_y == 0
+
+
+async def test_computer_without_a_supported_accelerator_still_opens(tmp_path: Path) -> None:
+    # An Intel Mac: the discrete GPU reports Metal but is not Apple silicon, and the integrated one reports no API.
+    hardware = replace_fields(
+        _hardware_with(),
+        operating_system="Darwin",
+        accelerators=(
+            AcceleratorSnapshot(
+                vendor="AMD",
+                name="AMD Radeon Pro 5500M",
+                memory_bytes=8 * 1024**3,
+                core_count=None,
+                driver_version=None,
+                api="Metal",
+            ),
+            AcceleratorSnapshot(
+                vendor="Intel",
+                name="Intel UHD Graphics 630",
+                memory_bytes=1536 * 1024**2,
+                core_count=None,
+                driver_version=None,
+                api=None,
+            ),
+        ),
+    )
+    catalog = load_model_catalog(CATALOG_PATH)
+    app = AgentPerfLocalApp(
+        catalog,
+        controller=FakeReplayController(),
+        managed_controller=LocalManagedReplayController(catalog_as_of=catalog.as_of, hardware=hardware),
+        defaults=TuiDefaults(output_dir=tmp_path / "results"),
+    )
+
+    async with app.run_test(size=(96, 30)) as pilot:
+        await pilot.click("#welcome-start")
+        model_list = app.query_one("#model-list", OptionList)
+        prompts = tuple(str(model_list.get_option_at_index(index).prompt) for index in range(model_list.option_count))
+        assert prompts[0] == "THIS COMPUTER: 2 accelerators"
+        assert prompts.index("No recipe runs on this computer.") < prompts.index("OTHER HARDWARE")
+        assert _custom_endpoint_highlighted(app)
+
+        # An accelerator the app cannot classify keeps its own error rather than a platform list.
+        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
+        detail = str(app.query_one("#model-detail", Static).content)
+        assert "does not expose CUDA, ROCm, or Apple Metal" in detail
+        assert "It runs on" not in detail
+
+
 def _installed_sglang_offer(
     hardware: HardwareSnapshot,
     candidate: ModelCandidate,
@@ -2181,8 +2340,8 @@ async def test_consent_checks_the_server_before_run_is_offered(
         assert app.query_one("#preflight-reduced", Static).display is reduced_shown
         reduced_recorded = EligibilityReason.REDUCED_CONTEXT in app.evidence.ineligibility_reasons
         assert reduced_recorded is (probe.observed_tokens is None or probe.observed_tokens < 65_536)
-        if run_offered:
-            await _settle_until(pilot, lambda: app.focused is app.query_one("#run-start", Button))
+        expected_focus = "#run-start" if run_offered else "#endpoint-consent-checkbox"
+        await _settle_until(pilot, lambda: app.focused is app.query_one(expected_focus))
 
         app.query_one("#endpoint-consent-checkbox", Checkbox).value = False
         await _settle_until(pilot, lambda: run.disabled and not server_check.display)
@@ -2212,9 +2371,9 @@ async def _start_managed_run_with_submit(
     submit: bool,
 ) -> None:
     await pilot.click("#welcome-start")
-    app.query_one("#model-list", OptionList).focus()
-    # The second recipe, gemma4-26b-a4b-q4-0, is a portable GGUF recipe the fake offer serves.
-    await pilot.press("down", "enter")
+    # A portable GGUF recipe, which the fake llama.cpp offer serves.
+    await _highlight_profile(app, pilot, "gemma4-26b-a4b-q4-0")
+    await pilot.press("enter")
     await pilot.pause()
     await _check_setup(app, pilot)
     await _tick_consent(app, pilot)
@@ -2387,8 +2546,8 @@ async def test_submission_stays_busy_until_server_responds(
         )
         async with app.run_test(size=MINIMUM_TERMINAL_SIZE) as pilot:
             await pilot.click("#welcome-start")
-            app.query_one("#model-list", OptionList).focus()
-            await pilot.press("down", "enter")
+            await _highlight_profile(app, pilot, "gemma4-26b-a4b-q4-0")
+            await pilot.press("enter")
             await pilot.pause()
             await _check_setup(app, pilot)
             assert app.step is TuiStep.PREFLIGHT
@@ -2464,7 +2623,7 @@ async def test_weights_profile_is_selectable_and_launchable_from_the_model_scree
         await _highlight_profile(app, pilot, "gemma4-26b-a4b-nvfp4")
 
         detail = str(app.query_one("#model-detail", Static).content)
-        assert "sglang" in detail
+        assert "SGLang" in detail
         assert "weights · " in detail
 
         await pilot.press("enter")

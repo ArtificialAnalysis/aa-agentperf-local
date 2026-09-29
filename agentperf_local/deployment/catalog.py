@@ -19,7 +19,7 @@ from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
 from agentperf_local.submission.contract import MODEL_RELEASE_SLUG_PATTERN
 
-MAX_DISPLAY_NAME_CHARACTERS = 160
+MAX_LABEL_CHARACTERS = 160
 MAX_RECIPE_BYTES = 262_144
 MAX_RECIPES = 512
 MAX_DEPLOYMENT_ARTIFACTS = 512
@@ -43,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:1c9d291e1bf3fbd178168b9e3bde3a1e0eb6f46ea2ac1ce337b273a0aaa8659a"
+BUNDLED_RECIPES_DIGEST = "sha256:3e150f09eb42ad1abb5a17625c923696e93b406523ea04a3768a5162be8250e9"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -79,6 +79,17 @@ DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
 THINKING_POLICIES: tuple[ThinkingPolicy, ...] = ("disabled", "enabled", "enabled-medium-candidate")
+# The speculative decoding method each policy uses; the target-only baseline uses none.
+SPECULATION_METHODS: dict[SpeculationPolicy, str | None] = {
+    "disabled-target-only-baseline": None,
+    "enabled-mtp-self-draft": "MTP",
+    "enabled-mtp-external-draft": "MTP",
+    "enabled-dflash-external-draft": "DFlash",
+    "enabled-dflash-draft": "DFlash",
+    "enabled-dspark-external-draft": "DSpark",
+    "enabled-dspark-draft": "DSpark",
+    "enabled-vllm-external-draft": "Draft model",
+}
 SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "disabled-target-only-baseline",
     "enabled-mtp-self-draft",
@@ -474,7 +485,14 @@ class ModelCandidate(BaseModel, frozen=True):
 
     profile_id: str
     as_of: str
-    display_name: str
+    # The base model, named the same way in every recipe of one model folder. The hardware
+    # the recipe was built for is its folder, which the catalog records.
+    model_name: str
+    # The weight format as its files name it, such as Q4_K_M, UD-Q4_K_M, or NVFP4.
+    quantization: str
+    # What tells this build apart from another of the same model, quantization, speed-up, and
+    # hardware, such as a kernel or a packing; left out when nothing needs telling apart.
+    variant: str | None = None
     model_release_slug: str
     hf_repository: str
     hf_revision: str
@@ -491,10 +509,10 @@ class ModelCandidate(BaseModel, frozen=True):
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
         _iso_date(self.as_of, "as_of")
-        if not self.display_name or len(self.display_name) > MAX_DISPLAY_NAME_CHARACTERS:
-            raise ValueError("display_name must be short printable text")
-        if not self.display_name.isprintable():
-            raise ValueError("display_name must be short printable text")
+        _label(self.model_name, "model_name")
+        _label(self.quantization, "quantization")
+        if self.variant is not None:
+            _label(self.variant, "variant")
         if MODEL_RELEASE_SLUG.fullmatch(self.model_release_slug) is None:
             raise ValueError("model_release_slug must be letters and digits joined by single dots or hyphens")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
@@ -540,16 +558,25 @@ class ModelCatalog(BaseModel, frozen=True):
     models: Annotated[tuple[ModelCandidate, ...], Field(min_length=1)]
     sources: tuple[RecipeSource, ...]
     digest: str
+    # Each recipe's hardware folder by profile_id, such as rtx-5090 or any. The folder
+    # names what a recipe was built for, so recipes do not repeat it.
+    hardware_folders: dict[str, str]
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require at least one recipe, unique names, and one source per recipe in the same order."""
+        """Require recipes with unique names, each with its source text in order and its hardware folder."""
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")
         if tuple(source.profile_id for source in self.sources) != profile_ids:
             raise ValueError("every recipe needs its source text, in recipe order")
+        if set(self.hardware_folders) != set(profile_ids):
+            raise ValueError("every recipe needs its hardware folder")
         return self
+
+    def hardware_of(self, candidate: ModelCandidate) -> str:
+        """Return the hardware folder one recipe sits in."""
+        return self.hardware_folders[candidate.profile_id]
 
     def recipe_text(self, profile_id: str) -> str:
         """Return the exact text of one recipe file."""
@@ -567,6 +594,11 @@ class ModelCatalog(BaseModel, frozen=True):
     def is_bundled_snapshot(self) -> bool:
         """Return whether the recipes match the ones shipped with this release."""
         return self.digest == BUNDLED_RECIPES_DIGEST
+
+
+def _label(value: str, field: str) -> None:
+    if not value or len(value) > MAX_LABEL_CHARACTERS or not value.isprintable():
+        raise ValueError(f"{field} must be short printable text")
 
 
 def _iso_date(value: str, field: str) -> None:
@@ -626,6 +658,10 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
     """
     models: list[ModelCandidate] = []
+    model_names: dict[str, str] = {}
+    hardware_folders: dict[str, str] = {}
+    # A recipe is shown by model, quantization, variant, speed-up, and hardware, so no two may share all five.
+    shown_as: dict[tuple[str, str, str | None, str | None, str], str] = {}
     sources: list[RecipeSource] = []
     listing = bytearray()
     for path in _recipe_paths(root):
@@ -638,10 +674,29 @@ def load_model_catalog(root: Path) -> ModelCatalog:
             raise ValueError(
                 f"recipe {relative} must sit in the folder of its model_release_slug {model.model_release_slug}"
             )
+        model_folder = path.parent.parent.name
+        if model_names.setdefault(model_folder, model.model_name) != model.model_name:
+            raise ValueError(f"every recipe in {model_folder} must share the model_name {model_names[model_folder]}")
+        shown = (
+            model.model_name,
+            model.quantization,
+            model.variant,
+            SPECULATION_METHODS[model.speculation_policy],
+            path.parent.name,
+        )
+        twin = shown_as.setdefault(shown, relative)
+        if twin != relative:
+            raise ValueError(f"recipes {twin} and {relative} would show the same name; give one a variant")
         models.append(model)
+        hardware_folders[model.profile_id] = path.parent.name
         try:
             sources.append(RecipeSource(profile_id=model.profile_id, text=encoded.decode("utf-8")))
         except UnicodeDecodeError as error:
             raise ValueError(f"recipe {relative} must be UTF-8 text") from error
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
-    return ModelCatalog(models=tuple(models), sources=tuple(sources), digest=sha256_bytes(bytes(listing)))
+    return ModelCatalog(
+        models=tuple(models),
+        sources=tuple(sources),
+        digest=sha256_bytes(bytes(listing)),
+        hardware_folders=hardware_folders,
+    )

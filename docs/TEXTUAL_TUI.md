@@ -55,13 +55,15 @@ uv run agentperf-local tui \
 The primary path is:
 
 ```text
-Choose a model → Setup → Confirm → Running → Result
+Choose a model & config → Setup → Confirm → Running → Result
 ```
 
 **Use existing server** on the welcome screen goes directly to Setup. Back returns
-to the route you came from, and keeps your field values. After the server check
-or managed-run confirmation, focus moves to **Run benchmark**. Sharing is optional;
-Up from Run reaches the submission checkbox.
+to the route you came from, and keeps your field values. Ticking the run
+confirmation for a managed run keeps focus on it; Down from the optional
+submission checkbox reaches **Run benchmark**. For your own server, focus moves to
+**Run benchmark** once the server answers its check, because that run is submitted
+from the command line.
 
 - Up and Down choose an option.
 - Left and Right move between controls, including the welcome choices and model details.
@@ -93,7 +95,7 @@ selected model and editable server settings; managed server addresses are set
 automatically. Expand **Advanced options** to change the measured client.
 Fields keep their labels and values on one line, even in compact terminals.
 Right from the model list reaches a separate scrollable detail pane, so long
-model names, compatibility notes, and catalog evidence remain readable.
+compatibility notes and download details remain readable.
 Left and Right keep their normal cursor behavior inside text fields. Tab remains
 an optional shortcut; every control is reachable with arrows. Welcome choices
 include their descriptions in the clickable area, and controls highlight on hover.
@@ -107,8 +109,31 @@ repeating the focused button. Help contains the less frequent privacy shortcut.
 
 ## Included choices
 
-The model screen lists every recipe in [`recipes/`](../recipes), in folder
-order, plus an `Other model or server` entry.
+The model screen lists every recipe in [`recipes/`](../recipes), plus an
+`Other model or server` entry. The list has two parts. **This computer** holds
+the recipes for this computer's GPU family, then `Other model or server`.
+After a gap, **Other hardware** holds the recipes for other GPU families,
+grayed out. Each part is a table with the column headings **Model/Quant** (the
+model, then each recipe's weight format), **Spec decode** (the speculative
+decoding method, or a dash for none), and **Built for** (the hardware the recipe
+was built for). Recipes sit under their model's name. A colored mark gives each
+recipe's standing:
+
+| Mark | Standing |
+| --- | --- |
+| Green `●` | Runs on this computer. |
+| Amber `▲` | Needs setup first (install a framework, or memory could not be checked), or fits only at a reduced context the replay allows. |
+| Red `✗` | Too large for this computer's memory at any context the replay allows. |
+| Gray `·` | Made for other hardware. |
+
+Within a part, models follow in name order, and a model's recipes go best
+standing first. Each recipe is checked at its full context, whatever context
+setup last held, against the selected replay's minimum. With several
+accelerators and no device chosen yet, a recipe shows its best standing across
+them. The detail pane leads with the standing and, when a recipe cannot start,
+the reason; for llama.cpp it also names the backend a recipe pins, such as
+Vulkan. Recipes loaded with `--recipes`
+also carry a note that they are not from Artificial Analysis.
 
 Every catalog candidate is evaluated through the same selection surface. A
 candidate with a complete deployment recipe is intersected with the detected
@@ -220,26 +245,37 @@ and the elapsed time, a context line naming the size of the request now going
 out and the share of the served context window it fills, and a status line
 with the last turn's first-token time, decode speed, and total time. The size
 is the one the recording counted, because nothing has tokenized the prompt
-yet, so the line words it as approximate; a server that never reported a
-context length gets no bar, because there is no honest denominator for one.
+yet, so the line words it as approximate. The line is words only, so it never
+reads as a second progress bar; a server that never reported a context length
+gets no share, because there is no honest denominator for one.
 Below that, an activity log on the left records one line per step — setup
 checked, server answered or model file verified, server ready, GPU startup
 verified, replay loaded — and one line per turn with its decode speed and
 duration. The last-turn status above the log carries first-token latency.
 A single spinning live line names the step in progress. A metrics column on
-the right shows the run's tokens per second so far and a decode-speed histogram.
-Press `d` to reveal the first-token histogram and per-turn trend. A managed run also shows the
+the right shows the run's tokens per second so far and a decode-speed range chart.
+Press `d` to reveal the first-token range chart and per-turn trend. A managed run also shows the
 model download progress in GiB and can swap the activity log for the server's
-own log with `l`. Terminals narrower than 90 columns show the activity log by
-default; `d` switches to the metrics. They also shorten the context bar to its
-share alone. Terminals shorter than 34 rows omit the trend, and shorter than
-27 rows omit the first-token chart.
+own log with `l`. Below 100 columns the run screen shows the activity log by
+default, because its metrics column is wider than other side panels; `d`
+switches to the metrics, and the context line shortens. Terminals shorter than
+28 rows omit the trend, and shorter than 21 rows omit the first-token chart.
 
 The result screen leads with the outcome, tokens per second, median response
 times, and the folder containing the reports. **Result details** reveals p90
-timings, per-turn decode percentiles, and three final distributions. The charts
-stack when they cannot fit side by side, so detail remains accessible at every
-supported terminal size. No run or result screen renders
+timings, per-turn decode percentiles, and three final range charts.
+
+A range chart is a one-line box plot of one per-turn metric, labeled under
+the line with its lowest and highest values (min and max) and the median. The
+whiskers reach the min and max, the box spans the middle half of turns (p25 to
+p75), and the lit cell is the median. The plot is a sketch rather than to scale:
+it centers on the median on a log scale, so its width shows how far turns stray
+from typical, and a whisker past the edge ends in an arrow. Decode speed reaches
+2× either side of the median and the two times reach 10×, because latency grows
+with each task's context; one metric always uses the same scale, so runs compare
+by eye. The result screen stacks its three charts.
+
+No run or result screen renders
 prompts, responses, tool arguments, server URLs, or secrets. The server log
 pane shows the owned server's own output, which names only its loopback
 address.
