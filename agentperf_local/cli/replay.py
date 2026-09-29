@@ -303,6 +303,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
         manifest_path=manifest_path,
         output_dir=output_dir,
         candidate=candidate,
+        recipe=catalog.source(candidate.profile_id),
         framework=framework,
         device=bound,
         catalog_as_of=catalog.as_of,

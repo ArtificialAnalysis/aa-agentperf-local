@@ -21,6 +21,7 @@ from agentperf_local.deployment.catalog import (
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
+    RecipeSource,
     VllmLaunch,
 )
 from agentperf_local.deployment.qualification import ProbeOutcome
@@ -53,6 +54,11 @@ SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
     ("private-audit-v1.schema.json", "$defs/outcome", ProbeOutcome),
     ("private-audit-v1.schema.json", "$defs/phase", PowerPhaseSummary),
     ("private-audit-v1.schema.json", "$defs/power/properties/collection", TelemetryFooter),
+    ("private-audit-v2.schema.json", "$defs/accelerator", AcceleratorSnapshot),
+    ("private-audit-v2.schema.json", "$defs/recipe", RecipeSource),
+    ("private-audit-v2.schema.json", "$defs/outcome", ProbeOutcome),
+    ("private-audit-v2.schema.json", "$defs/phase", PowerPhaseSummary),
+    ("private-audit-v2.schema.json", "$defs/power/properties/collection", TelemetryFooter),
     ("public-submission-v2.schema.json", "$defs/benchmark", SubmissionContext),
     ("public-submission-v2.schema.json", "$defs/accelerator", PublicAcceleratorProfile),
     ("public-submission-v2.schema.json", "$defs/evidenceDigests", ArtifactDigests),

@@ -104,7 +104,7 @@ minted, so a companion from another attempt can never be attached to this one:
 | File | Written | Contents |
 | --- | --- | --- |
 | `deployment.log` | before inference | Mode-0600 child-server log used for GPU startup evidence and diagnostics. |
-| `deployment.json` | before inference | A deployment identifier and creation time, the exact Hub revision, artifact path, size and SHA-256, launch command and its digest, runtime fingerprint, GPU startup policy, and detected hardware. |
+| `deployment.json` | before inference | A deployment identifier and creation time, the exact recipe file (path, SHA-256, and text), the exact Hub revision, artifact path, size and SHA-256, launch command and its digest, runtime fingerprint, GPU startup policy, and detected hardware. |
 | `measurement.json` | before inference | The run identifier, pre-run suite, managed artifact or attached alias digest, runtime, endpoint alias, client source, local hardware binding, the served-context observation, and the SHA-256 of the `deployment.json` bytes. |
 | `qualification.json` | before inference | The public synthetic protocol probes, run against the ready server and bound to the run identifier. |
 | `telemetry.jsonl` | around inference | Normalized NVIDIA samples from the child collector. Absent on hosts without `nvidia-smi`. |
@@ -195,7 +195,8 @@ same submission, so an interrupted upload is retried by running `submit` again.
 | Schema | Produced or consumed by |
 | --- | --- |
 | [`recipe-v1`](schemas/recipe-v1.schema.json) | One managed-run recipe in [`recipes/`](../recipes) |
-| [`private-audit-v1`](schemas/private-audit-v1.schema.json) | The AA-private audit file inside a bundle |
+| [`private-audit-v1`](schemas/private-audit-v1.schema.json) | Superseded by v2 |
+| [`private-audit-v2`](schemas/private-audit-v2.schema.json) | The AA-private audit file inside a bundle; adds the exact recipe file the run launched |
 | [`private-nvidia-telemetry-v2`](schemas/private-nvidia-telemetry-v2.schema.json) | The NVIDIA collector; carries the run identifier and records glitched lines as all-missing samples |
 | [`public-submission-v2`](schemas/public-submission-v2.schema.json) | `prepare-submission` and aggregate bundle validation; carries the run identifier and the observer time the run excluded |
 | [`runtime-qualification-v1`](schemas/runtime-qualification-v1.schema.json) | Superseded by v2; kept only because the checked-in MLX evidence uses it |

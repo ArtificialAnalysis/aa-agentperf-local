@@ -39,12 +39,13 @@ from agentperf_local.common.json_fields import (
     required_string,
 )
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
-from agentperf_local.common.models import replace_fields
+from agentperf_local.common.models import read_object, replace_fields
 from agentperf_local.deployment.catalog import (
     DEPLOYMENT_FRAMEWORK_ORDER,
     DeploymentFramework,
     ModelCandidate,
     ModelDeployment,
+    RecipeSource,
 )
 from agentperf_local.deployment.context_policy import (
     derived_minimum_memory_bytes,
@@ -79,8 +80,9 @@ from agentperf_local.provenance.hardware import (
 # digest. Version 3 replaced the single artifact_sha256 field with the artifact-manifest
 # digest, because a managed recipe can now pin a whole weights repository. Version 4
 # added the recipe identity and the digest of the catalog it came from, which is what
-# anchors a submission to an allowlisted release.
-DEPLOYMENT_RECORD_VERSION = 4
+# anchors a submission to an allowlisted release. Version 5 added the exact recipe file,
+# so a result carries the recipe that produced it.
+DEPLOYMENT_RECORD_VERSION = 5
 DEPLOYMENT_RECORD_KIND = "managed_model_deployment"
 DEPLOYMENT_RECORD_STATUS = "ready-at-benchmark-start"
 MAX_DEPLOYMENT_RECORD_BYTES = 1024 * 1024
@@ -137,6 +139,8 @@ class DeploymentPlan(BaseModel, frozen=True):
     # service knows the catalog shipped at an allowlisted commit and can check that
     # this recipe is one of its entries, so no separate signature is needed.
     catalog_digest: str
+    # The exact recipe file, so a result carries the recipe that produced it.
+    recipe: RecipeSource
     framework: DeploymentFramework
     accelerator_platform: AcceleratorPlatform
     model_path: Path
@@ -177,6 +181,7 @@ class DeploymentPlan(BaseModel, frozen=True):
             "hf_repository": self.hf_repository,
             "hf_revision": self.hf_revision,
             "catalog_digest": self.catalog_digest,
+            "recipe": self.recipe.to_json(),
             "framework": self.framework,
             "accelerator_platform": self.accelerator_platform,
             "model_path": str(self.model_path),
@@ -634,6 +639,7 @@ def create_deployment_plan(
     artifacts: VerifiedDeployment,
     *,
     catalog_digest: str,
+    recipe: RecipeSource,
     port: int = DEFAULT_DEPLOYMENT_PORT,
     command_finder: CommandFinder = find_executable,
     alias_nonce: str | None = None,
@@ -646,6 +652,8 @@ def create_deployment_plan(
     reduced-context deployment with a proportionally smaller memory floor.
     """
     validate_digest(catalog_digest, "catalog_digest")
+    if recipe.profile_id != candidate.profile_id:
+        raise ValueError(f"recipe file {recipe.path} does not name the selected recipe")
     if port < MINIMUM_USER_PORT or port > MAXIMUM_PORT:
         raise ValueError(f"deployment port must be between {MINIMUM_USER_PORT} and {MAXIMUM_PORT}")
     deployment = candidate.deployment
@@ -687,6 +695,7 @@ def create_deployment_plan(
         hf_repository=candidate.hf_repository,
         hf_revision=candidate.hf_revision,
         catalog_digest=catalog_digest,
+        recipe=recipe,
         framework=framework,
         accelerator_platform=platform,
         model_path=artifacts.model_path,
@@ -953,6 +962,7 @@ class DeploymentRecord(BaseModel, frozen=True):
     hf_repository: str
     hf_revision: str
     catalog_digest: str
+    recipe: RecipeSource
     framework: DeploymentFramework
     accelerator_platform: AcceleratorPlatform
     artifact_manifest_sha256: str
@@ -986,6 +996,8 @@ class DeploymentRecord(BaseModel, frozen=True):
             raise ValueError("deployment artifact size and context tokens must be positive")
         if not self.gpu_startup_verified:
             raise ValueError("a deployment record without verified GPU startup cannot be audited")
+        if self.recipe.profile_id != self.profile_id:
+            raise ValueError("deployment record recipe file names a different profile_id")
         return self
 
     @classmethod
@@ -1014,6 +1026,7 @@ class DeploymentRecord(BaseModel, frozen=True):
             "hf_repository": self.hf_repository,
             "hf_revision": self.hf_revision,
             "catalog_digest": self.catalog_digest,
+            "recipe": self.recipe.to_json(),
             "framework": self.framework,
             "accelerator_platform": self.accelerator_platform,
             "artifact_manifest_sha256": self.artifact_manifest_sha256,
@@ -1042,6 +1055,7 @@ _AUDIT_RECORD_KEYS = frozenset(
         "hf_repository",
         "hf_revision",
         "catalog_digest",
+        "recipe",
         "framework",
         "accelerator_platform",
         "artifact_manifest_sha256",
@@ -1081,6 +1095,7 @@ def _deployment_record(
         hf_repository=required_string(plan, "hf_repository", plan_source),
         hf_revision=required_string(plan, "hf_revision", plan_source),
         catalog_digest=required_string(plan, "catalog_digest", plan_source),
+        recipe=read_object(RecipeSource, required_object(plan, "recipe", plan_source), f"{plan_source}.recipe"),
         framework=one_of(required_string(plan, "framework", plan_source), DEPLOYMENT_FRAMEWORK_ORDER, "framework"),
         accelerator_platform=one_of(
             required_string(plan, "accelerator_platform", plan_source), ACCELERATOR_PLATFORMS, "accelerator_platform"

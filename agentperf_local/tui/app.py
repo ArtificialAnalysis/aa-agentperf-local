@@ -1164,6 +1164,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         with raising_validator_errors():
             return ManagedDeploymentChoice(
                 candidate=candidate,
+                recipe=self.catalog.source(candidate.profile_id),
                 catalog_as_of=self.catalog.as_of,
                 catalog_digest=self.catalog.digest,
                 framework=framework,

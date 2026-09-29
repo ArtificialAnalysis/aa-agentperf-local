@@ -358,6 +358,7 @@ def test_managed_choice_names_launch_settings_no_setup_field_can_fix(
     with pytest.raises(ManagedLaunchSettingsProblem), raising_validator_errors():
         ManagedDeploymentChoice(
             candidate=_named(catalog, "gemma4-12b-it-q4-0"),
+            recipe=catalog.source("gemma4-12b-it-q4-0"),
             catalog_as_of=catalog.as_of,
             catalog_digest=BUNDLED_RECIPES_DIGEST,
             framework="llama-cpp",
@@ -626,6 +627,7 @@ def test_managed_choice_resolves_its_context_and_binds_reduced_evidence(
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     choice = ManagedDeploymentChoice(
         candidate=_named(catalog, "gemma4-12b-it-q4-0"),
+        recipe=catalog.source("gemma4-12b-it-q4-0"),
         catalog_as_of=catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
@@ -647,6 +649,7 @@ def test_managed_choice_rejects_a_context_outside_the_recipe(context_tokens: int
     with pytest.raises(ValueError, match="context"):
         ManagedDeploymentChoice(
             candidate=_named(catalog, "gemma4-12b-it-q4-0"),
+            recipe=catalog.source("gemma4-12b-it-q4-0"),
             catalog_as_of=catalog.as_of,
             catalog_digest=BUNDLED_RECIPES_DIGEST,
             framework="llama-cpp",
@@ -659,6 +662,7 @@ def test_managed_preflight_binds_the_selected_catalog_recipe(tmp_path: Path) -> 
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
     choice = ManagedDeploymentChoice(
         candidate=candidate,
+        recipe=catalog.source(candidate.profile_id),
         catalog_as_of=catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
@@ -695,6 +699,7 @@ async def test_managed_preflight_blocks_a_context_below_the_replay_floor(tmp_pat
     candidate = _named(catalog, "gemma4-12b-it-q4-0")
     choice = ManagedDeploymentChoice(
         candidate=candidate,
+        recipe=catalog.source(candidate.profile_id),
         catalog_as_of=catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
@@ -783,6 +788,7 @@ async def test_managed_launch_stops_before_planning_while_no_device_is_chosen(tm
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     choice = ManagedDeploymentChoice(
         candidate=_named(catalog, "gemma4-12b-it-q4-0"),
+        recipe=catalog.source("gemma4-12b-it-q4-0"),
         catalog_as_of=catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",

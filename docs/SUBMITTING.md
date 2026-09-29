@@ -41,7 +41,7 @@ send a token over plain `http` to a non-local host.
 | --- | --- | --- |
 | `aggregate.json` | May be published | Aggregate metrics, benchmark labels, client version, and a coarse hardware class for managed runs. |
 | `sanitized-turn-evidence.json` | May be published | Per-turn timings and token counts by position only. |
-| `private-audit.json` | Never published | The detailed hardware snapshot, the deployment summary, the endpoint probe results, and the power summary. Deleted within 180 days. |
+| `private-audit.json` | Never published | The detailed hardware snapshot, the deployment summary with the exact recipe file the run launched, the endpoint probe results, and the power summary. Deleted within 180 days. |
 | `bundle-manifest.json` | No | Sizes and SHA-256 digests that bind the other three files. |
 
 The bundle never contains prompts, responses, tool arguments, credentials,

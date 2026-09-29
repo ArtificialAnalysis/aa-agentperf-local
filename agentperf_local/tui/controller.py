@@ -499,6 +499,7 @@ class LocalManagedReplayController:
             manifest_path=request.manifest_path,
             output_dir=request.output_dir,
             candidate=choice.candidate,
+            recipe=choice.recipe,
             framework=choice.framework,
             device=bound,
             catalog_as_of=choice.catalog_as_of,

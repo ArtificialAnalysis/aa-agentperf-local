@@ -21,6 +21,7 @@ from agentperf_local.deployment.catalog import (
     DeploymentFramework,
     ModelCandidate,
     ModelCatalog,
+    RecipeSource,
     load_model_catalog,
 )
 from agentperf_local.deployment.frameworks import FrameworkIdentity, FrameworkOffer
@@ -146,6 +147,7 @@ def _install_fake_runtime(
         verified: VerifiedDeployment,
         *,
         catalog_digest: str,
+        recipe: RecipeSource,
         port: int,
         device_environment: tuple[tuple[str, str], ...] = (),
         context_tokens: int | None = None,
@@ -156,12 +158,13 @@ def _install_fake_runtime(
             hf_repository=selected.hf_repository,
             hf_revision=selected.hf_revision,
             catalog_digest=catalog_digest,
+            recipe=recipe,
             framework=planned_framework,
             accelerator_platform="nvidia-cuda",
             model_path=verified.model_path,
             artifact_manifest_sha256=verified.manifest_sha256,
             artifact_size_bytes=verified.size_bytes,
-            context_tokens=recipe.context_tokens,
+            context_tokens=selected.deployment.context_tokens,
             model_alias=candidate.profile_id,
             host="127.0.0.1",
             port=port,
@@ -219,6 +222,7 @@ def _tui_launch(
     assert recipe is not None
     choice = ManagedDeploymentChoice(
         candidate=runtime.candidate,
+        recipe=runtime.catalog.source(runtime.candidate.profile_id),
         catalog_as_of=runtime.catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework=runtime.framework,
@@ -340,7 +344,7 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     prepared = orjson.loads(capsys.readouterr().out)
     audit = orjson.loads((bundle_dir / "private-audit.json").read_bytes())
     audit_schema = orjson.loads(
-        (Path(__file__).parents[1] / "docs" / "schemas" / "private-audit-v1.schema.json").read_bytes()
+        (Path(__file__).parents[1] / "docs" / "schemas" / "private-audit-v2.schema.json").read_bytes()
     )
     Draft202012Validator(audit_schema).validate(audit)
     assert prepared["private_audit"] == {
@@ -350,6 +354,12 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     }
     assert audit["deployment"]["record_digest"] == measurement["deployment_digest"]
     assert audit["deployment"]["profile_id"] == runtime.candidate.profile_id
+    # The audit carries the exact recipe file, which matches its line in the catalog digest listing.
+    recipe = audit["deployment"]["recipe"]
+    recipe_bytes = (BUNDLED_RECIPES_ROOT / recipe["path"]).read_bytes()
+    assert recipe["text"].encode() == recipe_bytes
+    assert recipe["sha256"] == f"sha256:{hashlib.sha256(recipe_bytes).hexdigest()}"
+    assert recipe["path"].endswith(f"/{runtime.candidate.profile_id}.yaml")
     assert audit["runtime_qualification"]["run_id"] == run_id
     assert b"model.gguf" not in (bundle_dir / "private-audit.json").read_bytes()
     assert validate_submission_bundle(bundle_dir).aggregate_payload_digest == prepared["aggregate_payload_digest"]

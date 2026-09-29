@@ -57,7 +57,7 @@ RECORDING = Path(__file__).parent / "fixtures" / "recording" / "recordings" / "d
 PUBLIC_SUBMISSION_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "public-submission-v2.schema.json"
 SANITIZED_EVIDENCE_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "sanitized-turn-evidence-v1.schema.json"
 BUNDLE_MANIFEST_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "submission-bundle-v2.schema.json"
-PRIVATE_AUDIT_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "private-audit-v1.schema.json"
+PRIVATE_AUDIT_SCHEMA = Path(__file__).parents[1] / "docs" / "schemas" / "private-audit-v2.schema.json"
 OTHER_RUN_ID = "1f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
 
 RUN_ID = "8f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
@@ -412,7 +412,7 @@ def test_submission_bundle_binds_exact_four_file_bytes(tmp_path: Path) -> None:
     assert evidence_record["file_digest"] == f"sha256:{hashlib.sha256(evidence_bytes).hexdigest()}"
     assert evidence_record["byte_size"] == len(evidence_bytes)
     assert audit_record["file_digest"] == f"sha256:{hashlib.sha256(audit_bytes).hexdigest()}"
-    assert audit_record["privacy_profile"] == "aa-private-audit-v1"
+    assert audit_record["privacy_profile"] == "aa-private-audit-v2"
     assert written.manifest_digest == f"sha256:{hashlib.sha256(manifest_bytes).hexdigest()}"
     assert all(lacks_mode_bits(path, 0o133) for path in output_dir.iterdir())
     with pytest.raises(FileExistsError):

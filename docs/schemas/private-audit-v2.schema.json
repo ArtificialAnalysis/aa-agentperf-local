@@ -1,0 +1,991 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v2.schema.json",
+  "title": "AgentPerf Local private audit v2",
+  "description": "AA-private evidence that travels with a submission for tier classification and is never published: the full hardware snapshot, the path-free deployment summary with the exact recipe file, the runtime qualification report, and the reduced power summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "privacy_profile",
+    "run_id",
+    "aggregate_payload_digest",
+    "hardware",
+    "deployment",
+    "runtime_qualification",
+    "power",
+    "retention",
+    "excluded_private_categories"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "kind": {
+      "const": "agentperf_local_private_audit"
+    },
+    "privacy_profile": {
+      "const": "aa-private-audit-v2"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "aggregate_payload_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hardware": {
+      "$ref": "#/$defs/hardware"
+    },
+    "deployment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/deployment"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runtime_qualification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/qualification"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "power": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/power"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "published",
+        "bounded_days"
+      ],
+      "properties": {
+        "recipient": {
+          "const": "artificial-analysis"
+        },
+        "published": {
+          "const": false
+        },
+        "bounded_days": {
+          "const": 180
+        }
+      }
+    },
+    "excluded_private_categories": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "const": "prompts and model responses"
+        },
+        {
+          "const": "tool arguments, outputs, commands, and exception text"
+        },
+        {
+          "const": "endpoint URLs and credentials"
+        },
+        {
+          "const": "local paths, hostnames, serial numbers, and stable device identifiers"
+        },
+        {
+          "const": "raw cache namespaces, nonces, and challenge secrets"
+        },
+        {
+          "const": "raw environment variables, process lists, and command output"
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "accelerator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api",
+        "core_count",
+        "driver_version",
+        "max_graphics_clock_mhz",
+        "max_memory_clock_mhz",
+        "memory_bytes",
+        "memory_is_unified",
+        "name",
+        "power_limit_w",
+        "vendor"
+      ],
+      "properties": {
+        "vendor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "memory_bytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_is_unified": {
+          "description": "True when the accelerator has no memory of its own and draws on host memory. memory_bytes is null there, because there is no separate capacity to report.",
+          "type": "boolean"
+        },
+        "core_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "driver_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "api": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "power_limit_w": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_graphics_clock_mhz": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_memory_clock_mhz": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "operating_system",
+        "operating_system_version",
+        "kernel_version",
+        "architecture",
+        "cpu_model",
+        "logical_cpu_count",
+        "cpu_base_frequency_mhz",
+        "memory_bytes",
+        "accelerators",
+        "warnings"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "kind": {
+          "const": "hardware_snapshot"
+        },
+        "operating_system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "operating_system_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "kernel_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "cpu_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "logical_cpu_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cpu_base_frequency_mhz": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_bytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accelerators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/accelerator"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accelerator_platform",
+        "artifact_manifest_sha256",
+        "artifact_size_bytes",
+        "catalog_digest",
+        "context_tokens",
+        "created_at",
+        "deployment_id",
+        "framework",
+        "gpu_startup_verified",
+        "gpu_verification_policy",
+        "hf_repository",
+        "hf_revision",
+        "launch_configuration_digest",
+        "model_alias",
+        "profile_id",
+        "recipe",
+        "record_digest",
+        "reduced_context",
+        "runtime"
+      ],
+      "properties": {
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "hf_repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hf_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "recipe": {
+          "$ref": "#/$defs/recipe"
+        },
+        "framework": {
+          "enum": [
+            "llama-cpp",
+            "vllm",
+            "sglang"
+          ]
+        },
+        "accelerator_platform": {
+          "enum": [
+            "nvidia-cuda",
+            "amd-rocm",
+            "apple-metal"
+          ]
+        },
+        "artifact_manifest_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Digest over the recipe's whole pinned file manifest, so a single-file GGUF and a weights repository carry the same kind of identifier."
+        },
+        "artifact_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reduced_context": {
+          "type": "boolean"
+        },
+        "model_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "executable_sha256",
+            "fingerprint",
+            "runtime_id"
+          ],
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "executable_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "runtime_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          }
+        },
+        "gpu_startup_verified": {
+          "const": true
+        },
+        "gpu_verification_policy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "launch_configuration_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "record_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The exact recipe file the run launched. `path` and `sha256` form one line of the catalog digest listing, so the recipe can be checked against `catalog_digest`.",
+      "required": [
+        "path",
+        "sha256",
+        "text"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+/[A-Za-z0-9._+-]+\\.yaml$",
+          "description": "The recipe's path under the recipe folder: <model>/<hardware>/<profile_id>.yaml."
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest",
+          "description": "SHA-256 of the UTF-8 bytes of `text`."
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 262144,
+          "description": "The recipe file's exact text."
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe_id",
+        "passed",
+        "failure_codes",
+        "tool_names",
+        "tool_call_count",
+        "arguments_valid",
+        "call_identifiers_present",
+        "content_present",
+        "reasoning_present",
+        "finish_reason",
+        "usage_present",
+        "prompt_tokens",
+        "completion_tokens",
+        "raw_read_count",
+        "decoded_chunk_count",
+        "status_code"
+      ],
+      "properties": {
+        "probe_id": {
+          "enum": [
+            "single_tool",
+            "no_tool",
+            "parallel_tools",
+            "tool_history",
+            "capped_finish"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "failure_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "empty_stream",
+              "aborted",
+              "decode_error",
+              "tool_transport_invalid",
+              "tool_sequence_mismatch",
+              "tool_arguments_mismatch",
+              "tool_call_identifier_missing",
+              "content_missing",
+              "finish_reason_missing",
+              "capped_finish_not_reported",
+              "unexpected_generation_cap",
+              "usage_missing",
+              "request_error"
+            ]
+          }
+        },
+        "tool_names": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "tool_call_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "arguments_valid": {
+          "type": "boolean"
+        },
+        "call_identifiers_present": {
+          "type": "boolean"
+        },
+        "content_present": {
+          "type": "boolean"
+        },
+        "reasoning_present": {
+          "type": "boolean"
+        },
+        "finish_reason": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage_present": {
+          "type": "boolean"
+        },
+        "prompt_tokens": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "completion_tokens": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "raw_read_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decoded_chunk_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status_code": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "run_id",
+        "profile_id",
+        "endpoint_model_digest",
+        "client_backend",
+        "synthetic_pack_id",
+        "pack_digest",
+        "passed",
+        "outcomes",
+        "privacy"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "kind": {
+          "const": "runtime_qualification"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+        },
+        "endpoint_model_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "client_backend": {
+          "enum": [
+            "python",
+            "rust"
+          ]
+        },
+        "synthetic_pack_id": {
+          "const": "aa-runtime-synthetic-v1"
+        },
+        "pack_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "generated_text_included",
+            "tool_arguments_included",
+            "endpoint_url_included"
+          ],
+          "properties": {
+            "generated_text_included": {
+              "const": false
+            },
+            "tool_arguments_included": {
+              "const": false
+            },
+            "endpoint_url_included": {
+              "const": false
+            }
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/outcome"
+          }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_id",
+        "requested_interval_ms",
+        "total_sample_count",
+        "valid_power_sample_count",
+        "sampled_power_energy_valid",
+        "phase_duration_ms",
+        "minimum_coverage",
+        "power_coverage",
+        "power_integration_coverage",
+        "largest_uncovered_gap_ms",
+        "power_w_maximum",
+        "power_w_median",
+        "power_w_time_weighted_mean",
+        "sampled_power_energy_joules",
+        "gpu_utilization_percent_time_weighted_mean",
+        "memory_used_mib_maximum",
+        "temperature_c_maximum",
+        "graphics_clock_mhz_median",
+        "memory_clock_mhz_median"
+      ],
+      "properties": {
+        "phase_id": {
+          "const": "measured"
+        },
+        "requested_interval_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "total_sample_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid_power_sample_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sampled_power_energy_valid": {
+          "type": "boolean"
+        },
+        "phase_duration_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minimum_coverage": {
+          "type": "number",
+          "minimum": 0
+        },
+        "power_coverage": {
+          "type": "number",
+          "minimum": 0
+        },
+        "power_integration_coverage": {
+          "type": "number",
+          "minimum": 0
+        },
+        "largest_uncovered_gap_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "power_w_maximum": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "power_w_median": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "power_w_time_weighted_mean": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sampled_power_energy_joules": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gpu_utilization_percent_time_weighted_mean": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_used_mib_maximum": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperature_c_maximum": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "graphics_clock_mhz_median": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_clock_mhz_median": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "kind",
+        "run_id",
+        "collector_id",
+        "device_ordinal",
+        "requested_interval_ms",
+        "telemetry_file",
+        "telemetry_digest",
+        "first_sample_before_phase",
+        "collection",
+        "phases"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "nvidia_power_summary"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "collector_id": {
+          "const": "aa-nvidia-smi-v1"
+        },
+        "device_ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requested_interval_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "telemetry_file": {
+          "const": "telemetry.jsonl"
+        },
+        "telemetry_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "first_sample_before_phase": {
+          "type": "boolean"
+        },
+        "collection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sample_count",
+            "missing_value_count",
+            "unparseable_line_count",
+            "graceful",
+            "failure_code"
+          ],
+          "properties": {
+            "sample_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missing_value_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unparseable_line_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "graceful": {
+              "type": "boolean"
+            },
+            "failure_code": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/phase"
+          }
+        }
+      }
+    },
+    "nullableNonNegativeInteger": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

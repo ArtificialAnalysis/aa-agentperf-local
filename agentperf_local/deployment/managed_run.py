@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.common.models import replace_fields
-from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate
+from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate, RecipeSource
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
@@ -135,6 +135,8 @@ class ManagedRunInputs(BaseModel, frozen=True):
     manifest_path: Path
     output_dir: Path
     candidate: ModelCandidate
+    # The file the candidate was read from; the deployment record carries it.
+    recipe: RecipeSource
     framework: DeploymentFramework
     device: BoundDeploymentDevice
     catalog_as_of: str
@@ -332,6 +334,7 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         inputs.framework,
         artifact,
         catalog_digest=inputs.catalog_digest,
+        recipe=inputs.recipe,
         port=inputs.port,
         device_environment=inputs.device.environment,
         context_tokens=inputs.context_tokens,

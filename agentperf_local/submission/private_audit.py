@@ -27,11 +27,11 @@ from agentperf_local.provenance.hardware import HardwareSnapshot, hardware_snaps
 from agentperf_local.submission.aggregate import PRIVATE_FIELD_CATEGORIES, PublicSubmission
 from agentperf_local.telemetry.power import POWER_SUMMARY_FILENAME, PowerSummary, load_power_summary
 
-PRIVATE_AUDIT_VERSION = 1
+PRIVATE_AUDIT_VERSION = 2
 PRIVATE_AUDIT_KIND = "agentperf_local_private_audit"
-PRIVATE_AUDIT_PROFILE = "aa-private-audit-v1"
+PRIVATE_AUDIT_PROFILE = "aa-private-audit-v2"
 PRIVATE_AUDIT_FILENAME = "private-audit.json"
-PRIVATE_AUDIT_SCHEMA_ID = "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v1.schema.json"
+PRIVATE_AUDIT_SCHEMA_ID = "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v2.schema.json"
 PRIVATE_AUDIT_RECIPIENT = "artificial-analysis"
 # The service keeps this file for a bounded period after acceptance, then deletes it.
 PRIVATE_AUDIT_RETENTION_DAYS = 180

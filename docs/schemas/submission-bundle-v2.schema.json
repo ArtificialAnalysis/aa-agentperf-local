@@ -64,9 +64,9 @@
                 "role": { "const": "private_audit" },
                 "filename": { "const": "private-audit.json" },
                 "schema_id": {
-                  "const": "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v1.schema.json"
+                  "const": "https://artificialanalysis.ai/schemas/agentperf-local/private-audit-v2.schema.json"
                 },
-                "privacy_profile": { "const": "aa-private-audit-v1" }
+                "privacy_profile": { "const": "aa-private-audit-v2" }
               }
             }
           ]

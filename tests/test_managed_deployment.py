@@ -63,6 +63,7 @@ from agentperf_local.provenance.hardware import HardwareSnapshot
 from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
 from tests.fake_executable import write_python_executable
 from tests.file_modes import has_mode
+from tests.recipe_sources import recipe_source
 
 MODEL_BYTES = b"small deterministic GGUF fixture"
 MODEL_DIGEST = hashlib.sha256(MODEL_BYTES).hexdigest()
@@ -375,6 +376,7 @@ def test_cached_artifact_builds_a_pinned_framework_launch_plan(
         "llama-cpp",
         cached,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -422,6 +424,7 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
         "llama-cpp",
         ensure_model_artifacts(tmp_path, candidate),
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -495,6 +498,7 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
         "llama-cpp",
         verified,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -547,6 +551,7 @@ def test_screened_recipes_keep_their_measured_launch_settings(
         "llama-cpp",
         verified,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -571,6 +576,7 @@ def test_screened_recipes_keep_their_measured_launch_settings(
                 "llama-cpp",
                 verified,
                 catalog_digest=BUNDLED_RECIPES_DIGEST,
+                recipe=recipe_source(candidate),
                 command_finder=_installed_command,
                 device_environment=(("HIP_VISIBLE_DEVICES", "1"),),
             )
@@ -597,6 +603,7 @@ def test_lazy_mode_recipe_passes_its_lazy_read_flag(tmp_path: Path) -> None:
         "llama-cpp",
         ensure_model_artifacts(tmp_path, candidate),
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -616,6 +623,7 @@ def test_launch_plan_rejects_a_framework_the_recipe_does_not_name(tmp_path: Path
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=_installed_command,
             alias_nonce="test",
         )
@@ -719,6 +727,7 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(_candidate()),
         framework="llama-cpp",
         accelerator_platform="apple-metal",
         model_path=artifact,
@@ -975,6 +984,7 @@ def test_memory_gate_allows_only_a_small_reporting_shortfall(
                 "llama-cpp",
                 cached,
                 catalog_digest=BUNDLED_RECIPES_DIGEST,
+                recipe=recipe_source(candidate),
                 command_finder=_installed_command,
                 alias_nonce="test",
             )
@@ -985,6 +995,7 @@ def test_memory_gate_allows_only_a_small_reporting_shortfall(
         "llama-cpp",
         cached,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -1016,6 +1027,7 @@ def test_reduced_context_launch_fits_small_hardware_and_lands_ctx_size(tmp_path:
             "llama-cpp",
             cached,
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=_installed_command,
             alias_nonce="test",
         )
@@ -1025,6 +1037,7 @@ def test_reduced_context_launch_fits_small_hardware_and_lands_ctx_size(tmp_path:
         "llama-cpp",
         cached,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
         context_tokens=REDUCED_CONTEXT_TOKENS,
@@ -1058,6 +1071,7 @@ def test_plan_rejects_a_context_outside_the_allowed_range(
             "llama-cpp",
             cached,
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=_installed_command,
             alias_nonce="test",
             context_tokens=context_tokens,
@@ -1425,6 +1439,7 @@ def test_cached_weights_repository_is_served_from_its_snapshot_directory(tmp_pat
         "sglang",
         cached,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=_installed_command,
         alias_nonce="test",
     )
@@ -1679,6 +1694,7 @@ def test_recipe_launch_command_carries_its_pinned_flags(
         framework,
         cached,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
         command_finder=finder,
         alias_nonce="test",
     )
@@ -1728,6 +1744,7 @@ def test_vllm_launch_serves_only_the_pinned_version(
             "vllm",
             ensure_model_artifacts(tmp_path, candidate),
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=finder,
             alias_nonce="test",
         )
@@ -1797,6 +1814,7 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=finder,
             alias_nonce="test",
         )
@@ -1827,6 +1845,7 @@ def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch
             "sglang",
             ensure_model_artifacts(tmp_path, candidate),
             catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
             command_finder=lambda command: str(executable),
             alias_nonce="test",
         )

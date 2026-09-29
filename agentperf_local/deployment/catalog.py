@@ -35,6 +35,8 @@ ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-
 # libyaml's loader parses the recipes about four times faster; the pure-Python one is the fallback.
 _YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 RECIPE_SUFFIX = ".yaml"
+# A recipe path has three parts: <model>/<hardware>/<profile_id>.yaml.
+RECIPE_PATH_PARTS = 3
 RECIPES_README = "README.md"
 # A wheel carries a copy of the repository's recipes/ folder inside the package. A
 # source checkout has no copy, so it reads the folder at the repository root.
@@ -501,19 +503,65 @@ class ModelCandidate(BaseModel, frozen=True):
         return self
 
 
+class RecipeSource(BaseModel, frozen=True):
+    """Hold one recipe file's exact text, its path under the recipe folder, and its digest.
+
+    The path and digest form one line of the catalog digest listing, so a reader who
+    has the catalog digest can check that this text is one of its recipes.
+    """
+
+    path: str
+    sha256: str
+    text: str
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Require a <model>/<hardware>/<profile_id>.yaml path and a digest of the exact text."""
+        parts = self.path.split("/")
+        if len(parts) != RECIPE_PATH_PARTS or not parts[-1].endswith(RECIPE_SUFFIX):
+            raise ValueError("recipe path must be <model>/<hardware>/<profile_id>.yaml")
+        for part in (*parts[:-1], self.profile_id):
+            validate_identifier(part, "recipe path")
+        if len(self.text.encode()) > MAX_RECIPE_BYTES:
+            raise ValueError(f"recipe text must not exceed {MAX_RECIPE_BYTES} bytes")
+        if self.sha256 != sha256_bytes(self.text.encode()):
+            raise ValueError("recipe sha256 does not match the recipe text")
+        return self
+
+    @property
+    def profile_id(self) -> str:
+        """Return the profile_id the file name carries."""
+        return self.path.rsplit("/", 1)[-1].removesuffix(RECIPE_SUFFIX)
+
+    def to_json(self) -> JsonObject:
+        """Return the recipe file as a JSON object."""
+        return {"path": self.path, "sha256": self.sha256, "text": self.text}
+
+
 class ModelCatalog(BaseModel, frozen=True):
-    """Store every recipe of one folder and the folder's identity."""
+    """Store every recipe of one folder, the file each came from, and the folder's identity."""
 
     models: Annotated[tuple[ModelCandidate, ...], Field(min_length=1)]
+    # One source per model, in the same order.
+    sources: tuple[RecipeSource, ...]
     digest: str
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require at least one recipe and unique names."""
+        """Require at least one recipe, unique names, and one matching source per recipe."""
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")
+        if tuple(source.profile_id for source in self.sources) != profile_ids:
+            raise ValueError("every recipe needs the one source file it was read from")
         return self
+
+    def source(self, profile_id: str) -> RecipeSource:
+        """Return the file one recipe was read from."""
+        for source in self.sources:
+            if source.profile_id == profile_id:
+                return source
+        raise ValueError(f"unknown recipe profile_id: {profile_id}")
 
     @property
     def as_of(self) -> str:
@@ -583,6 +631,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
     """
     models: list[ModelCandidate] = []
+    sources: list[RecipeSource] = []
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -590,6 +639,11 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         model = read_object(ModelCandidate, _parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
+        try:
+            text = encoded.decode()
+        except UnicodeDecodeError as error:
+            raise ValueError(f"recipe {relative} must be UTF-8 text") from error
         models.append(model)
+        sources.append(RecipeSource(path=relative, sha256=sha256_bytes(encoded), text=text))
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
-    return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))
+    return ModelCatalog(models=tuple(models), sources=tuple(sources), digest=sha256_bytes(bytes(listing)))

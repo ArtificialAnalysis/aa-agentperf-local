@@ -20,7 +20,7 @@ from agentperf_local.client.endpoint import normalize_base_url, url_is_cleartext
 from agentperf_local.client.rust_client import validate_rustcore_available
 from agentperf_local.common.durable_files import nearest_existing_ancestor, validate_new_file_paths
 from agentperf_local.common.identity import validate_digest
-from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate
+from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandidate, RecipeSource
 from agentperf_local.deployment.context_policy import (
     ContextBelowReplayFloor,
     require_replay_context_floor,
@@ -194,6 +194,8 @@ class ManagedDeploymentChoice(BaseModel, frozen=True):
     """Bind one catalog model to a local framework choice."""
 
     candidate: ModelCandidate
+    # The recipe file the candidate was read from; the deployment record carries it.
+    recipe: RecipeSource
     catalog_as_of: str
     # The catalog file this candidate came from. It travels into the deployment record
     # so a submission names the release its recipe belongs to.
