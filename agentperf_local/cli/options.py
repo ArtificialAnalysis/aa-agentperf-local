@@ -11,7 +11,6 @@ from pydantic import BaseModel, SecretStr
 from agentperf_local.client.backends import CLIENT_BACKENDS, ClientBackend
 from agentperf_local.common.argparse_fields import (
     read_optional_integer,
-    read_optional_number,
     read_optional_path,
     read_optional_string,
     read_path,
@@ -19,6 +18,7 @@ from agentperf_local.common.argparse_fields import (
 )
 from agentperf_local.common.json_fields import one_of
 from agentperf_local.common.json_types import JsonObject
+from agentperf_local.deployment.attached_server import ATTACHED_SERVER_FILENAME
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_ROOT,
     DEPLOYMENT_FRAMEWORK_ORDER,
@@ -40,12 +40,13 @@ from agentperf_local.provenance.benchmark import (
     MEASUREMENT_BINDING_FILENAME,
 )
 from agentperf_local.provenance.hardware import (
+    HardwareSnapshot,
     collect_hardware_snapshot,
+    select_accelerator,
 )
 from agentperf_local.replay.config import (
     API_KEY_ENV_PATTERN,
     DEFAULT_OUTPUT_TOKEN_MARGIN,
-    DEFAULT_TOOL_DELAY_SCALE,
     OUTPUT_TOKEN_POLICIES,
     TOOL_CHOICES,
     OutputTokenPolicy,
@@ -78,7 +79,7 @@ MESSAGE_SOURCES: tuple[MessageSource, ...] = ("provider-request", "request-messa
 SAMPLING_PRESETS: tuple[SamplingPreset, ...] = ("standard", "custom")
 
 
-TOOL_REPLAY_MODES: tuple[ToolReplayMode, ...] = ("none", "recorded", "live")
+TOOL_REPLAY_MODES: tuple[ToolReplayMode, ...] = ("none", "fixed_delay", "live")
 
 
 DEFAULT_MANAGED_PROFILE_ID = "gemma4-12b-it-q4-0"
@@ -96,6 +97,7 @@ BOUND_RESULT_FILENAMES = (
     POWER_SUMMARY_FILENAME,
     QUALIFICATION_FILENAME,
     DEPLOYMENT_LOG_FILENAME,
+    ATTACHED_SERVER_FILENAME,
 )
 
 
@@ -188,16 +190,6 @@ def read_output_token_margin(namespace: argparse.Namespace, policy: OutputTokenP
     return margin
 
 
-def read_tool_delay_scale(namespace: argparse.Namespace, tool_mode: ToolReplayMode) -> float:
-    """Resolve the recorded delay scale and reject it without tool replay."""
-    scale = read_optional_number(namespace, "tool_delay_scale")
-    if scale is None:
-        return DEFAULT_TOOL_DELAY_SCALE
-    if tool_mode == "none":
-        raise ValueError("tool delay scale requires a tool replay mode")
-    return scale
-
-
 def read_live_workspace_root(namespace: argparse.Namespace, tool_mode: ToolReplayMode) -> Path | None:
     """Resolve the live workspace root, defaulting live runs to a folder inside the output directory."""
     root = read_optional_path(namespace, "live_workspace_root")
@@ -225,6 +217,11 @@ def read_managed_target(namespace: argparse.Namespace) -> ManagedTarget:
 
 def read_bound_device(namespace: argparse.Namespace) -> BoundDeploymentDevice:
     return bind_snapshot_to_device(collect_hardware_snapshot(), read_optional_integer(namespace, "device"))
+
+
+def read_selected_hardware(namespace: argparse.Namespace) -> HardwareSnapshot:
+    """Read the host, keeping only the accelerator --device names when it names one."""
+    return select_accelerator(collect_hardware_snapshot(), read_optional_integer(namespace, "device"))
 
 
 def require_fresh_output_dir(output_dir: Path, label: str) -> None:

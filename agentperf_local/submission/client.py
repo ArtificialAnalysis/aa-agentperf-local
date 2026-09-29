@@ -1,61 +1,41 @@
-"""Send a prepared bundle to the submission service and read back its status.
+"""Send a prepared submission to the service and read back its status.
 
-Public surface: submit_bundle, submit_bundle_async, fetch_submission_status,
+Public surface: submit_body, submit_body_async, fetch_submission_status,
 fetch_revision_allowlist, check_revision_allowlist, revision_advice,
 read_submit_token, SubmissionReceipt, SubmissionStatus, RevisionAllowlist,
-RevisionCheck, SubmissionError, and the notice, URL, and token constants.
+RevisionCheck, SubmissionError, and the URL, size, and token constants.
 """
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import os
 import re
 from collections.abc import AsyncIterator, Callable, Iterator
-from pathlib import Path
 
 import httpx
-import orjson
 from pydantic import BaseModel
 
 from agentperf_local import __version__
 from agentperf_local.client.endpoint import url_is_cleartext_remote
 from agentperf_local.common.json_fields import decode_json_object, lenient_string
 from agentperf_local.common.json_types import JsonObject, JsonValue
-from agentperf_local.provenance.benchmark import PRODUCER_CLIENT_NAME, SourceProvenance
+from agentperf_local.provenance.benchmark import SourceProvenance
 from agentperf_local.replay.config import API_KEY_ENV_PATTERN
-from agentperf_local.submission.bundle import (
-    ARTIFACT_CONTRACTS,
-    ValidatedSubmissionBundle,
-    validate_submission_bundle,
-)
-from agentperf_local.submission.private_audit import PRIVATE_AUDIT_RETENTION_DAYS
 
 SUBMIT_BASE_URL = "https://submit.artificialanalysis.ai"
 SUBMIT_TOKEN_ENV = "AGENTPERF_SUBMIT_TOKEN"
 SUBMISSIONS_PATH = "/v1/submissions"
 REVISIONS_PATH = "/v1/revisions"
+# The service refuses a larger body with 413.
 MAX_REQUEST_BYTES = 32 * 1024**2
 SUBMIT_TIMEOUT_SECONDS = 60.0
 STATUS_TIMEOUT_SECONDS = 20.0
 REVISIONS_TIMEOUT_SECONDS = 10.0
 UPLOAD_CHUNK_BYTES = 64 * 1024
-# Each complete or padded three-byte base64 group produces four bytes.
-BASE64_INPUT_GROUP_BYTES = 3
-BASE64_OUTPUT_GROUP_BYTES = 4
 USER_AGENT = f"agentperf-local/{__version__}"
-# The wording the user agreed to travels with the request; bump the version when it changes.
-PRIVATE_AUDIT_NOTICE_VERSION = "2026-09-03"
-PRIVATE_AUDIT_NOTICE = (
-    "Artificial Analysis may publish aggregate results and sanitized turn timings.\n"
-    f"Hardware and verification evidence stays private and is deleted within {PRIVATE_AUDIT_RETENTION_DAYS} days.\n"
-    "Prompts, responses, credentials, local paths, hostnames, serial numbers, and endpoint URLs are never sent.\n"
-    "Failed checks are accepted as self-reported. A copy stays on this computer; retries do not duplicate it."
-)
 SUBMISSION_ID_PATTERN = re.compile(r"^sub_[a-z2-7]{26}$")
-SUBMISSION_STATUSES = frozenset(("queued", "validating", "accepted", "rejected"))
-TRUST_TIERS = frozenset(("verified", "community-self-reported"))
+# "queued" means the service stored the body but has no analytics row yet; sending it again adds the row.
+SUBMISSION_STATUSES = frozenset(("accepted", "queued"))
 CLEARTEXT_TOKEN_MESSAGE = "refusing to send a submit token over cleartext http to a non-loopback host"
 type UploadProgress = Callable[[int, int], None]
 
@@ -108,11 +88,8 @@ class SubmissionStatus(BaseModel, frozen=True):
 
     submission_id: str
     status: str
-    trust_tier: str | None
     reasons: tuple[SubmissionReason, ...]
     submitted_at: str | None
-    source_revision: str | None
-    public_url: str | None
 
     def to_json(self) -> JsonObject:
         """Return the status as JSON data."""
@@ -120,11 +97,8 @@ class SubmissionStatus(BaseModel, frozen=True):
         return {
             "submission_id": self.submission_id,
             "status": self.status,
-            "trust_tier": self.trust_tier,
             "reasons": reasons,
             "submitted_at": self.submitted_at,
-            "source_revision": self.source_revision,
-            "public_url": self.public_url,
         }
 
 
@@ -268,61 +242,17 @@ def _receipt(response: httpx.Response, bytes_sent: int) -> SubmissionReceipt:
     )
 
 
-def build_submission_body(bundle: ValidatedSubmissionBundle) -> bytes:
-    """Encode the validated bundle exactly as the service expects it.
-
-    The files travel as the exact bytes the manifest digests; the acknowledgment
-    records which notice wording the user agreed to before these bytes left the disk.
-    The size cap is checked from the manifest before any file is expanded.
-    """
-    base64_bytes = sum(
-        ((artifact.byte_size + BASE64_INPUT_GROUP_BYTES - 1) // BASE64_INPUT_GROUP_BYTES) * BASE64_OUTPUT_GROUP_BYTES
-        for artifact in bundle.manifest.artifacts
-    )
-    if base64_bytes > MAX_REQUEST_BYTES:
-        raise SubmissionError(
-            f"the base64-encoded bundle files total {base64_bytes} bytes, "
-            f"more than the {MAX_REQUEST_BYTES}-byte request cap",
-            code="bundle_too_large",
-        )
-    files: JsonObject = {
-        contract.filename: base64.b64encode(encoded).decode("ascii")
-        for contract, encoded in zip(ARTIFACT_CONTRACTS, bundle.artifact_bytes, strict=True)
-    }
-    body: JsonObject = {
-        "bundle_manifest": bundle.manifest.to_json(),
-        "files": files,
-        "private_audit_acknowledgement": {
-            "acknowledged": True,
-            "notice_version": PRIVATE_AUDIT_NOTICE_VERSION,
-        },
-        "client": {"name": PRODUCER_CLIENT_NAME, "version": __version__},
-    }
-    encoded = orjson.dumps(body)
+def _prepared_upload(encoded: bytes, base_url: str, token: str | None) -> _PreparedUpload:
+    _reject_cleartext_token(base_url, token)
     if len(encoded) > MAX_REQUEST_BYTES:
         raise SubmissionError(
-            f"the encoded bundle is {len(encoded)} bytes, above the {MAX_REQUEST_BYTES}-byte request cap",
-            code="bundle_too_large",
+            f"the submission is {len(encoded)} bytes, above the {MAX_REQUEST_BYTES}-byte request cap",
+            code="request_too_large",
         )
-    return encoded
-
-
-def _prepared_upload(
-    bundle: Path | ValidatedSubmissionBundle,
-    base_url: str,
-    token: str | None,
-) -> _PreparedUpload:
-    _reject_cleartext_token(base_url, token)
-    validated = validate_submission_bundle(bundle) if isinstance(bundle, Path) else bundle
-    encoded = build_submission_body(validated)
     headers = _headers(token)
     headers["Content-Type"] = "application/json"
     headers["Content-Length"] = str(len(encoded))
-    return _PreparedUpload(
-        url=f"{base_url.rstrip('/')}{SUBMISSIONS_PATH}",
-        headers=headers,
-        encoded=encoded,
-    )
+    return _PreparedUpload(url=f"{base_url.rstrip('/')}{SUBMISSIONS_PATH}", headers=headers, encoded=encoded)
 
 
 def _chunks(encoded: bytes, progress: UploadProgress | None) -> Iterator[bytes]:
@@ -346,8 +276,8 @@ def _submission_result(response: httpx.Response, bytes_sent: int) -> SubmissionR
     raise _error_from_response(response)
 
 
-def submit_bundle(
-    bundle: Path | ValidatedSubmissionBundle,
+def submit_body(
+    encoded: bytes,
     *,
     base_url: str = SUBMIT_BASE_URL,
     token: str | None = None,
@@ -355,14 +285,13 @@ def submit_bundle(
     timeout_seconds: float = SUBMIT_TIMEOUT_SECONDS,
     transport: httpx.BaseTransport | None = None,
 ) -> SubmissionReceipt:
-    """Send one locally validated bundle in one request and return the receipt.
+    """Send one validated body in one request and return the receipt.
 
-    The request is synchronous. If it is interrupted, running it again with the same
-    bundle is the recovery: the service keys submissions on the aggregate digest. A
-    path is validated here; callers that already need its parsed fields may pass that
-    validated value to avoid reading the files twice.
+    The request is synchronous. If it is interrupted, sending the same bytes again is
+    the recovery: the service keys a submission on its run_id and answers a retry with
+    the same content with 200.
     """
-    prepared = _prepared_upload(bundle, base_url, token)
+    prepared = _prepared_upload(encoded, base_url, token)
     response = _request(
         "POST",
         prepared.url,
@@ -375,8 +304,8 @@ def submit_bundle(
     return _submission_result(response, len(prepared.encoded))
 
 
-async def submit_bundle_async(
-    bundle: Path | ValidatedSubmissionBundle,
+async def submit_body_async(
+    encoded: bytes,
     *,
     base_url: str = SUBMIT_BASE_URL,
     token: str | None = None,
@@ -384,8 +313,8 @@ async def submit_bundle_async(
     timeout_seconds: float = SUBMIT_TIMEOUT_SECONDS,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> SubmissionReceipt:
-    """Send one bundle without hiding cancellation in an executor thread."""
-    prepared = await asyncio.to_thread(_prepared_upload, bundle, base_url, token)
+    """Send one validated body without hiding cancellation in an executor thread."""
+    prepared = _prepared_upload(encoded, base_url, token)
     response = await _async_request(
         "POST",
         prepared.url,
@@ -423,7 +352,7 @@ def fetch_submission_status(
     timeout_seconds: float = STATUS_TIMEOUT_SECONDS,
     transport: httpx.BaseTransport | None = None,
 ) -> SubmissionStatus:
-    """Read one submission's status, tier, and reason codes."""
+    """Read one submission's status and reason codes."""
     if SUBMISSION_ID_PATTERN.fullmatch(submission_id) is None:
         raise ValueError("submission identifiers look like sub_ followed by 26 base32 characters")
     _reject_cleartext_token(base_url, token)
@@ -439,19 +368,13 @@ def fetch_submission_status(
         raise _error_from_response(response)
     body = _json_body(response)
     status = lenient_string(body, "status")
-    trust_tier = lenient_string(body, "trust_tier")
     if lenient_string(body, "submission_id") != submission_id or status not in SUBMISSION_STATUSES:
         raise SubmissionError("the service answered with an unknown submission status", code="invalid_response")
-    if trust_tier is not None and trust_tier not in TRUST_TIERS:
-        raise SubmissionError("the service answered with an unknown trust tier", code="invalid_response")
     return SubmissionStatus(
         submission_id=submission_id,
         status=status,
-        trust_tier=trust_tier,
         reasons=_reasons(body),
         submitted_at=lenient_string(body, "submitted_at"),
-        source_revision=lenient_string(body, "source_revision"),
-        public_url=lenient_string(body, "public_url"),
     )
 
 
@@ -495,9 +418,10 @@ def revision_advice(allowlist: RevisionAllowlist, provenance: SourceProvenance) 
     """
     if not allowlist.revisions:
         return None
-    if provenance.source_state != "clean":
+    if provenance.source_state not in ("release", "clean"):
         return (
-            f"the client source tree is {provenance.source_state}; only a clean allowlisted commit can reach verified"
+            f"the client source tree is {provenance.source_state}; only a release or a clean allowlisted commit "
+            "can reach verified"
         )
     if provenance.source_revision is None or provenance.source_revision not in allowlist.revisions:
         window = "" if allowlist.window_days is None else f" {allowlist.window_days}-day"

@@ -13,6 +13,7 @@ RECORDING_FILE = Path(__file__).parent / "fixtures" / "recording" / "recordings"
 CASSETTE_DIR = Path(__file__).parent / "fixtures" / "cassette"
 EXPECTED_TURNS = 2
 EXPECTED_TOOL_CALLS = 1
+QUALIFICATION_PROBES = 5
 
 
 def _cassette_chunks(path: Path) -> tuple[bytes, ...]:
@@ -30,12 +31,16 @@ async def test_cassette_survives_the_full_cli_pipeline(
     capsys.readouterr()
 
     output_dir = tmp_path / "results"
-    # The ignore_eos probe and its control stream first, like any two turns would; the
-    # replay's two turns take the streams after them.
-    responses = tuple(
-        _cassette_chunks(CASSETTE_DIR / filename)
-        for filename in ("demo-content.sse", "demo-content.sse", "demo-tool-and-content.sse", "demo-content.sse")
+    # The ignore_eos probe and its control stream first, then the qualification probes, like
+    # any seven turns would; the replay's two turns take the streams after them.
+    filenames = (
+        "demo-content.sse",
+        "demo-content.sse",
+        *("demo-content.sse",) * QUALIFICATION_PROBES,
+        "demo-tool-and-content.sse",
+        "demo-content.sse",
     )
+    responses = tuple(_cassette_chunks(CASSETTE_DIR / filename) for filename in filenames)
     async with LocalSseServer((), responses=responses) as server:
         status = await asyncio.to_thread(
             main,
@@ -57,11 +62,12 @@ async def test_cassette_survives_the_full_cli_pipeline(
     captured = capsys.readouterr()
     assert status == 0, captured.err
     assert orjson.loads(captured.out)["success"] is True
-    assert [request.method for request in server.requests] == ["GET", "GET", "POST", "POST", "POST", "POST"]
-    # Probe with the field, control without it, then the two exact-policy turns.
+    assert [request.method for request in server.requests] == ["GET", "GET", *("POST",) * (4 + QUALIFICATION_PROBES)]
+    # Probe with the field, control without it, the qualification probes, then the two exact-policy turns.
     assert [request.asks_ignore_eos for request in server.requests if request.method == "POST"] == [
         True,
         False,
+        *(False,) * QUALIFICATION_PROBES,
         True,
         True,
     ]

@@ -172,7 +172,8 @@ name with `--api-key-env`. No flag takes a literal key.
 
 ## Real tool calling
 
-By default the replay skips tool time between turns. `run --tool-mode live`
+By default the replay skips tool time between turns. `run --tool-mode fixed_delay`
+sleeps after each turn for the tool time recorded there. `run --tool-mode live`
 runs the recorded shell commands in Docker containers, so tool time is real.
 This mode is opt-in and needs Docker and prebuilt images. The build scripts
 are in the source checkout. They are bash scripts, so on Windows run them from
@@ -201,7 +202,6 @@ Security caveats:
 - The scripts pull or build third-party images and clone the SWE-bench harness
   from GitHub.
 
-Live-tool runs cannot be submitted.
 
 ## Rust client (experimental)
 
@@ -220,8 +220,9 @@ metrics.
 ## Submitting results
 
 Submitting is optional and nothing is uploaded unless you ask.
-`prepare-submission` builds a bundle, `submit` sends it, and
-`submission-status` reads it back. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
+`prepare-submission` builds the submission file, `submit` sends it, and
+`submission-status` reads it back. A run on a server you started needs
+`run --attached-server FILE`. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
 details on what is sent to Artificial Analysis.
 
 ## Commands
@@ -234,8 +235,8 @@ details on what is sent to Artificial Analysis.
 | `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |
-| `prepare-submission` | Build a submission bundle without uploading it. |
-| `submit` | Send a prepared bundle to Artificial Analysis. |
+| `prepare-submission` | Build a submission file without uploading it. |
+| `submit` | Send a prepared submission to Artificial Analysis. |
 | `submission-status` | Read a submission's status. |
 
 Run `uv run agentperf-local <command> --help` for every option.

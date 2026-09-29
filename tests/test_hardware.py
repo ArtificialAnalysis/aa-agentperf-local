@@ -23,7 +23,6 @@ from agentperf_local.provenance.hardware import (
     accelerator_platform,
     collect_hardware_snapshot,
     hardware_snapshot_from_json,
-    public_hardware_profile,
 )
 from agentperf_local.provenance.hardware_facts import (
     HARDWARE_WARNING_MESSAGES,
@@ -494,47 +493,6 @@ def test_macos_reports_discrete_vendors_memory_and_drops_unpublishable_rows() ->
 
 
 @pytest.mark.parametrize(
-    ("host_memory_bytes", "accelerator_memory_bytes", "expected_host_gib", "expected_accelerator_gib"),
-    [
-        (4 * 1024**3, 12 * 1024**3, 4, 12),
-        (63 * 1024**3, 24560 * 1024**2, 56, 23),
-        (64 * 1024**3, 97_887 * 1024**2, 64, 95),
-    ],
-)
-def test_public_profile_floors_memory_to_its_bucket(
-    host_memory_bytes: int,
-    accelerator_memory_bytes: int,
-    expected_host_gib: int,
-    expected_accelerator_gib: int,
-) -> None:
-    snapshot = HardwareSnapshot(
-        operating_system="Linux",
-        operating_system_version="24.04",
-        kernel_version="test-kernel",
-        architecture="x86_64",
-        cpu_model="test CPU",
-        logical_cpu_count=16,
-        memory_bytes=host_memory_bytes,
-        accelerators=(
-            AcceleratorSnapshot(
-                vendor="NVIDIA",
-                name="NVIDIA GeForce RTX 5090",
-                memory_bytes=accelerator_memory_bytes,
-                core_count=None,
-                driver_version="590.42",
-                api="CUDA",
-            ),
-        ),
-        warnings=(),
-    )
-
-    profile = public_hardware_profile(snapshot)
-
-    assert profile.host_memory_gib == expected_host_gib
-    assert profile.accelerator.memory_gib == expected_accelerator_gib
-
-
-@pytest.mark.parametrize(
     ("stdout", "fallback_stdout", "expected_envelope", "expected_warnings"),
     [
         (
@@ -558,7 +516,7 @@ def test_public_profile_floors_memory_to_its_bucket(
     ],
     ids=("extended", "placeholders", "legacy-driver-fallback"),
 )
-def test_nvidia_envelope_fields_stay_private_and_survive_a_legacy_driver(
+def test_nvidia_envelope_fields_survive_a_legacy_driver_and_a_round_trip(
     stdout: bytes,
     fallback_stdout: bytes | None,
     expected_envelope: tuple[float | None, int | None, int | None],
@@ -577,7 +535,6 @@ def test_nvidia_envelope_fields_stay_private_and_survive_a_legacy_driver(
 
     snapshot = collect_hardware_snapshot(probe)
     accelerator = snapshot.accelerators[0]
-    profile_json = orjson.dumps(public_hardware_profile(snapshot).to_json())
     round_tripped = hardware_snapshot_from_json(snapshot.to_json())
 
     assert (accelerator.power_limit_w, accelerator.max_graphics_clock_mhz, accelerator.max_memory_clock_mhz) == (
@@ -586,10 +543,6 @@ def test_nvidia_envelope_fields_stay_private_and_survive_a_legacy_driver(
     assert snapshot.warnings == expected_warnings
     assert snapshot.cpu_base_frequency_mhz == 3600
     assert round_tripped == snapshot
-    assert b"power_limit" not in profile_json
-    assert b"clock" not in profile_json
-    assert b"base_frequency" not in profile_json
-    assert b"3600" not in profile_json
 
 
 @pytest.mark.parametrize(

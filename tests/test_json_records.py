@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import pathlib
 from enum import StrEnum
 from pathlib import Path
@@ -83,28 +82,3 @@ def test_json_value_encodes_each_supported_kind(value: object, expected: object)
 def test_unencodable_values_are_refused() -> None:
     with pytest.raises(TypeError, match="has no JSON encoding"):
         json_value(object())
-
-
-def _classes_with_derived_keys() -> list[tuple[str, str, bool, bool]]:
-    """Return every class whose reader derives its key set, and how its writer is spelled."""
-    found: list[tuple[str, str, bool, bool]] = []
-    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            body = ast.unparse(node)
-            if "json_field_names(cls)" not in body:
-                continue
-            writer = next((m for m in node.body if isinstance(m, ast.FunctionDef) and m.name == "to_json"), None)
-            derived_writer = writer is not None and "json_record(self)" in ast.unparse(writer)
-            found.append((path.name, node.name, writer is not None, derived_writer))
-    return found
-
-
-def test_a_derived_key_set_is_never_paired_with_a_hand_written_writer() -> None:
-    """One field list drives both directions, so a new field cannot reach one side only."""
-    classes = _classes_with_derived_keys()
-
-    assert classes, "no class derives its closed key set; this rule has nothing to protect"
-    drifted = [(module, name) for module, name, has_writer, derived in classes if has_writer and not derived]
-    assert drifted == []

@@ -526,19 +526,36 @@ class ModelCandidate(BaseModel, frozen=True):
         return self
 
 
+class RecipeSource(BaseModel, frozen=True):
+    """Hold one recipe file's exact text, which a managed submission sends as it is."""
+
+    profile_id: str
+    text: str
+
+
 class ModelCatalog(BaseModel, frozen=True):
-    """Store every recipe of one folder and the folder's identity."""
+    """Store every recipe of one folder, the text of each recipe file, and the folder's identity."""
 
     models: Annotated[tuple[ModelCandidate, ...], Field(min_length=1)]
+    sources: tuple[RecipeSource, ...]
     digest: str
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require at least one recipe and unique names."""
+        """Require at least one recipe, unique names, and one source per recipe in the same order."""
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")
+        if tuple(source.profile_id for source in self.sources) != profile_ids:
+            raise ValueError("every recipe needs its source text, in recipe order")
         return self
+
+    def recipe_text(self, profile_id: str) -> str:
+        """Return the exact text of one recipe file."""
+        source = next((source for source in self.sources if source.profile_id == profile_id), None)
+        if source is None:
+            raise ValueError(f"no recipe has profile_id {profile_id}")
+        return source.text
 
     @property
     def as_of(self) -> str:
@@ -608,6 +625,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
     """
     models: list[ModelCandidate] = []
+    sources: list[RecipeSource] = []
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -620,5 +638,9 @@ def load_model_catalog(root: Path) -> ModelCatalog:
                 f"recipe {relative} must sit in the folder of its model_release_slug {model.model_release_slug}"
             )
         models.append(model)
+        try:
+            sources.append(RecipeSource(profile_id=model.profile_id, text=encoded.decode("utf-8")))
+        except UnicodeDecodeError as error:
+            raise ValueError(f"recipe {relative} must be UTF-8 text") from error
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
-    return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))
+    return ModelCatalog(models=tuple(models), sources=tuple(sources), digest=sha256_bytes(bytes(listing)))

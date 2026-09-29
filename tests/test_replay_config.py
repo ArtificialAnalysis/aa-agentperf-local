@@ -28,7 +28,6 @@ def _config(**overrides: Any) -> RunConfig:
         "temperature",
         "top_p",
         "min_p",
-        "tool_delay_scale",
         "live_timeout_seconds",
     ),
 )

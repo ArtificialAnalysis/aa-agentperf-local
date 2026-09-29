@@ -1,7 +1,6 @@
 """Exercise the full-screen TUI through its public controller boundary."""
 
 import asyncio
-import base64
 import shutil
 import sys
 import threading
@@ -15,7 +14,6 @@ from textual.containers import Vertical, VerticalScroll
 from textual.pilot import Pilot
 from textual.widgets import Button, Checkbox, Digits, Input, OptionList, ProgressBar, RichLog, Static
 
-from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_ROOT,
     ModelCandidate,
@@ -25,7 +23,6 @@ from agentperf_local.deployment.context_policy import derived_minimum_memory_byt
 from agentperf_local.deployment.endpoint_probes import ContextProbeResult
 from agentperf_local.deployment.frameworks import FrameworkOffer
 from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
-from agentperf_local.deployment.qualification import QUALIFICATION_FILENAME, write_runtime_qualification
 from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.provenance.hardware import HardwareSnapshot
 from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
@@ -37,7 +34,7 @@ from agentperf_local.replay.runner import (
     TurnStartedBoundary,
 )
 from agentperf_local.reports.reporting import ArtifactPaths
-from agentperf_local.submission.private_audit import PRIVATE_AUDIT_FILENAME
+from agentperf_local.submission.framework_commit import GITHUB_API_URL_ENV
 from agentperf_local.tui.app import (
     ATTACHED_CONTEXT_UNVERIFIED_MESSAGE,
     BLOCKED_ACTION_MESSAGE,
@@ -1293,7 +1290,9 @@ async def test_minimum_supported_terminal_keeps_primary_keyboard_actions_reachab
         notice = app.query_one("#submit-notice", Static)
         panel = app.query_one("#submit-panel", Vertical)
         assert submit.region.intersection(notice.region).area == 0
-        assert notice.region.height >= 4
+        # An attached run is submitted from the command line; the note says how in three rows.
+        assert submit.disabled
+        assert notice.region.height >= 3
         assert submit.region.x >= panel.region.x
         assert notice.region.right <= panel.region.right
 
@@ -2189,22 +2188,21 @@ async def test_consent_checks_the_server_before_run_is_offered(
         await _settle_until(pilot, lambda: run.disabled and not server_check.display)
 
 
-def _bound_results_writer(tmp_path: Path, *, failed_qualification: bool = False) -> Callable[[Path], None]:
-    """Return a writer that fills the run folder with a bound, packageable result set."""
-    from tests.test_submission import RUN_ID, _private_summary, _qualification, _write_bound_results
+def _bound_results_writer(seed: Path) -> Callable[[Path], None]:
+    """Return a writer that fills the run folder with a copy of one recorded, submittable result set."""
 
     def write(output_dir: Path) -> None:
-        source = _write_bound_results(tmp_path / f"seed-{output_dir.name}", _private_summary())
         output_dir.mkdir(parents=True, exist_ok=True)
-        for child in source.iterdir():
+        for child in seed.iterdir():
             (output_dir / child.name).write_bytes(child.read_bytes())
-        if failed_qualification:
-            passing = _qualification(RUN_ID)
-            failed_outcome = replace_fields(passing.outcomes[0], passed=False, failure_codes=("request_error",))
-            failed = replace_fields(passing, outcomes=(failed_outcome, *passing.outcomes[1:]))
-            write_runtime_qualification(output_dir / QUALIFICATION_FILENAME, failed)
 
     return write
+
+
+def _run_id(results_dir: Path) -> str:
+    run_id = parse_json_object((results_dir / "measurement.json").read_bytes(), "measurement")["run_id"]
+    assert isinstance(run_id, str)
+    return run_id
 
 
 async def _start_managed_run_with_submit(
@@ -2230,26 +2228,32 @@ async def _start_managed_run_with_submit(
     if submit:
         # Replay completion posts a message that starts a second worker. Waiting for
         # the replay worker alone can return before Textual has registered the upload.
-        await _settle_until(pilot, lambda: app.upload_bundle_dir is not None)
+        await _settle_until(pilot, lambda: app.upload_submission_path is not None)
 
 
 @pytest.mark.parametrize("outcome", ["accepted", "refused"])
 async def test_ticking_submit_uploads_the_finished_managed_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     outcome: str,
 ) -> None:
+    from tests.attached_run import record_attached_run
     from tests.submission_server import SUBMISSION_ID, VALID_TOKEN, FakeSubmissionService, LocalSubmissionServer
 
     token_env = "AGENTPERF_TUI_TEST_TOKEN"
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
     monkeypatch.setenv(token_env, VALID_TOKEN)
-    service = FakeSubmissionService(require_token=True, rate_limited=outcome == "refused")
-    managed_controller = FakeManagedReplayController(
-        availability_result=_managed_availability(),
-        results_writer=_bound_results_writer(tmp_path, failed_qualification=outcome == "accepted"),
-    )
+    service = FakeSubmissionService(require_token=True)
     with LocalSubmissionServer(service) as server:
+        monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
+        seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
+        if outcome == "refused":
+            # The service already holds different content for this run, so it answers 409.
+            service.accepted_content[_run_id(seed)] = b"{}"
+        managed_controller = FakeManagedReplayController(
+            availability_result=_managed_availability(), results_writer=_bound_results_writer(seed)
+        )
         app = AgentPerfLocalApp(
             load_model_catalog(CATALOG_PATH),
             controller=FakeReplayController(),
@@ -2267,9 +2271,9 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
             notice = str(app.query_one("#submit-notice", Static).content)
             assert not submit_box.disabled
             assert "May be published" in notice
-            assert "private for 180 days" in notice
+            assert "Kept private, with no end date" in notice
             assert "Never sent" in notice
-            assert "Failed checks" in notice
+            assert "Failed qualification probes are recorded" in notice
             # The fake allowlist never contains this checkout, so the advisory check has spoken.
             assert "This client version can submit, but cannot reach verified" in notice
             assert app.submit_requested
@@ -2278,48 +2282,44 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
             # The result page inserts soft break points into long paths; the command itself is plain.
             upload = str(app.query_one("#result-upload", Static).content).replace("\x1f", "")
             request = managed_controller.requests[0]
-            bundle_dir = request.output_dir.with_name(f"{request.output_dir.name}-submission")
+            submission_path = request.output_dir.with_name(f"{request.output_dir.name}-submission.json")
 
     assert app.outcome is TuiOutcome.SUCCESS
     assert not app.upload_active
-    assert (bundle_dir / "private-audit.json").is_file()
-    assert app.upload_bundle_dir == bundle_dir
+    assert submission_path.is_file()
+    assert app.upload_submission_path == submission_path
     if outcome == "accepted":
         assert app.submission_receipt is not None
         assert app.submission_receipt.submission_id == SUBMISSION_ID
-        assert f"Submitted · {SUBMISSION_ID} · queued" in upload
+        assert f"Submitted · {SUBMISSION_ID} · accepted" in upload
         assert f"submission-status {SUBMISSION_ID}" in upload
         assert service.captured[0].status == 202
         assert service.captured[0].headers["authorization"] == f"Bearer {VALID_TOKEN}"
-        files = service.captured[0].body["files"]
-        assert isinstance(files, dict)
-        encoded_audit = files[PRIVATE_AUDIT_FILENAME]
-        assert isinstance(encoded_audit, str)
-        audit = parse_json_object(base64.b64decode(encoded_audit), PRIVATE_AUDIT_FILENAME)
-        qualification = audit["runtime_qualification"]
-        assert isinstance(qualification, dict)
-        assert qualification["passed"] is False
+        assert service.captured[0].body == parse_json_object(submission_path.read_bytes(), "submission")
     else:
         assert app.submission_receipt is None
-        assert "Upload failed · rate_limited" in upload
-        assert f"agentperf-local submit {bundle_dir} --yes" in upload
+        assert "Upload failed · idempotency_conflict" in upload
+        assert f"agentperf-local submit {submission_path} --yes" in upload
     assert VALID_TOKEN not in upload
 
 
 async def test_submit_checkbox_uploads_anonymously_without_a_token(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from tests.attached_run import record_attached_run
     from tests.submission_server import LocalSubmissionServer
 
     token_env = "AGENTPERF_TUI_TEST_TOKEN"
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
     monkeypatch.delenv(token_env, raising=False)
-    managed_controller = FakeManagedReplayController(
-        availability_result=_managed_availability(),
-        results_writer=_bound_results_writer(tmp_path),
-    )
     with LocalSubmissionServer() as server:
+        monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
+        seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
+        managed_controller = FakeManagedReplayController(
+            availability_result=_managed_availability(), results_writer=_bound_results_writer(seed)
+        )
         app = AgentPerfLocalApp(
             load_model_catalog(CATALOG_PATH),
             controller=FakeReplayController(),
@@ -2339,8 +2339,7 @@ async def test_submit_checkbox_uploads_anonymously_without_a_token(
             await pilot.pause()
 
     assert not submit_box.disabled
-    assert "Failed checks" in notice
-    assert "still submitted as self-reported" in notice
+    assert "Failed qualification probes are recorded, not rejected" in notice
     assert app.submit_requested
     assert app.submission_receipt is not None
     assert server.service.captured[0].status == 202
@@ -2352,38 +2351,45 @@ async def test_submit_checkbox_uploads_anonymously_without_a_token(
 async def test_submission_stays_busy_until_server_responds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     size: tuple[int, int],
     accepted: bool,
 ) -> None:
+    from tests.attached_run import record_attached_run
     from tests.submission_server import FakeSubmissionService, LocalSubmissionServer
 
     token_env = "AGENTPERF_TUI_TEST_TOKEN"
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
     monkeypatch.delenv(token_env, raising=False)
-    controller = FakeReplayController(results_writer=_bound_results_writer(tmp_path))
     release = threading.Event()
-    service = FakeSubmissionService(response_release=release, rate_limited=not accepted)
+    service = FakeSubmissionService(response_release=release)
     with LocalSubmissionServer(service) as server:
+        monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
+        seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
+        if not accepted:
+            service.accepted_content[_run_id(seed)] = b"{}"
+        controller = FakeManagedReplayController(
+            availability_result=_managed_availability(), results_writer=_bound_results_writer(seed)
+        )
         app = AgentPerfLocalApp(
             load_model_catalog(CATALOG_PATH),
-            controller=controller,
+            controller=FakeReplayController(),
+            managed_controller=controller,
             defaults=TuiDefaults(
                 output_dir=tmp_path / "results",
                 client_backend="python",
-                # Every catalog entry is a managed recipe, so an attached run is reached
-                # through the endpoint entry, which a configured endpoint model selects.
-                endpoint_model=ATTACHED_ENDPOINT_MODEL,
                 submit_base_url=server.base_url,
                 submit_token_env=token_env,
             ),
         )
         async with app.run_test(size=size) as pilot:
             await pilot.click("#welcome-start")
-            await pilot.click("#model-continue")
+            app.query_one("#model-list", OptionList).focus()
+            await pilot.press("down", "enter")
             await pilot.pause()
             await _check_setup(app, pilot)
             assert app.step is TuiStep.PREFLIGHT
-            app.query_one("#endpoint-consent-checkbox", Checkbox).value = True
-            await _settle_until(pilot, lambda: not app.query_one("#run-start", Button).disabled)
+            await _tick_consent(app, pilot)
             app.query_one("#submit-checkbox", Checkbox).value = True
             await pilot.pause()
             app.query_one("#run-start", Button).press()
@@ -2417,7 +2423,7 @@ async def test_submission_stays_busy_until_server_responds(
                 await _settle_until(pilot, lambda: "Waiting&#160;for&#160;confirmation" in app.export_screenshot())
             finally:
                 release.set()
-            await _settle_until(pilot, lambda: app.upload_bundle_dir is not None)
+            await _settle_until(pilot, lambda: app.upload_submission_path is not None)
             assert not app.upload_active
             assert not busy.display
             assert not new_run.disabled
@@ -2426,9 +2432,9 @@ async def test_submission_stays_busy_until_server_responds(
             await _settle_until(pilot, lambda: app.step is TuiStep.CONFIG)
             await pilot.press("q")
 
-    assert controller.requests[0].managed_deployment is None
+    assert controller.requests[0].managed_deployment is not None
     assert (app.submission_receipt is not None) is accepted
-    assert server.service.captured[0].status == (202 if accepted else 429)
+    assert server.service.captured[0].status == (202 if accepted else 409)
     assert "authorization" not in server.service.captured[0].headers
 
 

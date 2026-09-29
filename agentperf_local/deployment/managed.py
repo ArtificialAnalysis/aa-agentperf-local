@@ -14,35 +14,25 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Self
+from typing import IO, Literal
 
 import httpx
 import orjson
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from agentperf_local.common.durable_files import (
     NEW_FILE_OPEN_FLAGS,
     PRIVATE_FILE_PERMISSIONS,
     WrittenFile,
-    read_bounded_file,
     validate_new_file_paths,
     write_digest_file,
 )
-from agentperf_local.common.identity import mint_run_id, sha256_bytes, validate_digest, validate_run_id
-from agentperf_local.common.json_fields import (
-    decode_json_object,
-    one_of,
-    require_exact_keys,
-    required_boolean,
-    required_integer,
-    required_object,
-    required_string,
-)
+from agentperf_local.common.identity import mint_run_id, sha256_bytes, validate_digest
 from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
-from agentperf_local.common.models import replace_fields
+from agentperf_local.common.models import read_record
 from agentperf_local.deployment.catalog import (
-    DEPLOYMENT_FRAMEWORK_ORDER,
     DeploymentFramework,
+    LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
 )
@@ -65,22 +55,27 @@ from agentperf_local.deployment.frameworks import (
     require_supported_runtime,
     resolve_framework_executable,
 )
+from agentperf_local.deployment.launch_command import LocalPath, render_launch_command
 from agentperf_local.deployment.model_cache import VerifiedDeployment
 from agentperf_local.provenance.benchmark import SubmissionContext
 from agentperf_local.provenance.context import below_benchmark_context
 from agentperf_local.provenance.hardware import (
-    ACCELERATOR_PLATFORMS,
     AcceleratorPlatform,
     HardwareSnapshot,
     accelerator_platform,
+    select_accelerator,
 )
+from agentperf_local.submission.contract import AcceleratorBackend
 
 # Version 2 added the deployment identifier, creation time, and launch configuration
 # digest. Version 3 replaced the single artifact_sha256 field with the artifact-manifest
 # digest, because a managed recipe can now pin a whole weights repository. Version 4
 # added the recipe identity and the digest of the catalog it came from, which is what
 # anchors a submission to an allowlisted release.
-DEPLOYMENT_RECORD_VERSION = 4
+# Version 5 added the model release, the accelerator backend, the redacted launch command,
+# and the recipe text, which a submission sends.
+type DeploymentRecordVersion = Literal[5]
+DEPLOYMENT_RECORD_VERSION: DeploymentRecordVersion = 5
 DEPLOYMENT_RECORD_KIND = "managed_model_deployment"
 DEPLOYMENT_RECORD_STATUS = "ready-at-benchmark-start"
 MAX_DEPLOYMENT_RECORD_BYTES = 1024 * 1024
@@ -138,6 +133,7 @@ class DeploymentPlan(BaseModel, frozen=True):
     """Bind an exact model file, runtime command, and local endpoint."""
 
     profile_id: str
+    model_release_slug: str
     hf_repository: str
     hf_revision: str
     # The catalog file these three came from. A submission is anchored on it: the
@@ -146,6 +142,8 @@ class DeploymentPlan(BaseModel, frozen=True):
     catalog_digest: str
     framework: DeploymentFramework
     accelerator_platform: AcceleratorPlatform
+    # The compute backend the framework serves on, as a submission names it.
+    accelerator_backend: AcceleratorBackend
     model_path: Path
     artifact_manifest_sha256: str
     artifact_size_bytes: int
@@ -155,6 +153,8 @@ class DeploymentPlan(BaseModel, frozen=True):
     host: str
     port: int
     command: tuple[str, ...]
+    # The command and its environment as one shell line, with local paths and secrets replaced.
+    server_launch_command: str
     runtime: FrameworkIdentity
     device_environment: tuple[tuple[str, str], ...] = ()
 
@@ -181,11 +181,13 @@ class DeploymentPlan(BaseModel, frozen=True):
         command.extend(self.command)
         return {
             "profile_id": self.profile_id,
+            "model_release_slug": self.model_release_slug,
             "hf_repository": self.hf_repository,
             "hf_revision": self.hf_revision,
             "catalog_digest": self.catalog_digest,
             "framework": self.framework,
             "accelerator_platform": self.accelerator_platform,
+            "accelerator_backend": self.accelerator_backend,
             "model_path": str(self.model_path),
             "artifact_manifest_sha256": self.artifact_manifest_sha256,
             "artifact_size_bytes": self.artifact_size_bytes,
@@ -196,6 +198,7 @@ class DeploymentPlan(BaseModel, frozen=True):
             "gpu_execution_requested": True,
             "gpu_verification_policy": self.gpu_verification_policy,
             "command": command,
+            "server_launch_command": self.server_launch_command,
             "device_environment": dict(self.device_environment),
             "runtime": {
                 "version": self.runtime.version,
@@ -261,16 +264,9 @@ def bind_snapshot_to_device(snapshot: HardwareSnapshot, device_index: int | None
     Without an explicit index a single-accelerator machine binds unpinned, keeping the
     launch environment unchanged; a multi-accelerator machine must name a device.
     """
-    count = len(snapshot.accelerators)
     if device_index is None:
         return BoundDeploymentDevice(snapshot=snapshot, device_index=0, environment=())
-    if count == 0:
-        raise ValueError("no accelerator was detected, so no device can be selected")
-    if device_index < 0 or device_index >= count:
-        raise ValueError(
-            f"device index {device_index} is out of range; detected accelerators run from 0 to {count - 1}"
-        )
-    bound = replace_fields(snapshot, accelerators=(snapshot.accelerators[device_index],))
+    bound = select_accelerator(snapshot, device_index)
     platform = accelerator_platform(bound)
     return BoundDeploymentDevice(
         snapshot=bound,
@@ -639,6 +635,42 @@ def _launch_command(
     return (*executable.command_prefix, *arguments)
 
 
+# The launch command names the recipe's files under this placeholder, by their repository paths.
+MODEL_DIRECTORY_PLACEHOLDER = "$MODEL_DIR"
+PYTHON_PLACEHOLDER = "$PYTHON"
+
+
+def _accelerator_backend(platform: AcceleratorPlatform, launch: LlamaCppLaunch | None) -> AcceleratorBackend:
+    """Name the compute backend one managed launch serves on."""
+    if platform == "nvidia-cuda":
+        return "cuda"
+    if platform == "apple-metal":
+        return "metal"
+    return "vulkan" if launch is not None and launch.backend == "vulkan" else "rocm"
+
+
+def _known_launch_paths(
+    executable: FrameworkExecutable, deployment: ModelDeployment, artifacts: VerifiedDeployment
+) -> tuple[LocalPath, ...]:
+    """Name each local path a managed launch command holds, with the placeholder that replaces it."""
+    target = deployment.target_model_filename
+    paths = [
+        *(
+            LocalPath(path=str(artifact.path), placeholder=f"{MODEL_DIRECTORY_PLACEHOLDER}/{artifact.filename}")
+            for artifact in artifacts.artifacts
+        ),
+        LocalPath(
+            path=str(artifacts.model_path),
+            placeholder=MODEL_DIRECTORY_PLACEHOLDER if target is None else f"{MODEL_DIRECTORY_PLACEHOLDER}/{target}",
+        ),
+        LocalPath(path=sys.executable, placeholder=PYTHON_PLACEHOLDER),
+    ]
+    if executable.install_root is not None:
+        home = executable.framework.upper().replace("-", "_")
+        paths.append(LocalPath(path=str(executable.install_root), placeholder=f"${home}_HOME"))
+    return tuple(paths)
+
+
 def _require_unchanged_artifacts(artifacts: VerifiedDeployment, deployment: ModelDeployment) -> None:
     """Reject a verified artifact set that no longer matches the catalog or the disk.
 
@@ -720,13 +752,26 @@ def create_deployment_plan(
     environment_names = tuple(name for name, _ in combined_environment)
     if len(set(environment_names)) != len(environment_names):
         raise ValueError("managed deployment environment names must be unique")
+    command = _launch_command(
+        executable,
+        candidate,
+        deployment,
+        resolved_context_tokens,
+        artifacts.model_path,
+        artifacts.draft_model_path,
+        model_alias,
+        LOOPBACK_HOST,
+        port,
+    )
     return DeploymentPlan(
         profile_id=candidate.profile_id,
+        model_release_slug=candidate.model_release_slug,
         hf_repository=candidate.hf_repository,
         hf_revision=candidate.hf_revision,
         catalog_digest=catalog_digest,
         framework=framework,
         accelerator_platform=platform,
+        accelerator_backend=_accelerator_backend(platform, launch),
         model_path=artifacts.model_path,
         artifact_manifest_sha256=artifacts.manifest_sha256,
         artifact_size_bytes=artifacts.size_bytes,
@@ -735,16 +780,9 @@ def create_deployment_plan(
         model_alias=model_alias,
         host=LOOPBACK_HOST,
         port=port,
-        command=_launch_command(
-            executable,
-            candidate,
-            deployment,
-            resolved_context_tokens,
-            artifacts.model_path,
-            artifacts.draft_model_path,
-            model_alias,
-            LOOPBACK_HOST,
-            port,
+        command=command,
+        server_launch_command=render_launch_command(
+            command, combined_environment, _known_launch_paths(executable, deployment, artifacts)
         ),
         runtime=runtime,
         device_environment=combined_environment,
@@ -986,164 +1024,58 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
         )
 
 
-class DeploymentRecord(BaseModel, frozen=True):
-    """Hold the deployment facts a private audit may carry.
+class RecordedRuntime(BaseModel, frozen=True):
+    """Hold the runtime facts a deployment record states."""
 
-    The artifact path, launch command, host, and port stay in the on-disk record.
-    """
+    version: str
+    runtime_id: str
 
-    deployment_id: str
-    created_at: str
+
+class RecordedPlan(BaseModel, frozen=True):
+    """Hold the launch facts a submission reads back from a deployment record."""
+
     profile_id: str
+    model_release_slug: str
     hf_repository: str
     hf_revision: str
-    catalog_digest: str
     framework: DeploymentFramework
-    accelerator_platform: AcceleratorPlatform
+    accelerator_backend: AcceleratorBackend
     artifact_manifest_sha256: str
     artifact_size_bytes: int
     context_tokens: int
-    reduced_context: bool
-    model_alias: str
-    runtime_version: str
-    runtime_executable_sha256: str
-    runtime_fingerprint: str
-    runtime_id: str
-    gpu_startup_verified: bool
-    gpu_verification_policy: str
-    launch_configuration_digest: str
-    record_digest: str
+    server_launch_command: str
+    runtime: RecordedRuntime
 
-    @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        """Validate the identifiers and digests the audit chain relies on."""
-        validate_run_id(self.deployment_id, "deployment_id")
-        for field, value in (
-            ("catalog_digest", self.catalog_digest),
-            ("artifact_manifest_sha256", self.artifact_manifest_sha256),
-            ("runtime_executable_sha256", self.runtime_executable_sha256),
-            ("runtime_fingerprint", self.runtime_fingerprint),
-            ("launch_configuration_digest", self.launch_configuration_digest),
-            ("record_digest", self.record_digest),
-        ):
-            validate_digest(value, field)
-        if self.artifact_size_bytes <= 0 or self.context_tokens <= 0:
-            raise ValueError("deployment artifact size and context tokens must be positive")
-        if not self.gpu_startup_verified:
-            raise ValueError("a deployment record without verified GPU startup cannot be audited")
-        return self
 
-    @classmethod
-    def from_audit_json(cls, data: JsonObject, source: str) -> DeploymentRecord:
-        """Parse one strict audit summary."""
-        require_exact_keys(data, _AUDIT_RECORD_KEYS, source)
-        runtime = required_object(data, "runtime", source)
-        require_exact_keys(runtime, _AUDIT_RUNTIME_KEYS, f"{source}.runtime")
-        return _deployment_record(
-            data, data, runtime, record_digest=required_string(data, "record_digest", source), source=source
-        )
+class DeploymentRecord(BaseModel, frozen=True):
+    """Hold the deployment.json facts a submission sends.
+
+    The file also holds the local model path, the raw launch command, and the hardware
+    snapshot. The reader skips them, so none of them can reach a submission.
+    """
+
+    version: DeploymentRecordVersion
+    kind: Literal["managed_model_deployment"]
+    status: Literal["ready-at-benchmark-start"]
+    gpu_startup_verified: Literal[True]
+    recipe: str
+    deployment: RecordedPlan
 
     def require_benchmark(self, context: SubmissionContext) -> None:
         """Refuse a record that describes a different model, runtime, or context than the benchmark identity."""
-        if self.artifact_manifest_sha256 != context.model_artifact_digest or self.runtime_id != context.runtime_id:
+        plan = self.deployment
+        if (
+            plan.artifact_manifest_sha256 != context.model_artifact_digest
+            or plan.runtime.runtime_id != context.runtime_id
+        ):
             raise ValueError("deployment record does not match the bound benchmark identity")
-        if self.context_tokens != context.context_tokens:
+        if plan.context_tokens != context.context_tokens:
             raise ValueError("deployment record context does not match the bound benchmark identity")
 
-    def to_audit_json(self) -> JsonObject:
-        """Return the path-free deployment summary for the private audit file."""
-        return {
-            "deployment_id": self.deployment_id,
-            "created_at": self.created_at,
-            "profile_id": self.profile_id,
-            "hf_repository": self.hf_repository,
-            "hf_revision": self.hf_revision,
-            "catalog_digest": self.catalog_digest,
-            "framework": self.framework,
-            "accelerator_platform": self.accelerator_platform,
-            "artifact_manifest_sha256": self.artifact_manifest_sha256,
-            "artifact_size_bytes": self.artifact_size_bytes,
-            "context_tokens": self.context_tokens,
-            "reduced_context": self.reduced_context,
-            "model_alias": self.model_alias,
-            "runtime": {
-                "version": self.runtime_version,
-                "executable_sha256": self.runtime_executable_sha256,
-                "fingerprint": self.runtime_fingerprint,
-                "runtime_id": self.runtime_id,
-            },
-            "gpu_startup_verified": self.gpu_startup_verified,
-            "gpu_verification_policy": self.gpu_verification_policy,
-            "launch_configuration_digest": self.launch_configuration_digest,
-            "record_digest": self.record_digest,
-        }
 
-
-_AUDIT_RECORD_KEYS = frozenset(
-    (
-        "deployment_id",
-        "created_at",
-        "profile_id",
-        "hf_repository",
-        "hf_revision",
-        "catalog_digest",
-        "framework",
-        "accelerator_platform",
-        "artifact_manifest_sha256",
-        "artifact_size_bytes",
-        "context_tokens",
-        "reduced_context",
-        "model_alias",
-        "runtime",
-        "gpu_startup_verified",
-        "gpu_verification_policy",
-        "launch_configuration_digest",
-        "record_digest",
-    )
-)
-_AUDIT_RUNTIME_KEYS = frozenset(("version", "executable_sha256", "fingerprint", "runtime_id"))
-
-
-def _deployment_record(
-    header: JsonObject,
-    plan: JsonObject,
-    runtime: JsonObject,
-    *,
-    record_digest: str,
-    source: str,
-) -> DeploymentRecord:
-    """Build one record from the objects that hold its identifiers, launch facts, and runtime facts.
-
-    The on-disk record nests the plan under "deployment"; the audit summary is flat.
-    Both shapes read through here so a new field is added in one place.
-    """
-    plan_source = source if plan is header else f"{source}.deployment"
-    runtime_source = f"{plan_source}.runtime"
-    return DeploymentRecord(
-        deployment_id=required_string(header, "deployment_id", source),
-        created_at=required_string(header, "created_at", source),
-        profile_id=required_string(plan, "profile_id", plan_source),
-        hf_repository=required_string(plan, "hf_repository", plan_source),
-        hf_revision=required_string(plan, "hf_revision", plan_source),
-        catalog_digest=required_string(plan, "catalog_digest", plan_source),
-        framework=one_of(required_string(plan, "framework", plan_source), DEPLOYMENT_FRAMEWORK_ORDER, "framework"),
-        accelerator_platform=one_of(
-            required_string(plan, "accelerator_platform", plan_source), ACCELERATOR_PLATFORMS, "accelerator_platform"
-        ),
-        artifact_manifest_sha256=required_string(plan, "artifact_manifest_sha256", plan_source),
-        artifact_size_bytes=required_integer(plan, "artifact_size_bytes", plan_source),
-        context_tokens=required_integer(plan, "context_tokens", plan_source),
-        reduced_context=required_boolean(plan, "reduced_context", plan_source),
-        model_alias=required_string(plan, "model_alias", plan_source),
-        runtime_version=required_string(runtime, "version", runtime_source),
-        runtime_executable_sha256=required_string(runtime, "executable_sha256", runtime_source),
-        runtime_fingerprint=required_string(runtime, "fingerprint", runtime_source),
-        runtime_id=required_string(runtime, "runtime_id", runtime_source),
-        gpu_startup_verified=required_boolean(header, "gpu_startup_verified", source),
-        gpu_verification_policy=required_string(plan, "gpu_verification_policy", plan_source),
-        launch_configuration_digest=required_string(header, "launch_configuration_digest", source),
-        record_digest=record_digest,
-    )
+def read_deployment_record(encoded: bytes, source: str) -> DeploymentRecord:
+    """Parse one deployment record's exact bytes, keeping only the facts a submission sends."""
+    return read_record(DeploymentRecord, encoded, source, unknown_keys="skip")
 
 
 def launch_configuration_digest(plan: DeploymentPlan) -> str:
@@ -1168,9 +1100,10 @@ def write_deployment_record(
     plan: DeploymentPlan,
     snapshot: HardwareSnapshot,
     *,
+    recipe_text: str,
     gpu_startup_verified: bool,
 ) -> WrittenFile:
-    """Write the exact managed deployment facts before inference starts."""
+    """Write the exact managed deployment facts, with the recipe file's text, before inference starts."""
     if not gpu_startup_verified:
         raise ValueError("managed deployment records require verified GPU startup evidence")
     deployment_id = mint_run_id()
@@ -1182,22 +1115,10 @@ def write_deployment_record(
         "created_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "launch_configuration_digest": launch_configuration_digest(plan),
         "deployment": plan.to_json(),
+        "recipe": recipe_text,
         "gpu_startup_verified": True,
         "hardware": snapshot.to_json(),
         "log_file": DEPLOYMENT_LOG_FILENAME,
         "upload_performed": False,
     }
     return write_digest_file(path, orjson.dumps(data, option=orjson.OPT_INDENT_2))
-
-
-def load_deployment_record(path: Path) -> DeploymentRecord:
-    """Read one managed deployment record and keep only its audit-safe facts."""
-    encoded = read_bounded_file(path, MAX_DEPLOYMENT_RECORD_BYTES, label="deployment record")
-    data = decode_json_object(encoded, f"invalid deployment record JSON: {path}")
-    if data.get("version") != DEPLOYMENT_RECORD_VERSION:
-        raise ValueError("deployment record version is not supported; re-run the benchmark with a current client")
-    if data.get("kind") != DEPLOYMENT_RECORD_KIND or data.get("status") != DEPLOYMENT_RECORD_STATUS:
-        raise ValueError("deployment record kind or status is not supported")
-    plan = required_object(data, "deployment", "deployment")
-    runtime = required_object(plan, "runtime", "deployment.deployment")
-    return _deployment_record(data, plan, runtime, record_digest=sha256_bytes(encoded), source="deployment")

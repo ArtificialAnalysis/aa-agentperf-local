@@ -1,7 +1,9 @@
-"""Serve a deterministic fake of the submission API on an ephemeral localhost port."""
+"""Serve a deterministic fake of the submission API, and of GitHub's commit lookup, on a localhost port."""
 
 from __future__ import annotations
 
+import hashlib
+import re
 import threading
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -10,11 +12,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import orjson
 from pydantic import BaseModel
 
-from agentperf_local.common.json_types import JsonObject, normalize_json_object
+from agentperf_local.common.json_types import JsonObject, JsonValue, normalize_json_object
+from agentperf_local.common.models import read_record
+from agentperf_local.submission.contract import SubmissionRequest
+from agentperf_local.submission.spec import validate_against_spec
 
 VALID_TOKEN = "aa-test-token"
 SUBMISSION_ID = "sub_abcdefghijklmnopqrstuvwxyz"
 ALLOWLISTED_REVISION = "2" * 40
+GITHUB_COMMIT_PATH = re.compile(r"^/repos/[^/]+/[^/]+/commits/(?P<ref>[^/]+)$")
+SHORT_COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
+FULL_COMMIT_LENGTH = 40
 
 
 class CapturedSubmission(BaseModel, frozen=True):
@@ -29,13 +37,20 @@ class CapturedSubmission(BaseModel, frozen=True):
 class FakeSubmissionService:
     """Hold the fake service's state across requests."""
 
-    body_cap_bytes: int | None = None
-    rate_limited: bool = False
     require_token: bool = False
     response_release: threading.Event | None = None
-    seen_digests: dict[str, str] = field(default_factory=dict)
+    # The canonical content accepted for each run_id; the service keys submissions on it.
+    accepted_content: dict[str, bytes] = field(default_factory=dict)
     captured: list[CapturedSubmission] = field(default_factory=list)
     status_answers: dict[str, JsonObject] = field(default_factory=dict)
+    looked_up_refs: list[str] = field(default_factory=list)
+
+
+def fake_commit(ref: str) -> str:
+    """Return the full commit the fake GitHub names for a short commit or a tag."""
+    if SHORT_COMMIT.fullmatch(ref) is not None:
+        return ref.ljust(FULL_COMMIT_LENGTH, "0")
+    return hashlib.sha1(ref.encode(), usedforsecurity=False).hexdigest()
 
 
 def _error(handler: BaseHTTPRequestHandler, status: HTTPStatus, code: str, message: str, detail: JsonObject) -> None:
@@ -62,38 +77,47 @@ def _handler(service: FakeSubmissionService) -> type[BaseHTTPRequestHandler]:
             if self.path != "/v1/submissions":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            length = int(self.headers.get("Content-Length", "0"))
-            raw = self.rfile.read(length)
+            raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             if service.response_release is not None:
                 service.response_release.wait()
             headers = {name.lower(): value for name, value in self.headers.items()}
-            if service.body_cap_bytes is not None and length > service.body_cap_bytes:
-                service.captured.append(CapturedSubmission(headers=headers, body={}, status=413))
-                _error(self, HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "bundle_too_large", "too large", {})
-                return
-            if service.rate_limited:
-                service.captured.append(CapturedSubmission(headers=headers, body={}, status=429))
-                _error(self, HTTPStatus.TOO_MANY_REQUESTS, "rate_limited", "slow down", {"retry_after_seconds": 30})
-                return
             token = headers.get("authorization", "").removeprefix("Bearer ")
             if service.require_token and token != VALID_TOKEN:
                 service.captured.append(CapturedSubmission(headers=headers, body={}, status=401))
                 _error(self, HTTPStatus.UNAUTHORIZED, "auth_required", "token missing or invalid", {})
                 return
             body = normalize_json_object(orjson.loads(raw))
-            service.captured.append(CapturedSubmission(headers=headers, body=body, status=0))
-            manifest = body.get("bundle_manifest")
-            digest = manifest.get("aggregate_payload_digest") if isinstance(manifest, dict) else None
-            key = digest if isinstance(digest, str) else ""
-            if key in service.seen_digests:
-                service.captured[-1] = CapturedSubmission(headers=headers, body=body, status=200)
-                _json(self, HTTPStatus.OK, {"submission_id": service.seen_digests[key], "status": "queued"})
+            try:
+                request = read_record(SubmissionRequest, raw, "request")
+                validate_against_spec(raw)
+            except ValueError as error:
+                service.captured.append(CapturedSubmission(headers=headers, body=body, status=422))
+                reasons: list[JsonValue] = []
+                reasons.extend(str(error).splitlines())
+                detail: JsonObject = {"reasons": reasons}
+                _error(
+                    self, HTTPStatus.UNPROCESSABLE_ENTITY, "validation_failed", "submission failed validation", detail
+                )
                 return
-            service.seen_digests[key] = SUBMISSION_ID
-            service.captured[-1] = CapturedSubmission(headers=headers, body=body, status=202)
-            _json(self, HTTPStatus.ACCEPTED, {"submission_id": SUBMISSION_ID, "status": "queued"})
+            # Formatting and key order do not change the content.
+            content = orjson.dumps(body, option=orjson.OPT_SORT_KEYS)
+            accepted = service.accepted_content.get(request.run_id)
+            if accepted is not None and accepted != content:
+                service.captured.append(CapturedSubmission(headers=headers, body=body, status=409))
+                _error(self, HTTPStatus.CONFLICT, "idempotency_conflict", "different content", {"reasons": []})
+                return
+            status = HTTPStatus.OK if accepted is not None else HTTPStatus.ACCEPTED
+            service.accepted_content[request.run_id] = content
+            service.captured.append(CapturedSubmission(headers=headers, body=body, status=status))
+            _json(self, status, {"submission_id": SUBMISSION_ID, "status": "accepted"})
 
         def do_GET(self) -> None:
+            commit_path = GITHUB_COMMIT_PATH.fullmatch(self.path)
+            if commit_path is not None:
+                ref = commit_path.group("ref")
+                service.looked_up_refs.append(ref)
+                _json(self, HTTPStatus.OK, {"sha": fake_commit(ref)})
+                return
             if self.path == "/v1/revisions":
                 _json(
                     self,
@@ -107,8 +131,7 @@ def _handler(service: FakeSubmissionService) -> type[BaseHTTPRequestHandler]:
                 return
             prefix = "/v1/submissions/"
             if self.path.startswith(prefix):
-                submission_id = self.path.removeprefix(prefix)
-                answer = service.status_answers.get(submission_id)
+                answer = service.status_answers.get(self.path.removeprefix(prefix))
                 if answer is None:
                     _error(self, HTTPStatus.NOT_FOUND, "not_found", "no such submission", {})
                     return

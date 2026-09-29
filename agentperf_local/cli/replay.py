@@ -23,8 +23,8 @@ from agentperf_local.cli.options import (
     read_replay_manifest_path,
     read_requested_output_token_policy,
     read_sampling_preset,
+    read_selected_hardware,
     read_tool_choice,
-    read_tool_delay_scale,
     read_tool_mode,
     require_fresh_output_dir,
     resolve_submit_token,
@@ -48,6 +48,13 @@ from agentperf_local.common.identity import mint_run_id
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.common.models import replace_fields
 from agentperf_local.common.units import BYTES_PER_GIB
+from agentperf_local.deployment.attached_server import (
+    ATTACHED_SERVER_FILENAME,
+    AttachedServer,
+    read_attached_server_description,
+    require_backend_matches,
+    write_attached_server,
+)
 from agentperf_local.deployment.catalog import (
     ModelCatalog,
     load_model_catalog,
@@ -71,14 +78,17 @@ from agentperf_local.deployment.managed import (
     DEPLOYMENT_RECORD_FILENAME,
 )
 from agentperf_local.deployment.managed_run import (
+    EndpointMeasurement,
     ManagedRunInputs,
     RunActivity,
     RunActivityKind,
+    measure_endpoint,
     run_managed_replay,
 )
 from agentperf_local.deployment.qualification import (
     QUALIFICATION_FILENAME,
 )
+from agentperf_local.provenance.accelerator_probes import NVIDIA_VENDOR
 from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
     MEASUREMENT_BINDING_FILENAME,
@@ -89,17 +99,21 @@ from agentperf_local.provenance.benchmark import (
     write_measurement_binding,
 )
 from agentperf_local.provenance.context import RunContextFacts
-from agentperf_local.provenance.hardware import HardwareSnapshot, collect_hardware_snapshot
+from agentperf_local.provenance.hardware import (
+    AcceleratorPlatform,
+    HardwareSnapshot,
+    selected_accelerator,
+)
 from agentperf_local.replay.config import (
     OutputTokenPolicy,
     RunConfig,
 )
-from agentperf_local.replay.runner import RunBoundaryEvent, RunObserver, RunResult, TurnResult, run_manifest
+from agentperf_local.replay.runner import RunBoundaryEvent, RunResult, TurnResult
 from agentperf_local.reports.progress import TerminalRunObserver
 from agentperf_local.reports.reporting import (
     ArtifactPaths,
-    write_run_artifacts,
 )
+from agentperf_local.submission.builder import contract_vendor
 from agentperf_local.submission.client import (
     check_revision_allowlist,
 )
@@ -111,19 +125,22 @@ from agentperf_local.tui.app import AgentPerfLocalApp, TuiDefaults, TuiOutcome
 from agentperf_local.workload.schema import load_manifest
 
 DOWNLOAD_PROGRESS_STEPS = 20
+# The qualification report names what it probed; an attached server has no recipe.
+ATTACHED_QUALIFICATION_PROFILE_ID = "attached"
 
 
 @contextmanager
-def _discarded_binding_on_failure(measurement_path: Path) -> Iterator[None]:
-    """Remove a measurement binding whose artifact set never landed.
+def _discarded_on_failure(paths: tuple[Path, ...]) -> Iterator[None]:
+    """Remove the files a run wrote before its reports, when the reports never land.
 
-    A binding without its artifact set proves nothing and permanently blocks the
-    directory.
+    A binding and its companions prove nothing without the reports, and they would
+    permanently block the directory.
     """
     try:
         yield
     except BaseException:
-        measurement_path.unlink(missing_ok=True)
+        for path in paths:
+            path.unlink(missing_ok=True)
         raise
 
 
@@ -156,7 +173,6 @@ def _run_config(namespace: argparse.Namespace, output_token_policy: OutputTokenP
         cache_isolation=read_boolean(namespace, "cache_isolation"),
         cache_namespace=read_optional_string(namespace, "cache_namespace"),
         tool_mode=tool_mode,
-        tool_delay_scale=read_tool_delay_scale(namespace, tool_mode),
         live_tool_image=read_optional_string(namespace, "live_tool_image"),
         live_workspace_root=read_live_workspace_root(namespace, tool_mode),
         live_network=read_optional_string(namespace, "live_network"),
@@ -199,7 +215,7 @@ class _CliManagedObserver:
         if kind is RunActivityKind.QUALIFIED and passed is not None and total is not None and passed < total:
             print(
                 f"warning: {total - passed}/{total} runtime probes failed; "
-                "the run continues but cannot reach the verified tier",
+                "the run continues, and a submission records the failures",
                 file=sys.stderr,
             )
         elif kind is RunActivityKind.POWER_UNAVAILABLE:
@@ -308,6 +324,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
         manifest_path=manifest_path,
         output_dir=output_dir,
         candidate=candidate,
+        recipe_text=catalog.recipe_text(candidate.profile_id),
         framework=framework,
         device=bound,
         catalog_as_of=catalog.as_of,
@@ -403,6 +420,23 @@ def _resolve_output_token_policy(namespace: argparse.Namespace) -> OutputTokenPo
     return "exact"
 
 
+def _attached_server(namespace: argparse.Namespace, snapshot: HardwareSnapshot) -> AttachedServer | None:
+    """Read the server description a submittable run needs, and check it against this host."""
+    path = read_optional_path(namespace, "attached_server")
+    if path is None:
+        return None
+    server = read_attached_server_description(path)
+    require_backend_matches(server, contract_vendor(selected_accelerator(snapshot).vendor))
+    return server
+
+
+def _power_platform(snapshot: HardwareSnapshot) -> AcceleratorPlatform | None:
+    """Return the platform power telemetry samples, which is one NVIDIA accelerator or none."""
+    if len(snapshot.accelerators) != 1 or snapshot.accelerators[0].vendor != NVIDIA_VENDOR:
+        return None
+    return "nvidia-cuda"
+
+
 def run_command(namespace: argparse.Namespace) -> int:
     if read_client_backend(namespace) == "rust":
         validate_rustcore_available()
@@ -414,7 +448,10 @@ def run_command(namespace: argparse.Namespace) -> int:
     measurement_path = output_dir / MEASUREMENT_BINDING_FILENAME
     # Minted before any endpoint contact so the binding and the summary share it.
     run_id = mint_run_id()
-    snapshot = collect_hardware_snapshot()
+    device_index = read_optional_integer(namespace, "device")
+    snapshot = read_selected_hardware(namespace)
+    # Checked before any endpoint contact, so a wrong description costs no run.
+    attached_server = _attached_server(namespace, snapshot)
     context = create_attached_submission_context(manifest_path, config.model)
     binding = create_measurement_binding(
         context,
@@ -444,27 +481,74 @@ def run_command(namespace: argparse.Namespace) -> int:
         )
         require_measurable_exact_policy(capability)
         _warn_undetermined_ignore_eos(capability)
-    write_measurement_binding(
-        measurement_path,
-        replace_fields(binding, observed_context_tokens=probe.observed_tokens),
+    progress = read_boolean(namespace, "progress")
+    observer = _CliManagedObserver(
+        progress=(
+            TerminalRunObserver(
+                device_label=snapshot.accelerators[0].name if snapshot.accelerators else "local endpoint",
+                suite_label=f"{context.suite_id} · {context.suite_epoch}",
+                stream=sys.stderr,
+            )
+            if progress
+            else None
+        ),
+        download_progress=None,
     )
-    with _discarded_binding_on_failure(measurement_path):
-        observer: RunObserver | None = None
-        if read_boolean(namespace, "progress"):
-            device_label = snapshot.accelerators[0].name if snapshot.accelerators else "local endpoint"
-            suite_label = f"{context.suite_id} · {context.suite_epoch}"
-            observer = TerminalRunObserver(device_label=device_label, suite_label=suite_label, stream=sys.stderr)
-        result = asyncio.run(run_manifest(manifest_path, config, observer=observer))
-        artifacts = write_run_artifacts(result, output_dir, config, run_context=run_context, run_id=run_id)
+    started_files = tuple(
+        output_dir / name
+        for name in (
+            ATTACHED_SERVER_FILENAME,
+            MEASUREMENT_BINDING_FILENAME,
+            QUALIFICATION_FILENAME,
+            TELEMETRY_FILENAME,
+            POWER_SUMMARY_FILENAME,
+        )
+    )
+    with _discarded_on_failure(started_files):
+        # The description lands before the binding, because the binding carries its digest.
+        written_server = (
+            None
+            if attached_server is None
+            else write_attached_server(output_dir / ATTACHED_SERVER_FILENAME, attached_server)
+        )
+        write_measurement_binding(
+            measurement_path,
+            replace_fields(
+                binding,
+                observed_context_tokens=probe.observed_tokens,
+                deployment_digest=None if written_server is None else written_server.file_digest,
+            ),
+        )
+        measured = asyncio.run(
+            measure_endpoint(
+                EndpointMeasurement(
+                    manifest_path=manifest_path,
+                    output_dir=output_dir,
+                    config=config,
+                    run_id=run_id,
+                    run_context=run_context,
+                    qualification_profile_id=ATTACHED_QUALIFICATION_PROFILE_ID,
+                    accelerator_platform=_power_platform(snapshot),
+                    device_index=0 if device_index is None else device_index,
+                    power=read_boolean(namespace, "power"),
+                    observe_replay=progress,
+                ),
+                observer,
+            )
+        )
     print_json(
         {
-            "success": result.success,
+            "success": measured.result.success,
             "run_id": run_id,
             "context": run_context.to_json(),
-            "artifacts": _artifact_json(artifacts),
+            "attached_server": None if written_server is None else str(written_server.path),
+            "qualification": str(output_dir / QUALIFICATION_FILENAME),
+            "qualification_passed": measured.qualification.passed,
+            "power": None if measured.power_summary is None else str(measured.power_summary),
+            "artifacts": _artifact_json(measured.artifacts),
         }
     )
-    return _run_status(result, artifacts.failures)
+    return _run_status(measured.result, measured.artifacts.failures)
 
 
 def _tui_status(outcome: TuiOutcome | None, return_code: int | None) -> int:

@@ -24,6 +24,9 @@ from agentperf_local.provenance.hardware_facts import (
     public_text,
 )
 
+NVIDIA_VENDOR = "NVIDIA"
+
+
 NVIDIA_SMI_BASE_FIELDS = ("name", "memory.total", "driver_version")
 
 
@@ -324,7 +327,7 @@ def _parse_nvidia_row(row: str, *, memory_is_unified: bool) -> AcceleratorSnapsh
     memory_bytes = _nvidia_row_memory_bytes(row)
     try:
         return AcceleratorSnapshot(
-            vendor="NVIDIA",
+            vendor=NVIDIA_VENDOR,
             name=name,
             memory_bytes=memory_bytes,
             core_count=None,

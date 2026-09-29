@@ -1,4 +1,4 @@
-"""Build, validate, and send one public submission."""
+"""Build, check, and send one submission."""
 
 from __future__ import annotations
 
@@ -12,61 +12,49 @@ from agentperf_local.common.argparse_fields import (
     read_path,
     read_string,
 )
-from agentperf_local.provenance.benchmark import (
-    SourceProvenance,
-)
-from agentperf_local.submission.bundle import (
-    BUNDLE_STATUS,
-    build_submission_bundle,
-    validate_bundle_output_path,
-    validate_submission_bundle,
-    write_submission_bundle,
+from agentperf_local.submission.builder import (
+    build_submission_request,
+    encode_submission,
+    read_prepared_submission,
+    write_prepared_submission,
 )
 from agentperf_local.submission.client import (
-    PRIVATE_AUDIT_NOTICE,
-    PRIVATE_AUDIT_NOTICE_VERSION,
     SubmissionError,
-    check_revision_allowlist,
     fetch_submission_status,
-    submit_bundle,
+    submit_body,
 )
+from agentperf_local.submission.notice import PRIVACY_NOTICE, PRIVACY_NOTICE_VERSION
 
 
 def prepare_submission_command(namespace: argparse.Namespace) -> int:
     results_dir = read_path(namespace, "results_dir")
-    output_dir = read_path(namespace, "output_dir")
-    validate_bundle_output_path(results_dir, output_dir)
-    bundle = build_submission_bundle(results_dir)
-    written = write_submission_bundle(output_dir, bundle)
+    output = read_path(namespace, "output")
+    request = build_submission_request(results_dir)
+    encoded = encode_submission(request)
+    write_prepared_submission(results_dir, output, encoded)
     print_json(
         {
-            "bundle": str(output_dir),
-            "run_id": bundle.aggregate.run_id,
-            "aggregate_payload_digest": bundle.aggregate.payload_digest,
-            "sanitized_rows_digest": bundle.evidence.rows_digest,
-            "manifest_digest": written.manifest_digest,
-            "total_byte_size": written.total_byte_size,
-            "private_audit": {
-                "deployment_record": bundle.audit.deployment is not None,
-                "runtime_qualification": bundle.audit.runtime_qualification is not None,
-                "power_summary": bundle.audit.power is not None,
-            },
-            "status": BUNDLE_STATUS,
+            "submission": str(output),
+            "run_id": request.run_id,
+            "deployment_mode": request.deployment.deployment_mode,
+            "turns": len(request.turns),
+            "byte_size": len(encoded),
+            "privacy_notice_version": request.privacy_notice_version,
             "upload_performed": False,
         }
     )
     return 0
 
 
-def _confirm_private_audit_notice(namespace: argparse.Namespace) -> None:
+def _confirm_privacy_notice(namespace: argparse.Namespace) -> None:
     """Show the notice and require an explicit yes before any byte leaves the machine."""
-    print(PRIVATE_AUDIT_NOTICE, file=sys.stderr)
-    print(f"(notice version {PRIVATE_AUDIT_NOTICE_VERSION})", file=sys.stderr)
+    print(PRIVACY_NOTICE, file=sys.stderr)
+    print(f"(notice version {PRIVACY_NOTICE_VERSION})", file=sys.stderr)
     if read_boolean(namespace, "yes"):
         return
     if not sys.stdin.isatty():
         raise ValueError("submit needs --yes when it cannot ask on a terminal")
-    answer = input("Send this bundle to Artificial Analysis? [y/N] ")
+    answer = input("Send this submission to Artificial Analysis? [y/N] ")
     if answer.strip().lower() not in ("y", "yes"):
         raise ValueError("submission canceled; nothing was sent")
 
@@ -86,38 +74,29 @@ def _upload_progress_printer() -> Callable[[int, int], None]:
     return report
 
 
-def _warn_about_revision(base_url: str, provenance: SourceProvenance) -> None:
-    """Advisory only: say now if this build cannot reach verified, but never block the upload."""
-    advice = check_revision_allowlist(provenance, base_url=base_url).advice
-    if advice is not None:
-        print(f"note: {advice}", file=sys.stderr)
-
-
 def submit_command(namespace: argparse.Namespace) -> int:
-    bundle_dir = read_path(namespace, "bundle_dir")
+    submission_path = read_path(namespace, "submission")
     base_url = read_string(namespace, "base_url")
     token = resolve_submit_token(namespace)
     if token is None:
         print(f"note: {read_string(namespace, 'token_env')} is unset or blank; submitting anonymously", file=sys.stderr)
-    _confirm_private_audit_notice(namespace)
+    prepared = read_prepared_submission(submission_path)
+    _confirm_privacy_notice(namespace)
     try:
-        bundle = validate_submission_bundle(bundle_dir)
-        _warn_about_revision(base_url, bundle.producer)
-        receipt = submit_bundle(bundle, base_url=base_url, token=token, progress=_upload_progress_printer())
+        receipt = submit_body(prepared.encoded, base_url=base_url, token=token, progress=_upload_progress_printer())
     except SubmissionError as error:
         detail = f" ({', '.join(error.reasons)})" if error.reasons else ""
-        retry = f"; retry after {error.retry_after_seconds} s" if error.retry_after_seconds is not None else ""
-        raise ValueError(f"submission refused: {error}{detail}{retry}") from error
+        raise ValueError(f"submission refused: {error}{detail}") from error
     print_json(
         {
             "submission_id": receipt.submission_id,
             "status": receipt.status,
             "created": receipt.created,
             "bytes_sent": receipt.bytes_sent,
-            "bundle": str(bundle_dir),
+            "submission": str(submission_path),
+            "run_id": prepared.request.run_id,
             "authenticated": token is not None,
-            "private_audit_acknowledged": True,
-            "notice_version": PRIVATE_AUDIT_NOTICE_VERSION,
+            "privacy_notice_version": PRIVACY_NOTICE_VERSION,
             "upload_performed": True,
         }
     )

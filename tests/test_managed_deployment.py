@@ -387,6 +387,10 @@ def test_cached_artifact_builds_a_pinned_framework_launch_plan(
     assert "--ctx-size" in plan.command
     assert str(cached.model_path) in plan.command
     assert plan.command[-2:] == ("--verbosity", "4")
+    # The shareable command names the executable and the model by placeholder, never by local path.
+    assert plan.server_launch_command.startswith('"$PYTHON" --model "$MODEL_DIR"/model.gguf --alias fixture-q4-0-test')
+    assert str(tmp_path) not in plan.server_launch_command
+    assert (plan.model_release_slug, plan.accelerator_backend) == ("fixture", "cuda")
 
 
 def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path: Path) -> None:
@@ -510,6 +514,9 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
     assert plan.command[plan.command.index("--ubatch-size") + 1] == "1024"
     assert "--backend-sampling" in plan.command
     assert "--spec-draft-backend-sampling" in plan.command
+    assert '--model "$MODEL_DIR"/target.gguf' in plan.server_launch_command
+    assert '--model-draft "$MODEL_DIR"/draft.gguf' in plan.server_launch_command
+    assert str(tmp_path) not in plan.server_launch_command
 
 
 @pytest.mark.parametrize(
@@ -718,11 +725,13 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
     runtime_digest = f"sha256:{'1' * 64}"
     plan = DeploymentPlan(
         profile_id="fixture-q4-0",
+        model_release_slug="fixture",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         accelerator_platform="apple-metal",
+        accelerator_backend="metal",
         model_path=artifact,
         artifact_manifest_sha256=f"sha256:{MODEL_DIGEST}",
         artifact_size_bytes=len(MODEL_BYTES),
@@ -741,6 +750,7 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
             "--offloaded",
             offloaded,
         ),
+        server_launch_command="python -m tests.managed_server",
         runtime=FrameworkIdentity(
             version="fixture",
             executable_sha256=runtime_digest,
@@ -1962,6 +1972,11 @@ def test_splash_serves_the_verified_snapshot_and_proves_its_context(
     assert plan.command[plan.command.index("--model") + 1] == SPLASH_REPOSITORY
     assert plan.command[plan.command.index("--served-model-name") + 1] == "fixture-splash-test"
     assert plan.command[plan.command.index("--max-context") + 1] == str(PROFILE_CONTEXT_TOKENS)
+    assert plan.server_launch_command.startswith(
+        '"$SPLASH_HOME"/python/bin/python3 -u "$SPLASH_HOME"/server/server.py --binary "$SPLASH_HOME"/engine/splash '
+        '"$MODEL_DIR"/target "$MODEL_DIR"/draft --tokenizer "$MODEL_DIR"/tokenizer'
+    )
+    assert plan.accelerator_backend == "metal"
     plan = replace_fields(
         plan,
         command=tuple(

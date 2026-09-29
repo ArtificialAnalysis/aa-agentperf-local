@@ -20,10 +20,16 @@ from agentperf_local.common.identity import (
     validate_identifier,
     validate_run_id,
 )
-from agentperf_local.common.json_fields import decode_json_object, optional_string, required_object, required_string
+from agentperf_local.common.json_fields import (
+    decode_json_object,
+    one_of,
+    optional_string,
+    required_object,
+    required_string,
+)
 from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject, JsonValue, pretty_json_bytes
-from agentperf_local.common.package_paths import PACKAGE_ROOT
+from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.hardware import HardwareSnapshot, hardware_snapshot_from_json
 from agentperf_local.workload.schema import load_manifest
 
@@ -36,8 +42,15 @@ MEASUREMENT_BINDING_VERSION = 3
 MEASUREMENT_BINDING_FILENAME = "measurement.json"
 PROVENANCE_COMMAND_TIMEOUT_SECONDS = 5.0
 PRODUCER_CLIENT_NAME = "agentperf-local"
+# The release workflow writes the tagged commit here before it builds the wheel. A source
+# checkout has no such file and reads its commit from git instead.
+RELEASE_REVISION_PATH = PACKAGE_DATA_ROOT / "release-revision.txt"
+GIT_REVISION_HEX_DIGITS = 40
 
-type SourceState = Literal["clean", "dirty", "not_git", "unavailable"]
+# release: an installed release build. clean or dirty: a git checkout with or without
+# uncommitted changes. not_git or unavailable: no commit can be named.
+type SourceState = Literal["release", "clean", "dirty", "not_git", "unavailable"]
+SOURCE_STATES: tuple[SourceState, ...] = ("release", "clean", "dirty", "not_git", "unavailable")
 
 
 class SubmissionContext(BaseModel, frozen=True):
@@ -111,15 +124,12 @@ class SourceProvenance(BaseModel, frozen=True):
     def check_invariants(self) -> Self:
         """Validate public source provenance."""
         validate_identifier(self.client_version, "client_version")
-        if self.source_state not in {"clean", "dirty", "not_git", "unavailable"}:
+        if self.source_state not in SOURCE_STATES:
             raise ValueError("source_state is not supported")
-        if self.source_revision is not None and (
-            len(self.source_revision) != 40
-            or any(character not in "0123456789abcdef" for character in self.source_revision)
-        ):
+        if self.source_revision is not None and not _is_git_revision(self.source_revision):
             raise ValueError("source_revision must be 40 lowercase hex digits or null")
-        if self.source_state in {"clean", "dirty"} and self.source_revision is None:
-            raise ValueError("clean or dirty source state requires a source revision")
+        if self.source_state in {"release", "clean", "dirty"} and self.source_revision is None:
+            raise ValueError("a release, clean, or dirty source state requires a source revision")
         return self
 
     @classmethod
@@ -127,17 +137,7 @@ class SourceProvenance(BaseModel, frozen=True):
         """Read one source provenance block."""
         if required_string(data, "client_name", "producer") != PRODUCER_CLIENT_NAME:
             raise ValueError(f"producer.client_name must be {PRODUCER_CLIENT_NAME}")
-        state = required_string(data, "source_state", "producer")
-        if state == "clean":
-            source_state: SourceState = "clean"
-        elif state == "dirty":
-            source_state = "dirty"
-        elif state == "not_git":
-            source_state = "not_git"
-        elif state == "unavailable":
-            source_state = "unavailable"
-        else:
-            raise ValueError("producer.source_state is not supported")
+        source_state = one_of(required_string(data, "source_state", "producer"), SOURCE_STATES, "producer.source_state")
         return cls(
             client_version=required_string(data, "client_version", "producer"),
             source_revision=optional_string(data, "source_revision", "producer"),
@@ -223,6 +223,21 @@ def workload_digest(manifest_path: Path) -> str:
     return sha256_bytes(canonical)
 
 
+def _is_git_revision(value: str) -> bool:
+    return len(value) == GIT_REVISION_HEX_DIGITS and all(character in "0123456789abcdef" for character in value)
+
+
+def _release_revision(path: Path) -> str | None:
+    """Return the commit a release build embeds, or None for a source checkout."""
+    try:
+        revision = path.read_text(encoding="ascii").strip()
+    except (FileNotFoundError, UnicodeDecodeError):
+        return None
+    if not _is_git_revision(revision):
+        raise ValueError(f"{path.name} must hold one 40-character lowercase commit")
+    return revision
+
+
 def _git_output(root: Path, arguments: tuple[str, ...]) -> bytes | None:
     if shutil.which("git") is None:
         return None
@@ -238,8 +253,18 @@ def _git_output(root: Path, arguments: tuple[str, ...]) -> bytes | None:
     return completed.stdout.strip() if completed.returncode == 0 else None
 
 
-def collect_source_provenance(root: Path | None = None) -> SourceProvenance:
-    """Collect a revision and an explicit source state."""
+def collect_source_provenance(
+    root: Path | None = None, release_revision_path: Path = RELEASE_REVISION_PATH
+) -> SourceProvenance:
+    """Collect a revision and an explicit source state.
+
+    A release build names the commit it was built from. Its package may sit inside some
+    other git checkout, such as a project's virtual environment, so the embedded commit
+    is read before git is asked.
+    """
+    release_revision = _release_revision(release_revision_path)
+    if release_revision is not None:
+        return SourceProvenance(client_version=__version__, source_revision=release_revision, source_state="release")
     selected_root = root if root is not None else PACKAGE_ROOT.parent
     revision_bytes = _git_output(selected_root, ("rev-parse", "HEAD"))
     if revision_bytes is None:

@@ -156,6 +156,24 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     parser.add_argument("--model", required=True, help="endpoint model identifier; stored in private results")
     parser.add_argument("--output-dir", required=True, type=nonempty_path, help="new private result directory")
+    parser.add_argument(
+        "--attached-server",
+        type=nonempty_path,
+        metavar="FILE",
+        help="YAML file that describes the server you started on this computer; needed to submit the run",
+    )
+    parser.add_argument(
+        "--device",
+        type=int,
+        default=None,
+        help="index of the detected accelerator the server uses; required when more than one is detected",
+    )
+    parser.add_argument(
+        "--power",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="sample GPU power with nvidia-smi in a child process; NVIDIA only, skipped when nvidia-smi is absent",
+    )
     _add_api_key_env_flag(parser)
     _add_streaming_flags(parser)
     parser.add_argument(
@@ -212,9 +230,8 @@ def _add_run_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "--tool-mode",
         choices=TOOL_REPLAY_MODES,
         default="none",
-        help="omit, sleep for, or execute recorded tool activity",
+        help="skip tool time, sleep for each turn's recorded tool time, or run the recorded tools",
     )
-    parser.add_argument("--tool-delay-scale", type=float, default=None, help="multiply recorded tool delays")
     parser.add_argument("--live-tool-image", help="override the recorded container image in live mode")
     parser.add_argument(
         "--live-workspace-root",
@@ -369,14 +386,16 @@ def _add_managed_run_parser(subparsers: argparse._SubParsersAction[argparse.Argu
 
 
 def _add_prepare_submission_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("prepare-submission", help="build the four-file submission bundle without uploading")
+    parser = subparsers.add_parser("prepare-submission", help="build the submission file without uploading it")
     parser.add_argument("results_dir", type=nonempty_path, help="bound benchmark results containing measurement.json")
-    parser.add_argument("--output-dir", required=True, type=nonempty_path)
+    parser.add_argument(
+        "--output", required=True, type=nonempty_path, help="new JSON file, outside the results directory"
+    )
 
 
 def _add_submit_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("submit", help="send one prepared bundle to Artificial Analysis")
-    parser.add_argument("bundle_dir", type=nonempty_path, help="directory written by prepare-submission")
+    parser = subparsers.add_parser("submit", help="send one prepared submission to Artificial Analysis")
+    parser.add_argument("submission", type=nonempty_path, help="JSON file written by prepare-submission")
     parser.add_argument("--base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
     parser.add_argument(
         "--token-env",

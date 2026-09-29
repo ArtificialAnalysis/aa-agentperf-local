@@ -48,6 +48,8 @@ FRAMEWORK_VERSION_TIMEOUT_SECONDS = 60.0
 
 
 MAX_FRAMEWORK_VERSION_CHARACTERS = 160
+VERSION_LINE_PREFIX = "version:"
+VERSION_NUMBER_PATTERN = re.compile(r"\d+\.\d+")
 
 
 # A packaged Splash install keeps its runtime beside the `splash` launcher, under
@@ -70,6 +72,8 @@ class FrameworkExecutable(BaseModel, frozen=True):
     command_prefix: tuple[str, ...]
     version_command: tuple[str, ...]
     executable_path: Path
+    # The folder a packaged install keeps its runtime in, which a launch command names by placeholder.
+    install_root: Path | None = None
 
 
 class FrameworkOffer(BaseModel, frozen=True):
@@ -193,6 +197,7 @@ def _resolve_splash_executable(command_finder: CommandFinder) -> FrameworkExecut
         command_prefix=(str(python), "-u", str(server), "--binary", str(engine)),
         version_command=(launcher, "--version"),
         executable_path=engine,
+        install_root=install_root,
     )
 
 
@@ -303,13 +308,23 @@ def framework_offers(
     return tuple(offers)
 
 
+def _version_line(lines: tuple[str, ...]) -> str | None:
+    """Pick the line that states the version.
+
+    A CUDA build of llama.cpp prints its devices before its "version:" line, and other
+    runtimes may log before the bare version, so the first line is only the last resort.
+    """
+    for line in lines:
+        if line.lower().startswith(VERSION_LINE_PREFIX):
+            return line
+    return next((line for line in lines if VERSION_NUMBER_PATTERN.search(line)), lines[0] if lines else None)
+
+
 def _safe_version(encoded: bytes) -> str:
-    decoded = encoded.decode("utf-8", errors="replace").splitlines()
-    if not decoded:
-        return "unreported"
-    version = decoded[0].strip()
+    lines = tuple(line.strip() for line in encoded.decode("utf-8", errors="replace").splitlines() if line.strip())
+    version = _version_line(lines)
     if (
-        not version
+        version is None
         or len(version) > MAX_FRAMEWORK_VERSION_CHARACTERS
         or not version.isascii()
         or not version.isprintable()
@@ -333,7 +348,9 @@ def framework_identity(executable: FrameworkExecutable) -> FrameworkIdentity:
     except OSError:
         version = "unreported"
     else:
-        version = _safe_version(completed.stdout or completed.stderr) if completed.returncode == 0 else "unreported"
+        # Some runtimes print their version on stdout, and llama.cpp prints it on stderr.
+        output = completed.stdout + completed.stderr
+        version = _safe_version(output) if completed.returncode == 0 else "unreported"
     try:
         executable_sha256 = sha256_file(executable.executable_path)
     except OSError as error:

@@ -19,7 +19,8 @@ DEFAULT_SERVED_CONTEXT_TOKENS = 65536
 SSE_EVENTS = (
     b'data: {"choices":[{"delta":{"content":"o"},"finish_reason":null}]}\n\n',
     b'data: {"choices":[{"delta":{"content":"k"},"finish_reason":"stop"}]}\n\n',
-    b'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n\n',
+    b'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5,'
+    b'"prompt_tokens_details":{"cached_tokens":1}}}\n\n',
     b"data: [DONE]\n\n",
 )
 EVENT_DELAY_SECONDS = 0.005
