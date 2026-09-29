@@ -19,12 +19,16 @@ CACHED_PROMPT_TOKENS = 1
 API_KEY_VALUE = "sk-must-not-leave"
 # The server's version names a release, so the client asks GitHub for the tag's commit.
 FRAMEWORK_VERSION = "0.11.0"
-EVENT_DELAY_SECONDS = 0.005
+# Windows asyncio runs a timer early when it is due within one clock tick of about 15.6 ms.
+# A shorter gap can put both output events in one read, which records zero generation time,
+# and the contract refuses zero. Two ticks and more keep the reads apart.
+EVENT_DELAY_SECONDS = 0.05
+# Only the gap between the two output events matters, so the events after it share one write.
 SSE_EVENTS = (
     b'data: {"choices":[{"delta":{"content":"o"},"finish_reason":null}]}\n\n',
-    b'data: {"choices":[{"delta":{"content":"k"},"finish_reason":"stop"}]}\n\n',
+    b'data: {"choices":[{"delta":{"content":"k"},"finish_reason":"stop"}]}\n\n'
     b'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5,'
-    b'"prompt_tokens_details":{"cached_tokens":1}}}\n\n',
+    b'"prompt_tokens_details":{"cached_tokens":1}}}\n\n'
     b"data: [DONE]\n\n",
 )
 ATTACHED_SERVER = """\
