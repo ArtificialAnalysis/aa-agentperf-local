@@ -19,10 +19,12 @@ from agentperf_local.deployment.catalog import (
     ModelDeployment,
     load_model_catalog,
 )
+from agentperf_local.deployment.context_policy import derived_minimum_memory_bytes
 
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
 METAL_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+SPARK_FLASH_NEXT_RECIPE = Path("qwen38-flash-next", "dgx-spark", "qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -81,6 +83,10 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-flash-next-iq4-nl-dgx-spark", "ba5b0d696d6997d82fcc55ba3f8e6128db6e0311"),
+        ("qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark", "7c4f1bc1a2d6847e0cbc01ac6b823f00251de8dd"),
+        ("qwen38-flash-next-nvfp4-mtp-dgx-spark", "7c4f1bc1a2d6847e0cbc01ac6b823f00251de8dd"),
+        ("qwen38-flash-next-iq4-nl-mtp-strix-halo", "ba5b0d696d6997d82fcc55ba3f8e6128db6e0311"),
     ]
     # The DGX Spark NVFP4 recipe is a safetensors weights repository served by vLLM on CUDA.
     qwen_weights = _named(catalog, "qwen38-27b-nvfp4-dgx-spark")
@@ -90,12 +96,13 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 9
+    assert len(dgx_spark) == 12
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
-    # Ling 3.0 flash is the one DGX Spark recipe that llama.cpp serves; the rest run vLLM.
+    # Ling 3.0 flash and Flash-Next are the DGX Spark recipes that llama.cpp serves; the rest run vLLM.
     assert [model.profile_id for model in dgx_spark if model.deployment.vllm is None] == [
-        "ling3-flash-q4-k-m-dspark-dgx-spark"
+        "ling3-flash-q4-k-m-dspark-dgx-spark",
+        "qwen38-flash-next-iq4-nl-dgx-spark",
     ]
     # SGLang profiles share their qualified release. llama.cpp publishes no comparable
     # release version to pin.
@@ -125,13 +132,27 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     draft = next(artifact for artifact in nemotron.artifacts if artifact.filename.startswith("dflash-"))
     assert draft.source_repository == "apolo13x/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-DFlash-GGUF"
     assert draft.source_revision == "3051796f1bcf60ac44a27c2f79c52a2a2b3e2b37"
-    # Ling's target-only recipe drafts nothing; its DSpark recipes cap the checkpoints that copy the draft KV cache.
-    ling = _named(catalog, "ling3-flash-q4-k-m").deployment.llama_cpp
-    assert ling is not None
-    assert ling.speculative_tokens is None
-    ling_dspark = _named(catalog, "ling3-flash-q4-k-m-dspark-dgx-spark").deployment.llama_cpp
-    assert ling_dspark is not None
-    assert ling_dspark.context_checkpoints == 2
+    spark_flash_next = _named(catalog, "qwen38-flash-next-iq4-nl-dgx-spark")
+    assert spark_flash_next.speculation_policy == "disabled-target-only-baseline"
+    flash_next = spark_flash_next.deployment
+    assert flash_next.llama_cpp is not None
+    assert flash_next.llama_cpp.lazy_mode == "on"
+    assert flash_next.llama_cpp.speculative_tokens is None
+    # The lazily read per-layer-embedding table stays on disk, so the floor is below the download size.
+    assert derived_minimum_memory_bytes(flash_next, 65536) < flash_next.artifact_size_bytes
+    halo_flash_next = _named(catalog, "qwen38-flash-next-iq4-nl-mtp-strix-halo").deployment
+    assert halo_flash_next.llama_cpp is not None
+    assert halo_flash_next.llama_cpp.lazy_mode == "on-direct"
+    assert derived_minimum_memory_bytes(halo_flash_next, 65536) < halo_flash_next.artifact_size_bytes
+    # The b12x vLLM recipe reads the same table from the checkpoint files, so its floor leaves it out too.
+    b12x_flash_next = _named(catalog, "qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark").deployment
+    assert b12x_flash_next.vllm is not None
+    assert b12x_flash_next.vllm.reads_ple_table_from_disk
+    assert derived_minimum_memory_bytes(b12x_flash_next, 65536) < b12x_flash_next.artifact_size_bytes
+    # The resident-table vLLM recipe pins the precompiled development build it was measured on.
+    resident_flash_next = _named(catalog, "qwen38-flash-next-nvfp4-mtp-dgx-spark").deployment
+    assert resident_flash_next.runtime_version_for("vllm") == "0.30.1rc1.dev187+g066a1598f.precompiled"
+    assert resident_flash_next.memory.lazy_read_bytes == 0
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
@@ -217,9 +238,10 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
             f"{METAL_RECIPE.as_posix()}: deployment.llama_cpp.threads: Input should be greater than 0",
         ),
         ("llama-negative-cache", "cache_ram_mib must be non-negative"),
-        ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
+        ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode or a vLLM recipe"),
         ("llama-speculative-without-depth", "a speculative llama.cpp recipe must set speculative_tokens"),
         ("llama-target-only-with-depth", "a target-only llama.cpp recipe must not set speculative_tokens"),
+        ("vllm-lazy-read-with-resident-ple-table", "only a llama.cpp recipe with a lazy_mode or a vLLM recipe"),
     ],
 )
 def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, message: str) -> None:
@@ -278,6 +300,16 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         else:
             launch["cache_ram_mib"] = -1
         _write(root, METAL_RECIPE, metal)
+    elif case == "vllm-lazy-read-with-resident-ple-table":
+        spark = _read(root, SPARK_FLASH_NEXT_RECIPE)
+        deployment = spark.get("deployment")
+        assert isinstance(deployment, dict)
+        launch = deployment.get("vllm")
+        assert isinstance(launch, dict)
+        environment = launch.get("environment")
+        assert isinstance(environment, dict)
+        environment["VLLM_PLE_TABLE_MEMORY"] = "ram"
+        _write(root, SPARK_FLASH_NEXT_RECIPE, spark)
     if case not in ("unquoted-as-of", "misnamed-file", "stray-file", "flat-recipe"):
         _write(root, GEMMA_RECIPE, gemma)
 

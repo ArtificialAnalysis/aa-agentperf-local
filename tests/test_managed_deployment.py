@@ -1696,6 +1696,11 @@ def test_recipe_launch_command_carries_its_pinned_flags(
 
 
 DEVELOPMENT_BUILD = "0.1.dev20073+g8e685d198"
+# A vLLM source install over a precompiled wheel reports its base release candidate and a suffix.
+PRECOMPILED_BUILD = "0.30.1rc1.dev187+g066a1598f.precompiled"
+# A build from a modified checkout carries a date, and a vLLM plugin can log before the version.
+DATED_BUILD = "0.1.dev21510+g1794dcf18.d20260927"
+PLUGIN_LOG_LINE = "INFO 09-28 07:41:45 [__init__.py:112] Registered model loader with load format `b12x`"
 
 
 @pytest.mark.parametrize(
@@ -1707,6 +1712,10 @@ DEVELOPMENT_BUILD = "0.1.dev20073+g8e685d198"
         (DEVELOPMENT_BUILD, DEVELOPMENT_BUILD, None),
         (DEVELOPMENT_BUILD, "0.1.dev20074+g1234567", "development build 0.1.dev20073"),
         (DEVELOPMENT_BUILD, "0.30.0", "development build 0.1.dev20073"),
+        (PRECOMPILED_BUILD, PRECOMPILED_BUILD, None),
+        (PRECOMPILED_BUILD, "0.30.1rc1.dev150+g3f2142c11.precompiled", "development build 0.30.1rc1.dev187"),
+        (DATED_BUILD, f"{PLUGIN_LOG_LINE}\n{DATED_BUILD}", None),
+        (DATED_BUILD, PLUGIN_LOG_LINE, "development build 0.1.dev21510"),
     ],
 )
 def test_vllm_launch_serves_only_the_pinned_version(
