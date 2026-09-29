@@ -41,7 +41,7 @@ from agentperf_local.provenance.hardware import (
     selected_accelerator,
 )
 
-# `sglang version` imports torch and initialises CUDA before it can answer: measured at
+# `sglang version` imports torch and initializes CUDA before it can answer: measured at
 # 8.5 s from a cold page cache on a DGX Spark, 2.9 s warm. A bound that a cold first run
 # trips reports a real 0.5.18 as unreported and refuses the recipe.
 FRAMEWORK_VERSION_TIMEOUT_SECONDS = 60.0

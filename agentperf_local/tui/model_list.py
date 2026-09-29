@@ -47,8 +47,8 @@ HARDWARE_COLUMN_HEADING = "Built for"
 NO_SPEEDUP = "—"
 COLUMN_HEADING = Style(bold=True)
 MUTED = Style(color=AA_NEUTRAL_500)
-# Other hardware is greyed out, marks included, so it reads as out of reach at a glance.
-GREYED = Style(color=AA_PLACEHOLDER)
+# Other hardware is grayed out, marks included, so it reads as out of reach at a glance.
+GRAYED = Style(color=AA_PLACEHOLDER)
 MODEL_HEADING = Style(bold=True)
 DIGIT_RUN = re.compile(r"(\d+)")
 # Device recipes sort first by folder name, then these portable ones, narrowest first.
@@ -130,16 +130,16 @@ def model_list_options(recipes: tuple[ListedRecipe, ...], computer: str | None) 
     if computer is not None:
         rows.extend((_heading(f"{THIS_COMPUTER_HEADING}: {computer}"), None, _gap()))
     if here:
-        rows.append(_column_headings(widths, greyed=False))
-        rows.extend(_part(here, widths, greyed=False))
+        rows.append(_column_headings(widths, grayed=False))
+        rows.extend(_part(here, widths, grayed=False))
     else:
         rows.append(Option(Text(NOTHING_RUNS_HERE), disabled=True))
     rows.append(_gap())
     rows.append(Option(CUSTOM_ENDPOINT_LABEL, id=SelectionKind.CUSTOM_ENDPOINT.value))
     if elsewhere:
         rows.extend((_gap(), _heading(OTHER_HARDWARE_HEADING), None, _gap()))
-        rows.append(_column_headings(widths, greyed=True))
-        rows.extend(_part(elsewhere, widths, greyed=True))
+        rows.append(_column_headings(widths, grayed=True))
+        rows.extend(_part(elsewhere, widths, grayed=True))
     return tuple(rows)
 
 
@@ -151,15 +151,15 @@ def _gap() -> Option:
     return Option("", disabled=True)
 
 
-def _column_headings(widths: tuple[int, int], *, greyed: bool) -> Option:
+def _column_headings(widths: tuple[int, int], *, grayed: bool) -> Option:
     model_width, speedup_width = widths
     headings = Text(
         f"{MODEL_COLUMN_HEADING.ljust(model_width)}{COLUMN_GAP}"
         f"{SPEEDUP_COLUMN_HEADING.ljust(speedup_width)}{COLUMN_GAP}{HARDWARE_COLUMN_HEADING}",
         style=COLUMN_HEADING,
     )
-    if greyed:
-        headings.stylize(GREYED)
+    if grayed:
+        headings.stylize(GRAYED)
     return Option(headings, disabled=True)
 
 
@@ -195,20 +195,20 @@ def _column_widths(recipes: tuple[ListedRecipe, ...]) -> tuple[int, int]:
     )
 
 
-def _part(recipes: tuple[ListedRecipe, ...], widths: tuple[int, int], *, greyed: bool) -> Iterator[Option]:
+def _part(recipes: tuple[ListedRecipe, ...], widths: tuple[int, int], *, grayed: bool) -> Iterator[Option]:
     """Yield one part's rows, a model heading before each model's recipes."""
     model_name: str | None = None
     for recipe in recipes:
         if recipe.candidate.model_name != model_name:
             model_name = recipe.candidate.model_name
             heading = Text(model_name, style=MODEL_HEADING)
-            if greyed:
-                heading.stylize(GREYED)
+            if grayed:
+                heading.stylize(GRAYED)
             yield Option(heading, disabled=True)
-        yield Option(_recipe_row(recipe, widths, greyed=greyed), id=recipe.candidate.profile_id)
+        yield Option(_recipe_row(recipe, widths, grayed=grayed), id=recipe.candidate.profile_id)
 
 
-def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, greyed: bool) -> Text:
+def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, grayed: bool) -> Text:
     """Word one recipe as a mark, then its quantization, spec decode method, and target hardware."""
     model_width, speedup_width = widths
     availability = recipe.availability
@@ -219,6 +219,6 @@ def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, greyed: bool) 
         f"{MARK_GAP}{quantization_text(candidate).ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
         f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{hardware_target_text(candidate, recipe.hardware)}"
     )
-    if greyed:
-        row.stylize(GREYED)
+    if grayed:
+        row.stylize(GRAYED)
     return row

@@ -524,7 +524,7 @@ class FakeManagedReplayController:
 
 @dataclass(slots=True, kw_only=True)
 class WedgedCleanupController:
-    """Hold owned cleanup open so a cancelled run cannot finish on its own."""
+    """Hold owned cleanup open so a canceled run cannot finish on its own."""
 
     started: asyncio.Event
     cancelling: asyncio.Event
@@ -1552,7 +1552,7 @@ async def test_cancel_discards_the_active_replay_without_resume(tmp_path: Path) 
         assert app.execution is None
         result_status = str(app.query_one("#result-status", Static).content)
         assert "No results were saved" in result_status
-        assert "Run cancelled" in str(app.query_one("#result-evidence", Static).content)
+        assert "Run canceled" in str(app.query_one("#result-evidence", Static).content)
 
         stale_generation = app.run_generation - 1
         output_dir = tmp_path / "private" / "results"
@@ -1721,7 +1721,7 @@ async def test_quit_during_a_wedged_cancellation_can_still_force_an_exit(tmp_pat
         await pilot.pause()
         assert app.is_running
         assert str(app.query_one("#run-metrics", Static).content) == (
-            "Still cancelling. Press q again to force quit. The model server may be left running."
+            "Still canceling. Press q again to force quit. The model server may be left running."
         )
 
         await pilot.press("q")

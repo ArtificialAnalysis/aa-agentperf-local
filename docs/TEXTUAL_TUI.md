@@ -41,7 +41,7 @@ uv run agentperf-local tui \
 | `--base-url URL` | Set the OpenAI-compatible API base URL. Plain http is fine for local and LAN servers; a non-local URL combined with an API key requires HTTPS so the key never travels in cleartext. |
 | `--model NAME` | Set the model name sent to the server. |
 | `--api-key-env NAME` | Name an environment variable containing the API key. |
-| `--client python\|rust` | Select the recorded streaming client. Default `python`; `rust` is an experimental client for high-concurrency benchmarking and needs the `rust` extra. |
+| `--client python\|rust` | Select the recorded streaming client. Default `python`; `rust` is an experimental client that records timings outside Python and needs the `rust` extra. |
 | `--recipes PATH` | Load recipes from another folder with the same layout. |
 | `--cache-root PATH` | Set the model cache used by managed models. Defaults to the standard Hugging Face hub cache, honoring `HF_HUB_CACHE` and `HF_HOME`. |
 | `--port PORT` | Set the owned localhost port used by a managed server. |
@@ -112,7 +112,7 @@ The model screen lists every recipe in [`recipes/`](../recipes), plus an
 `Other model or server` entry. The list has two parts. **This computer** holds
 the recipes for this computer's GPU family, then `Other model or server`.
 After a gap, **Other hardware** holds the recipes for other GPU families,
-greyed out. Each part is a table with the column headings **Model/Quant** (the
+grayed out. Each part is a table with the column headings **Model/Quant** (the
 model, then each recipe's weight format), **Spec decode** (the speculative
 decoding method, or a dash for none), and **Built for** (the hardware the recipe
 was built for). Recipes sit under their model's name. A colored mark gives each
@@ -123,7 +123,7 @@ recipe's standing:
 | Green `●` | Runs on this computer. |
 | Amber `▲` | Needs setup first (install a framework, or memory could not be checked), or fits only at a reduced context the replay allows. |
 | Red `✗` | Too large for this computer's memory at any context the replay allows. |
-| Grey `·` | Made for other hardware. |
+| Gray `·` | Made for other hardware. |
 
 Within a part, models follow in name order, and a model's recipes go best
 standing first. Each recipe is checked at its full context, whatever context
@@ -150,7 +150,7 @@ server process is pinned to that device so the private records describe only it.
 
 The managed setup screen also has a Context selector. It offers the full
 65,536-token benchmark context plus a fixed ladder of reduced choices (32,768 /
-16,384 / 8,192 tokens), each labelled with the accelerator memory it needs. A
+16,384 / 8,192 tokens), each labeled with the accelerator memory it needs. A
 reduced choice appears only when the selected replay's floor allows it, so the
 default replay offers the full context alone. The default is the full context
 when it fits the selected device, otherwise the largest reduced option that
@@ -189,7 +189,7 @@ bytes sent; 100% does not mean the service has confirmed the submission. A spinn
 stays visible beside New run and says “Waiting for confirmation…” until the
 service responds. While submission is in flight, New run is disabled and `q`
 and Escape wait; `Ctrl+C` cancels the upload
-and quits. A failed or cancelled upload keeps the bundle on disk and shows the
+and quits. A failed or canceled upload keeps the bundle on disk and shows the
 exact `submit` command that retries it.
 
 ## Network and evidence boundary
@@ -213,7 +213,7 @@ server reports is bound into the run's evidence the same way the `run` command
 binds it.
 
 The same check sends `GET /api/version` and `GET /api/tags` to detect Ollama.
-Ollama cannot honour `ignore_eos`, so the app warns before you press Run and
+Ollama cannot honor `ignore_eos`, so the app warns before you press Run and
 uses the `recorded` output policy. End-to-end latency is then a normalized estimate and is not
 directly comparable with `exact` runs. For other servers, the app probes
 `ignore_eos` before the replay and falls back to `recorded` the same way if the
@@ -264,11 +264,11 @@ The result screen leads with the outcome, tokens per second, median response
 times, and the folder containing the reports. **Result details** reveals p90
 timings, per-turn decode percentiles, and three final range charts.
 
-A range chart is a one-line box plot of one per-turn metric, labelled under
+A range chart is a one-line box plot of one per-turn metric, labeled under
 the line with its lowest and highest values (min and max) and the median. The
 whiskers reach the min and max, the box spans the middle half of turns (p25 to
 p75), and the lit cell is the median. The plot is a sketch rather than to scale:
-it centres on the median on a log scale, so its width shows how far turns stray
+it centers on the median on a log scale, so its width shows how far turns stray
 from typical, and a whisker past the edge ends in an arrow. Decode speed reaches
 2× either side of the median and the two times reach 10×, because latency grows
 with each task's context; one metric always uses the same scale, so runs compare
@@ -298,7 +298,7 @@ runtime fingerprint, artifact digest, detected hardware, and pre-inference
 measurement binding.
 
 Cancellation before result finalization discards the active replay, removes the
-measurement binding, and removes the run folder when it is empty. A cancelled or
+measurement binding, and removes the run folder when it is empty. A canceled or
 failed managed run keeps `deployment.log`, `deployment.json`, and
 `measurement.json` in its own run folder as diagnostics; the next attempt names
 a fresh run folder, so those leftovers never block it. Cancellation is disabled

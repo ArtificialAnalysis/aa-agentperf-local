@@ -22,7 +22,7 @@
 `agentperf-local` measures how fast your machine serves an AI agent. It replays
 recorded agent conversations against an OpenAI-compatible model server and
 reports throughput and latency. Each request carries the full conversation so
-far, as a real agent's would. It measures speed, not answer quality.
+far, as a real agent's would. It measures speed without measuring output quality.
 
 It can benchmark a server you already run, or it can download a pinned model,
 start the server, and benchmark it for you.
@@ -33,6 +33,14 @@ You need [`uv`](https://docs.astral.sh/uv/). It fetches Python 3.12 if you do
 not have it. Docker and Rust are optional. macOS, Linux, and Windows are
 supported. On Windows, managed runs need an NVIDIA GPU and llama.cpp; vLLM and
 SGLang run only on Linux.
+
+You also need either a model server that you already run with an
+OpenAI-compatible API, such as llama.cpp, LM Studio, vLLM, SGLang, or Ollama,
+or a serving framework that the tool can start. The bundled recipes use
+llama.cpp (`llama-server` on your `PATH`), or vLLM or SGLang on NVIDIA GPUs at
+the exact version each recipe pins. The tool does not install frameworks.
+`agentperf-local deployment-options --profile-id <id>` shows which frameworks
+can serve a recipe on this machine.
 
 ```console
 uv tool install agentperf-local
@@ -72,7 +80,7 @@ uv run agentperf-local managed-run \
 `managed-run` downloads the pinned model into the Hugging Face cache, checks
 every file's SHA-256, starts the server on localhost, runs the replay, and
 stops the server. Every recipe it can run is a YAML file in
-[`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model and then hardware.
+[`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model then hardware.
 
 ## The default run
 
@@ -89,12 +97,26 @@ A full run needs a 65,536-token context at batch size 1. Every catalog profile
 launches at that context. An attached server that serves more, such as
 131,072 tokens, also counts as full.
 
-The default replay's largest turn needs about 58,000 tokens, so it never runs
-below 65,536. A smaller context only serves a replay whose floor allows it,
-such as `aa-mini-v1`: pass `--context-tokens 32768` to `managed-run`, or choose
-a smaller context in the TUI. That run is marked `reduced: true` and is not
-comparable with full-context results. An attached server's context is read
-from the server at the start of the run.
+The default replay's largest turn needs about 58,000 tokens, so it only runs
+at the full 65,536. If your device cannot fit that, you can still check your
+setup with `aa-mini-v1`, which needs 8,192:
+
+```console
+uv run agentperf-local managed-run \
+  --profile-id gemma4-12b-it-q4-0 \
+  --framework llama-cpp \
+  --replay aa-mini-v1 \
+  --context-tokens 8192 \
+  --output-dir results/gemma4-12b-mini
+```
+
+In the TUI, start with `uv run agentperf-local tui --replay aa-mini-v1` and
+choose a smaller context on the Setup screen. A run below 65,536 tokens is
+marked `reduced: true` and is not comparable with full-context results.
+
+For an attached server, the tool reads the context at the start of the run:
+`meta.n_ctx` from llama.cpp, or `max_model_len` from vLLM and SGLang. A server
+that reports neither is recorded as not comparable.
 
 ## Attached servers
 
@@ -117,10 +139,10 @@ Use your server's base URL and the model name it reports:
 | SGLang | `http://127.0.0.1:30000/v1` |
 
 The `exact` policy sends `ignore_eos`, which is not part of the OpenAI API.
-Before the replay, `run` checks that the server honours it. If it does not,
+Before the replay, `run` checks that the server honors it. If it does not,
 `run` stops and names the flag to change.
 
-**Ollama cannot honour `ignore_eos`.** The tool detects Ollama before the run
+**Ollama cannot honor `ignore_eos`.** The tool detects Ollama before the run
 and warns you. The run then uses the `recorded` policy, which lets the model
 stop on its own and reports end-to-end latency as a normalized estimate. That
 result is not directly comparable with `exact` runs.
@@ -163,8 +185,8 @@ Live-tool runs cannot be submitted.
 
 ## Rust client (experimental)
 
-Python is the default client. An optional Rust client is available for
-high-concurrency benchmarking. It needs a [Rust toolchain](https://rustup.rs):
+Python is the default client. An optional Rust client records timings outside
+Python. It needs a [Rust toolchain](https://rustup.rs):
 
 ```console
 uv sync --extra rust
@@ -180,7 +202,7 @@ metrics.
 Submitting is optional and nothing is uploaded unless you ask.
 `prepare-submission` builds a bundle, `submit` sends it, and
 `submission-status` reads it back. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
-what is sent and what stays private.
+details on what is sent to Artificial Analysis.
 
 ## Commands
 
@@ -188,7 +210,7 @@ what is sent and what stays private.
 | --- | --- |
 | `tui` | Open the guided full-screen app. |
 | `run` | Replay a workload against a server you run. |
-| `managed-run` | Download a catalog model, serve it, and benchmark it. |
+| `managed-run` | Download a catalog model, then serve and benchmark it. |
 | `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |
@@ -216,7 +238,7 @@ results/my-server/
 `summary.json` holds the headline numbers: output tokens per second and median
 and p95 first-token and turn times. It is written last, so a crashed run has
 no summary. A managed run also writes the server log and deployment record.
-[FORMATS.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/FORMATS.md) describes every file.
+[FORMATS.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/FORMATS.md) describes each file.
 
 The results are private. They can contain paths, model labels, and errors.
 Starting a run sends the recorded prompts to the model server, so a remote URL
@@ -235,7 +257,7 @@ CI runs these checks and the Python and Rust client equivalence tests. See
 
 ## Documentation
 
-- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes): every managed-run recipe, and how to add one.
+- [Recipes](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes): managed-run recipes and instructions for adding more.
 - [Textual TUI](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/TEXTUAL_TUI.md): options, keys, and screens.
 - [Architecture](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/ARCHITECTURE.md): measurement rules, evidence boundary,
   and package layout.
@@ -244,4 +266,4 @@ CI runs these checks and the Python and Rust client equivalence tests. See
 
 agentperf-local is built and maintained by [Artificial Analysis](https://artificialanalysis.ai).
 Code is licensed under [Apache-2.0](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/LICENSE). The Artificial Analysis name and logo
-are not covered by the code licence.
+are not covered by the code license.

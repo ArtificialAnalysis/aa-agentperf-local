@@ -32,7 +32,7 @@ def generated_whole_budget(finish_reason: str | None, server_output_tokens: int 
     """Report whether a response ran to the max_tokens it was given.
 
     A "length" finish is the server saying it hit the cap. A usage count that disagrees
-    overrides it; a missing count cannot, because an honouring server that omits usage
+    overrides it; a missing count cannot, because an honoring server that omits usage
     would otherwise read as one that stopped early.
     """
     if finish_reason != LENGTH_FINISH_REASON:

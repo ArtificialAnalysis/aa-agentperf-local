@@ -41,7 +41,7 @@ MARK_COLORS = {DONE_MARK: AA_LIME, FAILED_MARK: AA_RED, WARNING_MARK: AA_ORANGE}
 RANGE_PLOT_CELLS = 41
 RANGE_PLOT_CENTER = RANGE_PLOT_CELLS // 2
 CHART_WIDTH = RANGE_PLOT_CELLS
-# The plot centres on the median and reaches a fixed ratio either side of it on a log
+# The plot centers on the median and reaches a fixed ratio either side of it on a log
 # scale, so its width shows spread relative to the median, not to the unit. Decode speed
 # varies far less than latency, which grows with each task's context.
 SPEED_PLOT_EDGE_RATIO = 2.0
@@ -63,7 +63,7 @@ CONTEXT_WINDOW_UNKNOWN = "context length not reported"
 
 @cache
 def _colored_kitty(art: str) -> Text:
-    """Colour one pose's face once; every later frame change is a lookup and a repaint."""
+    """Color one pose's face once; every later frame change is a lookup and a repaint."""
     ears, face, paws = art.splitlines()
     return Text.assemble(ears, "\n", face[0], (face[1:-1], AA_PURPLE_LIGHT), face[-1], "\n", paws)
 
@@ -150,7 +150,7 @@ def summarize_range(values: Sequence[float]) -> RangeSummary | None:
 
 
 def _plot_cell(value: float, median: float, edge_ratio: float) -> int:
-    """Place one value on the median-centred log scale, clamped to the plot."""
+    """Place one value on the median-centered log scale, clamped to the plot."""
     if median <= 0:
         return RANGE_PLOT_CENTER
     if value <= 0:
@@ -192,7 +192,7 @@ def range_plot(summary: RangeSummary, edge_ratio: float) -> Text:
 
 
 def range_labels(summary: RangeSummary, format_value: Callable[[float], str]) -> Text:
-    """Label the plot: min at its left, the median under its centre, where the median sits, and max at its right.
+    """Label the plot: min at its left, the median under its center, where the median sits, and max at its right.
 
     When the numbers are too long to spread out, they fall back to one run separated by gaps.
     """
@@ -213,7 +213,7 @@ def range_labels(summary: RangeSummary, format_value: Callable[[float], str]) ->
 
 
 class RangeChart(Static):
-    """Show one per-turn metric as a one-line box plot labelled with its min, median, and max.
+    """Show one per-turn metric as a one-line box plot labeled with its min, median, and max.
 
     Every rendition is three lines, so a repaint never needs a layout pass.
     """
@@ -282,7 +282,7 @@ class ContextGauge(Static):
             line.append(f" · {CONTEXT_WINDOW_UNKNOWN}", style=AA_NEUTRAL_500)
         else:
             fraction = tokens / context_tokens
-            # A request larger than the window will not fit, so its size says so in the warning colour.
+            # A request larger than the window will not fit, so its size says so in the warning color.
             size_style = AA_ORANGE if fraction > 1 else AA_NEUTRAL_50
             unit = "" if compact else " tokens"
             line.append(f"about {tokens:,} of {context_tokens:,}{unit}", style=size_style)

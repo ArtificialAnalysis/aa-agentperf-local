@@ -26,7 +26,7 @@ uv run agentperf-local submission-status sub_...
 ```
 
 Sending the same bundle again returns the same submission, so you can retry an
-interrupted upload with the same command. A failed or cancelled upload in the
+interrupted upload with the same command. A failed or canceled upload in the
 TUI keeps the bundle and shows the `submit` command that retries it.
 
 A token is optional. Set `AGENTPERF_SUBMIT_TOKEN`, or name another variable with
