@@ -37,8 +37,9 @@ SGLang run only on Linux.
 You also need either a model server that you already run with an
 OpenAI-compatible API, such as llama.cpp, LM Studio, vLLM, SGLang, or Ollama,
 or a serving framework that the tool can start. The bundled recipes use
-llama.cpp (`llama-server` on your `PATH`), or vLLM or SGLang on NVIDIA GPUs at
-the exact version each recipe pins. The tool does not install frameworks.
+llama.cpp (`llama-server` on your `PATH`), vLLM or SGLang on NVIDIA GPUs, or
+Splash on Apple Silicon, at the exact version each recipe pins. The tool does
+not install frameworks.
 `agentperf-local deployment-options --profile-id <id>` shows which frameworks
 can serve a recipe on this machine.
 
@@ -82,6 +83,23 @@ every file's SHA-256, starts the server on localhost, runs the replay, and
 stops the server. Every recipe it can run is a YAML file in
 [`recipes/`](https://github.com/ArtificialAnalysis/aa-agentperf-local/tree/main/recipes), by model then hardware.
 
+The `qwen38-27b-splash-dflash` recipe serves on [Splash](https://github.com/incoai/splash),
+Inco AI's Metal engine for Apple Silicon (M3 or newer, macOS 26.4 or later).
+Install it with `brew install incoai/tap/splash`. The recipe pins Splash 1.0.2
+and the `incoai/Qwen3.8-27B-Splash` package by commit. `managed-run` downloads
+and verifies the package itself, then starts Splash's server on that snapshot,
+so Splash never resolves a newer revision. Splash drops `ignore_eos`, so this
+recipe runs only under the `recorded` output policy, and its KV cache is always
+eight-bit. Both make its results not comparable with `exact` runs:
+
+```console
+uv run agentperf-local managed-run \
+  --profile-id qwen38-27b-splash-dflash \
+  --framework splash \
+  --output-token-policy recorded \
+  --output-dir results/qwen38-splash
+```
+
 ## The default run
 
 The default replay is `agentperf-default-v1`: eight recorded agent tasks with
@@ -115,8 +133,9 @@ choose a smaller context on the Setup screen. A run below 65,536 tokens is
 marked `reduced: true` and is not comparable with full-context results.
 
 For an attached server, the tool reads the context at the start of the run:
-`meta.n_ctx` from llama.cpp, or `max_model_len` from vLLM and SGLang. A server
-that reports neither is recorded as not comparable.
+`meta.n_ctx` from llama.cpp, `max_model_len` from vLLM and SGLang, or
+`maximum_context_tokens` from the Splash status endpoint. A server that
+reports none of them is recorded as not comparable.
 
 ## Attached servers
 
@@ -139,8 +158,9 @@ Use your server's base URL and the model name it reports:
 | SGLang | `http://127.0.0.1:30000/v1` |
 
 The `exact` policy sends `ignore_eos`, which is not part of the OpenAI API.
-Before the replay, `run` checks that the server honors it. If it does not,
-`run` stops and names the flag to change.
+Before the replay, `run` and `managed-run` check that the server honors it. If
+it does not, they stop and name the flag to change. The TUI switches to the
+`recorded` policy instead and says so.
 
 **Ollama cannot honor `ignore_eos`.** The tool detects Ollama before the run
 and warns you. The run then uses the `recorded` policy, which lets the model
@@ -152,7 +172,8 @@ name with `--api-key-env`. No flag takes a literal key.
 
 ## Real tool calling
 
-By default the replay skips tool time between turns. `run --tool-mode live`
+By default the replay skips tool time between turns. `run --tool-mode fixed_delay`
+sleeps after each turn for the tool time recorded there. `run --tool-mode live`
 runs the recorded shell commands in Docker containers, so tool time is real.
 This mode is opt-in and needs Docker and prebuilt images. The build scripts
 are in the source checkout. They are bash scripts, so on Windows run them from
@@ -181,7 +202,6 @@ Security caveats:
 - The scripts pull or build third-party images and clone the SWE-bench harness
   from GitHub.
 
-Live-tool runs cannot be submitted.
 
 ## Rust client (experimental)
 
@@ -200,8 +220,9 @@ metrics.
 ## Submitting results
 
 Submitting is optional and nothing is uploaded unless you ask.
-`prepare-submission` builds a bundle, `submit` sends it, and
-`submission-status` reads it back. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
+`prepare-submission` builds the submission file, `submit` sends it, and
+`submission-status` reads it back. A run on a server you started needs
+`run --attached-server FILE`. See [SUBMITTING.md](https://github.com/ArtificialAnalysis/aa-agentperf-local/blob/main/docs/SUBMITTING.md) for
 details on what is sent to Artificial Analysis.
 
 ## Commands
@@ -214,8 +235,8 @@ details on what is sent to Artificial Analysis.
 | `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |
-| `prepare-submission` | Build a submission bundle without uploading it. |
-| `submit` | Send a prepared bundle to Artificial Analysis. |
+| `prepare-submission` | Build a submission file without uploading it. |
+| `submit` | Send a prepared submission to Artificial Analysis. |
 | `submission-status` | Read a submission's status. |
 
 Run `uv run agentperf-local <command> --help` for every option.

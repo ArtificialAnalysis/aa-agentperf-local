@@ -25,7 +25,6 @@ from agentperf_local.replay.runner import ReplayDelaySource, RunResult, ToolRepl
 
 REPORT_VERSION = 1
 SHORT_OUTPUT_RATIO_WARNING_THRESHOLD = 0.5
-OUTPUT_LENGTH_NORMALIZATION_POLICY = "observed-decode-time-v1"
 # A first-to-last-token window spans one decode interval fewer than the tokens
 # it covers, so a turn needs two output tokens before any per-token time exists.
 MIN_MEASURABLE_OUTPUT_TOKENS = 2
@@ -749,7 +748,6 @@ def _config_json(config: RunConfig, cache: CacheIsolationMetadata, run_context: 
         "cache_isolation": cache.to_dict(),
         "tool_replay": {
             "mode": config.tool_mode,
-            "delay_scale": config.tool_delay_scale,
             # The profiled mode is gone; these stay as null so the report v1 shape does not change.
             "profile": None,
             "profile_statistic": None,

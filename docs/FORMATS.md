@@ -126,82 +126,53 @@ served-context observation from the pre-replay probe — to that attempt.
 These hashes establish local byte consistency. They do not prove that an endpoint
 loaded the declared bytes or ran on the detected accelerator.
 
-## Local public aggregate
+## Submission body
 
-`prepare-submission` converts a valid bound result into the `public-minimal-v1`
-aggregate. The typed producer
-allowlists aggregate metrics, execution-bound device-class fields for managed runs,
-benchmark labels, producer provenance, and digests that bind the aggregate to local
-evidence. Attached runs publish `hardware: null` because the client snapshot does
-not describe the remote server. The aggregate does not copy prompts, responses, tool
-content, endpoints, filesystem paths, stable device identifiers, or raw diagnostics.
+`prepare-submission` turns a valid bound result into one JSON body, the exact
+bytes `submit` sends to `POST /v1/submissions`. The service publishes the body's
+shape as an OpenAPI spec. The client keeps a pinned copy,
+[`submission-openapi.json`](../agentperf_local/data/submission-openapi.json),
+builds the body with typed models that mirror it, and checks each body against
+it before any upload. A CI job fails when the live spec differs from the copy.
 
-The envelope contains two different hashes:
+The builder reads the recorded files, not a fresh measurement:
 
-- `payload_digest` is SHA-256 over the compact, sorted-key bytes of the `payload`
-  object, prefixed with `sha256:`.
-- The bundle manifest's exact-file SHA-256 covers the emitted envelope bytes,
-  including whitespace and the trailing newline.
+- `measurement.json` gives the run identifier, the workload digest, the context,
+  the hardware snapshot, and the client's source commit.
+- `summary.json` gives the run settings and durations. The settings the service
+  pins, such as the transport policy, the output-token fallback, and cache
+  isolation, are read from it and passed through, so a run made with other
+  values is refused.
+- `turns.jsonl` gives each turn's raw timings and token counts. The service
+  derives every total and distribution from them.
+- `qualification.json` and, on NVIDIA, `power.json` give the probe outcomes and
+  the measured phase's power.
+- `deployment.json` (managed) or `attached-server.json` (attached) describes the
+  server. The measurement binding carries that file's digest, so an edit after
+  the run is refused.
 
-The packager reopens and cross-checks the complete private artifact set. It rejects
-request or tool failures, incomplete timing and token evidence, short outputs,
-capped generations, action-count mismatches, a summary whose run identifier
-differs from the binding, and inconsistent aggregates. Observers run between
-turns and their time is excluded from the measured duration; a run stays
-packageable while that excluded time is at most one percent of the measured
-duration, and the aggregate states it as `observer_duration_ms` so a receiver
-can apply a stricter rule. A valid aggregate is still self-reported evidence, not
-proof of hardware or model identity.
+The builder refuses a summary whose run identifier differs from the binding,
+workload files that changed after the run, failed turns and tool calls, turns
+without a decode window, and progress-display time above one percent of the
+measured duration. A valid body is still self-reported evidence, not proof of
+hardware or model identity.
 
-The sanitized turn evidence in the bundle is ordinal-only. It excludes source
-identifiers and generated content, and a receiver can derive its aggregate timing,
-token, pacing, and action metrics. Timing and task shape can still fingerprint the
-underlying trajectory.
-
-`prepare-submission` writes a new directory containing:
-
-```text
-submission/
-├── aggregate.json                  # public-minimal-v1, may be published
-├── sanitized-turn-evidence.json    # may be published
-├── private-audit.json              # AA-private, never published
-└── bundle-manifest.json            # written last, digests the other three
-```
-
-`private-audit.json` carries what the service needs to classify a submission
-but must not publish: the full hardware snapshot (including GPU power limit,
-clock caps, and CPU base frequency), the path-free deployment summary, the
-runtime qualification report, and the reduced power summary. It contains no
-prompts, responses, paths, hostnames, endpoint URLs, or credentials, and it
-states its own bounded retention. Only a managed run writes a qualification
-report; an attached run's audit carries none.
-
-The bundle manifest binds the exact length, SHA-256, media type, schema, role,
-privacy profile, and run identifier of the three payload files. It is written
-last. `submit` reopens the directory, verifies exact files and
-cross-file bindings, checks every payload object against the closed field
-contracts, and recomputes row-derived aggregates. It requires a managed run's
-private audit to reproduce the public hardware profile. An attached run must omit
-that public profile. Every bundle must name the same run and aggregate throughout.
-
-`prepare-submission` performs no network request. `submit` is the only command
-that sends bytes: it validates the bundle as above, prints the private-audit notice, asks for a yes,
-and sends the four files in one request. Re-sending the same bundle returns the
-same submission, so an interrupted upload is retried by running `submit` again.
-`submission-status` reads back the status, tier, and reason codes.
+`submit` is the only command that sends the body. It checks the file against
+the contract, the pinned spec, and the current privacy notice version, prints
+the notice, asks for a yes, and sends the bytes exactly as written. The service
+answers a retry of the same content with the same submission, and a different
+body for the same `run_id` with 409. `submission-status` reads back the status
+and reason codes.
 
 ## Supporting schemas
 
 | Schema | Produced or consumed by |
 | --- | --- |
 | [`recipe-v1`](schemas/recipe-v1.schema.json) | One managed-run recipe in [`recipes/`](../recipes) |
-| [`private-audit-v1`](schemas/private-audit-v1.schema.json) | The AA-private audit file inside a bundle |
 | [`private-nvidia-telemetry-v2`](schemas/private-nvidia-telemetry-v2.schema.json) | The NVIDIA collector; carries the run identifier and records glitched lines as all-missing samples |
-| [`public-submission-v2`](schemas/public-submission-v2.schema.json) | `prepare-submission` and aggregate bundle validation; carries the run identifier and the observer time the run excluded |
 | [`runtime-qualification-v1`](schemas/runtime-qualification-v1.schema.json) | Superseded by v2; kept only because the checked-in MLX evidence uses it |
-| [`runtime-qualification-v2`](schemas/runtime-qualification-v2.schema.json) | Managed runs; adds the run identifier |
-| [`sanitized-turn-evidence-v1`](schemas/sanitized-turn-evidence-v1.schema.json) | `prepare-submission` |
-| [`submission-bundle-v2`](schemas/submission-bundle-v2.schema.json) | `prepare-submission` and `submit`; binds the private audit and the run identifier |
+| [`runtime-qualification-v2`](schemas/runtime-qualification-v2.schema.json) | Every run; adds the run identifier |
+| [`submission-openapi.json`](../agentperf_local/data/submission-openapi.json) | The service's spec; `prepare-submission` and `submit` check each body against it |
 
 Schema validation checks structure, types, bounds, enums, and closed objects.
 Semantic validators still enforce relationships such as exact turn order,

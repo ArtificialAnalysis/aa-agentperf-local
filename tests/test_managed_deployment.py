@@ -43,6 +43,7 @@ from agentperf_local.deployment.context_policy import (
     MINIMUM_CONTEXT_TOKENS,
     derived_minimum_memory_bytes,
 )
+from agentperf_local.deployment.endpoint_probes import probe_served_context_tokens
 from agentperf_local.deployment.frameworks import (
     CommandFinder,
     FrameworkIdentity,
@@ -120,6 +121,7 @@ def _candidate() -> ModelCandidate:
         profile_id="fixture-q4-0",
         as_of="2026-09-21",
         display_name="Fixture Q4_0",
+        model_release_slug="fixture",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
         devices=("nvidia-cuda", "amd-rocm", "apple-silicon"),
@@ -385,6 +387,10 @@ def test_cached_artifact_builds_a_pinned_framework_launch_plan(
     assert "--ctx-size" in plan.command
     assert str(cached.model_path) in plan.command
     assert plan.command[-2:] == ("--verbosity", "4")
+    # The shareable command names the executable and the model by placeholder, never by local path.
+    assert plan.server_launch_command.startswith('"$PYTHON" --model "$MODEL_DIR"/model.gguf --alias fixture-q4-0-test')
+    assert str(tmp_path) not in plan.server_launch_command
+    assert (plan.model_release_slug, plan.accelerator_backend) == ("fixture", "cuda")
 
 
 def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path: Path) -> None:
@@ -508,6 +514,9 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
     assert plan.command[plan.command.index("--ubatch-size") + 1] == "1024"
     assert "--backend-sampling" in plan.command
     assert "--spec-draft-backend-sampling" in plan.command
+    assert '--model "$MODEL_DIR"/target.gguf' in plan.server_launch_command
+    assert '--model-draft "$MODEL_DIR"/draft.gguf' in plan.server_launch_command
+    assert str(tmp_path) not in plan.server_launch_command
 
 
 @pytest.mark.parametrize(
@@ -716,11 +725,13 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
     runtime_digest = f"sha256:{'1' * 64}"
     plan = DeploymentPlan(
         profile_id="fixture-q4-0",
+        model_release_slug="fixture",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework="llama-cpp",
         accelerator_platform="apple-metal",
+        accelerator_backend="metal",
         model_path=artifact,
         artifact_manifest_sha256=f"sha256:{MODEL_DIGEST}",
         artifact_size_bytes=len(MODEL_BYTES),
@@ -739,6 +750,7 @@ def _owned_plan(tmp_path: Path, *, offloaded: str = "1/1", port: int | None = No
             "--offloaded",
             offloaded,
         ),
+        server_launch_command="python -m tests.managed_server",
         runtime=FrameworkIdentity(
             version="fixture",
             executable_sha256=runtime_digest,
@@ -1830,3 +1842,156 @@ def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch
             command_finder=lambda command: str(executable),
             alias_nonce="test",
         )
+
+
+SPLASH_FILES: tuple[tuple[str, bytes], ...] = (
+    ("draft/model.bin", b"fixture draft"),
+    ("manifest.json", b'{"schema_version": 3}'),
+    ("target/layer-0.bin", b"fixture target layer"),
+    ("tokenizer/tokenizer.json", b'{"version": "fixture"}'),
+)
+SPLASH_REPOSITORY = "example/model-splash"
+SPLASH_VERSION = "1.0.2"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# A stand-in for the server script inside a Splash install. It reads the flags the
+# launcher passes and serves them through the shared fixture server.
+SPLASH_SERVER_SCRIPT = """\
+import argparse
+import sys
+
+sys.path.insert(0, {root!r})
+from tests.managed_server import main
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--binary", required=True)
+for positional in ("target", "draft"):
+    parser.add_argument(positional)
+parser.add_argument("--port", required=True)
+parser.add_argument("--served-model-name", required=True)
+parser.add_argument("--max-context", required=True)
+known, _ = parser.parse_known_args()
+arguments = ["--port", known.port, "--alias", known.served_model_name, "--ctx-size", known.max_context]
+raise SystemExit(main([*arguments, "--backend", "splash"]))
+"""
+# The packaged interpreter stand-in hands its arguments to this test's Python.
+SPLASH_PYTHON_SCRIPT = "import os\nimport sys\n\nos.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
+
+
+def _splash_candidate() -> ModelCandidate:
+    """Build one Splash package recipe with the directory layout of the bundled Qwen3.8 package."""
+    artifacts = tuple(
+        DeploymentArtifact(filename=filename, sha256=hashlib.sha256(content).hexdigest(), size_bytes=len(content))
+        for filename, content in SPLASH_FILES
+    )
+    deployment = ModelDeployment(
+        artifact_kind="splash-package",
+        artifacts=artifacts,
+        context_tokens=PROFILE_CONTEXT_TOKENS,
+        frameworks=("splash",),
+        memory=WEIGHTS_MEMORY,
+        runtime_versions=(("splash", SPLASH_VERSION),),
+    )
+    return replace_fields(
+        _candidate(),
+        profile_id="fixture-splash",
+        display_name="Fixture Splash",
+        hf_repository=SPLASH_REPOSITORY,
+        tool_call_parser="qwen3_coder",
+        reasoning_parser="qwen3",
+        thinking_policy="enabled",
+        speculation_policy="enabled-dflash-draft",
+        deployment=deployment,
+        devices=("apple-silicon",),
+    )
+
+
+def _cached_splash_package(cache_root: Path, candidate: ModelCandidate) -> Path:
+    """Lay every pinned file of a Splash package out as huggingface_hub caches it."""
+    repository_root = cache_root / repo_folder_name(repo_id=SPLASH_REPOSITORY, repo_type="model")
+    snapshot_root = repository_root / "snapshots" / candidate.hf_revision
+    for filename, content in SPLASH_FILES:
+        blob = repository_root / "blobs" / hashlib.sha256(content).hexdigest()
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(content)
+        entry = snapshot_root / filename
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.symlink_to(os.path.relpath(blob, entry.parent))
+    return snapshot_root
+
+
+def _splash_install(tmp_path: Path) -> CommandFinder:
+    """Lay out a packaged Splash install whose server script is the fixture server."""
+    cellar = tmp_path / "Cellar" / "splash"
+    libexec = cellar / "libexec"
+    launcher = write_python_executable(cellar / "bin" / "splash", f"print('Splash {SPLASH_VERSION}')\n")
+    write_python_executable(libexec / "python" / "bin" / "python3", SPLASH_PYTHON_SCRIPT)
+    (libexec / "release.json").write_text(f'{{"version": "{SPLASH_VERSION}"}}')
+    (libexec / "server").mkdir()
+    (libexec / "server" / "server.py").write_text(SPLASH_SERVER_SCRIPT.format(root=str(REPOSITORY_ROOT)))
+    (libexec / "engine").mkdir()
+    (libexec / "engine" / "splash").write_bytes(b"fixture engine")
+    linked = tmp_path / "bin" / "splash"
+    linked.parent.mkdir()
+    linked.symlink_to(launcher)
+    return lambda command: str(linked) if command == "splash" else None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Splash runs on macOS only; the fixture install uses shebangs")
+@pytest.mark.parametrize(
+    ("served_context", "expected_error"),
+    (
+        (PROFILE_CONTEXT_TOKENS, None),
+        (SERVED_CONTEXT_TOKENS_MISMATCH, "reports a 8192-token context but the profile requires 65536"),
+    ),
+)
+def test_splash_serves_the_verified_snapshot_and_proves_its_context(
+    tmp_path: Path, served_context: int, expected_error: str | None
+) -> None:
+    """Splash starts on the pinned snapshot, not its own download, and reports its context on /status."""
+    candidate = _splash_candidate()
+    snapshot_root = _cached_splash_package(tmp_path, candidate)
+
+    plan = create_deployment_plan(
+        _hardware("Apple", "Metal", memory_bytes=64 * 1024**3),
+        candidate,
+        "splash",
+        ensure_model_artifacts(tmp_path, candidate),
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
+        command_finder=_splash_install(tmp_path),
+        alias_nonce="test",
+        port=_free_port(),
+    )
+
+    engine = tmp_path / "Cellar" / "splash" / "libexec" / "engine" / "splash"
+    assert plan.command[plan.command.index("--binary") + 1] == str(engine)
+    assert plan.runtime.executable_sha256 == f"sha256:{hashlib.sha256(b'fixture engine').hexdigest()}"
+    assert plan.runtime.version == f"Splash {SPLASH_VERSION}"
+    assert str(snapshot_root / "target") in plan.command
+    assert str(snapshot_root / "draft") in plan.command
+    assert plan.command[plan.command.index("--tokenizer") + 1] == str(snapshot_root / "tokenizer")
+    assert plan.command[plan.command.index("--model") + 1] == SPLASH_REPOSITORY
+    assert plan.command[plan.command.index("--served-model-name") + 1] == "fixture-splash-test"
+    assert plan.command[plan.command.index("--max-context") + 1] == str(PROFILE_CONTEXT_TOKENS)
+    assert plan.server_launch_command.startswith(
+        '"$SPLASH_HOME"/python/bin/python3 -u "$SPLASH_HOME"/server/server.py --binary "$SPLASH_HOME"/engine/splash '
+        '"$MODEL_DIR"/target "$MODEL_DIR"/draft --tokenizer "$MODEL_DIR"/tokenizer'
+    )
+    assert plan.accelerator_backend == "metal"
+    plan = replace_fields(
+        plan,
+        command=tuple(
+            str(served_context) if previous == "--max-context" else argument
+            for previous, argument in zip(("", *plan.command), plan.command, strict=False)
+        ),
+    )
+
+    with start_managed_deployment(plan, tmp_path / "deployment.log") as deployment:
+        if expected_error is None:
+            served = wait_for_deployment(deployment, timeout_seconds=MANAGED_TEST_STARTUP_TIMEOUT_SECONDS)
+            assert served == served_context
+            verify_gpu_startup(deployment)
+            # An attached run against the same server reads the context the same way.
+            assert probe_served_context_tokens(plan.base_url, plan.model_alias).observed_tokens == served_context
+        else:
+            with pytest.raises(RuntimeError, match=expected_error):
+                wait_for_deployment(deployment, timeout_seconds=MANAGED_TEST_STARTUP_TIMEOUT_SECONDS)

@@ -499,6 +499,7 @@ class LocalManagedReplayController:
             manifest_path=request.manifest_path,
             output_dir=request.output_dir,
             candidate=choice.candidate,
+            recipe_text=choice.recipe_text,
             framework=choice.framework,
             device=bound,
             catalog_as_of=choice.catalog_as_of,
@@ -508,6 +509,8 @@ class LocalManagedReplayController:
             context_tokens=choice.context_tokens,
             startup_timeout_seconds=choice.startup_timeout_seconds,
             client_backend=request.client_backend,
+            # As in the attached flow, the server is asked and the run adopts the policy it supports.
+            output_token_policy=None,
         )
         log_stop = threading.Event()
         loop = asyncio.get_running_loop()
@@ -540,4 +543,5 @@ class LocalManagedReplayController:
             gpu_startup_verified=True,
             power_summary=outcome.power_summary,
             qualification=outcome.qualification,
+            output_token_policy=outcome.output_token_policy,
         )

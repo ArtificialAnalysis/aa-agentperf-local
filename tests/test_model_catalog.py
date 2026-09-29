@@ -21,8 +21,9 @@ from agentperf_local.deployment.catalog import (
 )
 
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
-GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
-METAL_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+GEMMA_RECIPE = Path("gemma-4-12b", "any", "gemma4-12b-it-q4-0.yaml")
+METAL_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+SPLASH_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-splash-dflash.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -48,7 +49,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     catalog = load_model_catalog(CATALOG_PATH)
 
     assert catalog.as_of == "2026-09-28"
-    # Recipes load in recipes/<model>/<hardware>/ order, and "any" sorts first within a model.
+    # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
         ("gemma4-26b-a4b-q4-0", "d1c082be9cf3c8a514acf63b8761f4b41935842e"),
@@ -63,10 +64,10 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("ling3-flash-q4-k-m-dspark-strix-halo", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("muse-glimmer-30b-q4-k-m-dflash-rtx5090", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("muse-glimmer-30b-q4-k-m-dflash-strix-halo", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
-        ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark", "bee7596271d1495f6992ae224aefde4410e816b8"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo", "f2d3fe3694501008786e81e5f20360cbf715496a"),
+        ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("qwen35-122b-a10b-nvfp4-mtp-dgx-spark", "98915d837c4e7c87ac8296d02e89de19b3207e6d"),
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
@@ -79,6 +80,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-nvfp4-dgx-spark", "319f741cce68d7914884900c138a1fbb70a42f30"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-27b-splash-dflash", "9d27070b71f7142c6b6025f03ac011d70a73cb48"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
     ]
@@ -132,6 +134,12 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     ling_dspark = _named(catalog, "ling3-flash-q4-k-m-dspark-dgx-spark").deployment.llama_cpp
     assert ling_dspark is not None
     assert ling_dspark.context_checkpoints == 2
+    # Splash serves its own packed package on Apple Silicon and pins the release it was run on.
+    splash = _named(catalog, "qwen38-27b-splash-dflash")
+    assert splash.devices == ("apple-silicon",)
+    assert splash.deployment.artifact_kind == "splash-package"
+    assert splash.deployment.frameworks == ("splash",)
+    assert splash.deployment.runtime_version_for("splash") == "1.0.2"
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
@@ -201,6 +209,8 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("malformed-as-of", "as_of must be an ISO date"),
         ("unquoted-as-of", "quote dates"),
         ("misnamed-file", "must be named after its profile_id"),
+        ("slug-folder-mismatch", "must sit in the folder of its model_release_slug gemma-4-31b"),
+        ("malformed-slug", "model_release_slug must be letters and digits joined by single dots or hyphens"),
         ("model-alias", f"{GEMMA_RECIPE.as_posix()}: deployment.model_alias: Extra inputs are not permitted"),
         ("stray-file", "recipes must be .yaml files"),
         ("flat-recipe", "may only hold folders"),
@@ -220,6 +230,9 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
         ("llama-speculative-without-depth", "a speculative llama.cpp recipe must set speculative_tokens"),
         ("llama-target-only-with-depth", "a target-only llama.cpp recipe must not set speculative_tokens"),
+        ("splash-other-runtime", "a Splash package is served by Splash alone"),
+        ("splash-missing-manifest", "a Splash package recipe must pin manifest.json"),
+        ("splash-missing-draft", "a Splash package recipe must pin files under draft/"),
     ],
 )
 def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, message: str) -> None:
@@ -237,6 +250,10 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         (root / GEMMA_RECIPE).write_text((root / GEMMA_RECIPE).read_text().replace("'2026-09-21'", "2026-09-21"))
     elif case == "misnamed-file":
         (root / GEMMA_RECIPE).rename(root / GEMMA_RECIPE.with_name("gemma.yaml"))
+    elif case == "slug-folder-mismatch":
+        gemma["model_release_slug"] = "gemma-4-31b"
+    elif case == "malformed-slug":
+        gemma["model_release_slug"] = "gemma--4"
     elif case == "model-alias":
         deployment = gemma.get("deployment")
         assert isinstance(deployment, dict)
@@ -278,6 +295,23 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         else:
             launch["cache_ram_mib"] = -1
         _write(root, METAL_RECIPE, metal)
+    elif case.startswith("splash-"):
+        splash = _read(root, SPLASH_RECIPE)
+        deployment = splash.get("deployment")
+        assert isinstance(deployment, dict)
+        artifacts = deployment.get("artifacts")
+        assert isinstance(artifacts, list)
+        if case == "splash-other-runtime":
+            deployment["frameworks"] = ["llama-cpp"]
+            del deployment["runtime_versions"]
+        else:
+            dropped = "manifest.json" if case == "splash-missing-manifest" else "draft/"
+            deployment["artifacts"] = [
+                artifact
+                for artifact in artifacts
+                if not (isinstance(artifact, dict) and str(artifact.get("filename")).startswith(dropped))
+            ]
+        _write(root, SPLASH_RECIPE, splash)
     if case not in ("unquoted-as-of", "misnamed-file", "stray-file", "flat-recipe"):
         _write(root, GEMMA_RECIPE, gemma)
 

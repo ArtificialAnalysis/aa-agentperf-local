@@ -35,7 +35,7 @@ from agentperf_local.workload.schema import ManifestTask, RecordedToolCall, Trac
 
 SEQUENTIAL_MAX_CONNECTIONS = 1
 
-type ReplayDelaySource = Literal["none", "recorded", "scale_recorded", "live"]
+type ReplayDelaySource = Literal["none", "recorded", "live"]
 type Sleep = Callable[[float], Awaitable[None]]
 
 
@@ -463,8 +463,8 @@ def _simulated_tool_replays(row: TraceRow, config: RunConfig) -> tuple[ToolRepla
         replays.append(
             ToolReplayResult(
                 call=call,
-                replayed_duration_ms=call.duration_ms * config.tool_delay_scale,
-                delay_source="recorded" if config.tool_delay_scale == 1.0 else "scale_recorded",
+                replayed_duration_ms=call.duration_ms,
+                delay_source="recorded",
                 command=command,
             )
         )
@@ -602,7 +602,7 @@ async def _replay_tools(
 
     replays = _simulated_tool_replays(row, config)
     replayed_duration_ms = sum(replay.replayed_duration_ms for replay in replays)
-    if config.tool_mode == "recorded" and replayed_duration_ms > 0:
+    if config.tool_mode == "fixed_delay" and replayed_duration_ms > 0:
         await sleep(replayed_duration_ms / MILLISECONDS_PER_SECOND)
     return replays
 

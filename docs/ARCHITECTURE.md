@@ -17,7 +17,7 @@ flowchart LR
     Client --> Server[OpenAI-compatible server]
     Client --> Decode[Post-close decode and metrics]
     Decode --> Private[Private result files]
-    Private --> Bundle[Optional submission bundle]
+    Private --> Submission[Optional submission body]
 ```
 
 The attached-endpoint path:
@@ -55,7 +55,7 @@ Each package imports only from packages above it in this table.
 | `reports` | Private result files and the plain-terminal progress renderer. |
 | `telemetry` | The NVIDIA collector, the replay-scoped power collector, and post-phase reduction. |
 | `deployment` | The model catalog, context policy, framework selection, the pinned-file cache, endpoint probes, runtime qualification, the owned server, and the managed-run pipeline. |
-| `submission` | The public aggregate, per-turn evidence, the private audit, the bundle, and the upload client. |
+| `submission` | The typed body, the pinned spec check, the framework-commit lookup, and the upload client. |
 | `tui` | The Textual app, its stylesheet, inputs, messages, labels, widgets, branding, and the replay controller contract. |
 | `cli` | The argument readers, the parser definitions, and one module per group of commands. |
 
@@ -107,14 +107,17 @@ Custom datasets use the manifest and JSONL trace format in
 
 ## Models and recipes
 
-[`recipes/`](../recipes) holds one YAML file per recipe. A recipe has one of two shapes:
+[`recipes/`](../recipes) holds one YAML file per recipe. A recipe has one of three shapes:
 
 - A **GGUF recipe** pins one or more files by size and SHA-256. llama.cpp serves
   it on CUDA, ROCm, or Metal.
 - A **weights recipe** pins every file of a Hugging Face revision that the
   runtime opens. SGLang or vLLM serves it on CUDA.
+- A **Splash package recipe** pins every file of a packed Splash package: its
+  manifest and its target, draft, and tokenizer folders. Splash serves it on
+  Apple Silicon Metal, from the verified snapshot rather than its own download.
 
-A weights recipe names the exact runtime release it was checked against, and
+A weights or Splash recipe names the exact runtime release it was checked against, and
 the launcher refuses any other. A server can load the right weights, report
 the right context and backend, and still generate nonsense. Readiness checks do
 not read generated text, so they cannot catch that.
@@ -139,9 +142,9 @@ context.
 
 A reduced run stays distinct. The served context joins the benchmark identity
 and the pre-run binding. `summary.json` records the requested and observed
-tokens in `config.context` with `reduced: true`. The bundle keeps and
-cross-checks these facts so the service can separate full, reduced, and
-unobserved contexts.
+tokens in `config.context` with `reduced: true`. The submission sends the
+requested and served context, so the service can separate full and reduced
+contexts. A run whose server served less than it asked for cannot be submitted.
 
 For an attached endpoint, the run reads `meta.n_ctx` from the server at start.
 An endpoint that does not report its context is recorded as unobserved, with
@@ -188,11 +191,11 @@ untrusted input. Docker reduces the risk but is not a security boundary.
 
 | Component | Behavior |
 | --- | --- |
-| Hardware doctor | Reports local facts without hostnames, serials, UUIDs, PCI addresses, or raw command output. Exits nonzero unless exactly one accelerator is found. |
+| Hardware doctor | Reports local facts without hostnames, serials, UUIDs, PCI addresses, or raw command output. Reads NVIDIA GPUs from `nvidia-smi`, AMD GPUs from `amd-smi` or `rocm-smi`, Intel GPUs on Linux from `clinfo` with Intel's compute runtime, and Mac GPUs from `system_profiler`. Exits nonzero unless exactly one accelerator is found. |
 | Benchmark binding | Hashes the workload before a run and binds it to the suite, model, runtime, and hardware fields. |
-| Runtime qualification | Runs five synthetic endpoint probes after the managed server is ready and before the replay. It records structure only, not generated text or URLs. Passing is necessary, not sufficient. |
-| NVIDIA telemetry | A child-process collector that runs around the replay on NVIDIA hosts. The power summary stays private and travels only in the private audit file. |
-| Submission bundle | Builds and validates the four-file bundle. See [SUBMITTING.md](SUBMITTING.md). |
+| Runtime qualification | Runs five synthetic endpoint probes after the server is ready and before the replay, for managed runs and for `run --attached-server`. It records structure only, not generated text or URLs. Passing is necessary, not sufficient. |
+| NVIDIA telemetry | A child-process collector that runs around the replay on NVIDIA hosts. A submission carries the measured phase's power summary. |
+| Submission body | Builds one typed body from the recorded files and checks it against the service's pinned spec. See [SUBMITTING.md](SUBMITTING.md). |
 
 Machine-readable contracts for these files live under [`docs/schemas`](schemas).
 
@@ -208,7 +211,7 @@ Three claims stay separate:
   and process placement needs an external trust mechanism. None exists here.
 
 Anyone can modify this open-source client and fabricate consistent evidence.
-Every submission is therefore `community-self-reported`.
+Every submission is therefore self-reported.
 
 For an attached endpoint, the hardware snapshot describes the client machine,
 not the model server. Its model digest names the endpoint alias. It does not

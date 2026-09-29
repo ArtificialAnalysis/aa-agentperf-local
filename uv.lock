@@ -4,11 +4,12 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "agentperf-local"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
+    { name = "jsonschema" },
     { name = "orjson" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -23,7 +24,6 @@ rust = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -36,6 +36,7 @@ requires-dist = [
     { name = "agentperf-local-rustcore", marker = "extra == 'rust'", directory = "rustcore" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "huggingface-hub", specifier = ">=1.29.0" },
+    { name = "jsonschema", specifier = ">=4.25.1,<5.0.0" },
     { name = "orjson", specifier = ">=3.10.0" },
     { name = "pydantic", specifier = ">=2.11" },
     { name = "pyyaml", specifier = ">=6.0.0" },
@@ -46,7 +47,6 @@ provides-extras = ["rust"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema", specifier = ">=4.25.1,<5.0.0" },
     { name = "pytest", specifier = ">=9.0.0,<10.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.3.0,<2.0.0" },
     { name = "ruff", specifier = ">=0.14.0,<0.16.0" },
@@ -56,7 +56,7 @@ dev = [
 
 [[package]]
 name = "agentperf-local-rustcore"
-version = "0.2.0"
+version = "0.3.0"
 source = { directory = "rustcore" }
 
 [[package]]

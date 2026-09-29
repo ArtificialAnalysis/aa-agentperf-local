@@ -24,6 +24,10 @@ from agentperf_local.provenance.hardware_facts import (
     public_text,
 )
 
+NVIDIA_VENDOR = "NVIDIA"
+AMD_VENDOR = "AMD"
+
+
 NVIDIA_SMI_BASE_FIELDS = ("name", "memory.total", "driver_version")
 
 
@@ -68,6 +72,29 @@ ROCM_SMI_COMMAND = (
 ROCMINFO_COMMAND = ("rocminfo",)
 
 
+# clinfo prints what Intel's compute runtime reports for each GPU, as JSON. Intel's GPU setup
+# guides use clinfo to check that runtime, which llama.cpp SYCL and vLLM XPU both run on.
+CLINFO_COMMAND = ("clinfo", "--json")
+
+
+# The Intel compute runtime names itself this platform vendor. Another OpenCL platform, such
+# as Mesa's rusticl, can list the same card a second time, so only this platform is read.
+INTEL_PLATFORM_VENDOR_PREFIX = "Intel"
+
+
+INTEL_PCI_VENDOR_ID = 0x8086
+
+
+# CL_DEVICE_TYPE_GPU in the OpenCL headers. An Intel CPU runtime lists the processor too.
+OPENCL_DEVICE_TYPE_GPU = 1 << 2
+
+
+INTEL_VENDOR = "Intel"
+
+
+INTEL_API = "OpenCL"
+
+
 MACOS_PROFILE_COMMAND = ("system_profiler", "-json", "SPHardwareDataType", "SPDisplaysDataType")
 
 
@@ -81,7 +108,7 @@ MACOS_VENDOR_KEY = "sppci_vendor"
 MACOS_VENDOR_PREFIX = "sppci_vendor_"
 
 
-MACOS_VENDOR_NAMES = {"amd": "AMD", "ati": "AMD", "intel": "Intel"}
+MACOS_VENDOR_NAMES = {"amd": AMD_VENDOR, "ati": AMD_VENDOR, "intel": INTEL_VENDOR}
 
 
 MACOS_DEFAULT_VENDOR = "Apple"
@@ -301,7 +328,7 @@ def _parse_nvidia_row(row: str, *, memory_is_unified: bool) -> AcceleratorSnapsh
     memory_bytes = _nvidia_row_memory_bytes(row)
     try:
         return AcceleratorSnapshot(
-            vendor="NVIDIA",
+            vendor=NVIDIA_VENDOR,
             name=name,
             memory_bytes=memory_bytes,
             core_count=None,
@@ -468,7 +495,7 @@ def _parse_amd_output(encoded: bytes) -> tuple[AcceleratorSnapshot, ...]:
         if name is None:
             continue
         accelerator = _accelerator_or_none(
-            vendor="AMD",
+            vendor=AMD_VENDOR,
             name=name,
             memory_bytes=_nested_memory_bytes(device),
             core_count=None,
@@ -529,3 +556,81 @@ def inspect_amd(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...], Ha
         if accelerators := _parse_amd_output(result.stdout):
             return _amd_apu_memory(probe, accelerators), None
     return (), "amd_smi_unparseable" if saw_success else "amd_smi_failed"
+
+
+def _is_intel_gpu(device: JsonObject) -> bool:
+    """Return whether one clinfo device row is an Intel GPU rather than a CPU or another vendor."""
+    device_type = device.get("CL_DEVICE_TYPE")
+    type_bits = lenient_integer(device_type, "raw") if isinstance(device_type, dict) else None
+    return (
+        lenient_integer(device, "CL_DEVICE_VENDOR_ID") == INTEL_PCI_VENDOR_ID
+        and type_bits is not None
+        and type_bits & OPENCL_DEVICE_TYPE_GPU != 0
+    )
+
+
+def _intel_gpu_rows(root: JsonObject) -> tuple[JsonObject, ...] | None:
+    """Return the Intel runtime's GPU rows, or None when the platform and device lists are malformed."""
+    platforms = root.get("platforms")
+    if not isinstance(platforms, list):
+        return None
+    if not platforms:
+        # clinfo leaves out the device list when no OpenCL platform is installed.
+        return ()
+    device_groups = root.get("devices")
+    # clinfo lists each platform's devices at the same position as the platform.
+    if not isinstance(device_groups, list) or len(device_groups) != len(platforms):
+        return None
+    rows: list[JsonObject] = []
+    for platform, group in zip(platforms, device_groups, strict=True):
+        if not isinstance(platform, dict) or not isinstance(group, dict):
+            return None
+        vendor = lenient_string(platform, "CL_PLATFORM_VENDOR")
+        if vendor is None or not vendor.startswith(INTEL_PLATFORM_VENDOR_PREFIX):
+            continue
+        rows.extend(device for device in _object_rows(group.get("online")) if _is_intel_gpu(device))
+    return tuple(rows)
+
+
+def _intel_accelerator(device: JsonObject) -> AcceleratorSnapshot | None:
+    """Parse one Intel GPU row, or return None when its name is missing or fails the public label rules.
+
+    The runtime reports unified memory for a GPU without local memory of its own. Its
+    global memory size is then a share of host memory the runtime picks, so it is not
+    recorded as the GPU's memory.
+    """
+    name = public_text(lenient_string(device, "CL_DEVICE_NAME"))
+    if name is None:
+        return None
+    unified = device.get("CL_DEVICE_HOST_UNIFIED_MEMORY") is True
+    global_memory_bytes = lenient_integer(device, "CL_DEVICE_GLOBAL_MEM_SIZE")
+    return _accelerator_or_none(
+        vendor=INTEL_VENDOR,
+        name=name,
+        memory_bytes=None
+        if unified or global_memory_bytes is None or global_memory_bytes <= 0
+        else global_memory_bytes,
+        core_count=None,
+        driver_version=public_text(lenient_string(device, "CL_DRIVER_VERSION")),
+        api=INTEL_API,
+        memory_is_unified=unified,
+    )
+
+
+def inspect_intel(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...], HardwareWarningCode | None]:
+    """Read Intel GPUs from clinfo; a host without clinfo or without the Intel runtime reports none."""
+    if not probe.command_available(CLINFO_COMMAND[0]):
+        return (), None
+    result = probe.run(CLINFO_COMMAND)
+    if result.returncode != 0:
+        return (), "clinfo_failed"
+    try:
+        root = normalize_json_object(orjson.loads(result.stdout))
+    except (orjson.JSONDecodeError, ValueError):
+        return (), "clinfo_unparseable"
+    rows = _intel_gpu_rows(root)
+    if rows is None:
+        return (), "clinfo_unparseable"
+    accelerators = tuple(accelerator for row in rows if (accelerator := _intel_accelerator(row)) is not None)
+    # A dropped row hides a real device, so warn even when the other rows parsed.
+    return accelerators, None if len(accelerators) == len(rows) else "clinfo_unparseable"

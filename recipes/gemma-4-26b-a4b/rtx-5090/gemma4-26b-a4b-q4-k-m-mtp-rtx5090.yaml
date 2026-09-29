@@ -1,0 +1,46 @@
+profile_id: gemma4-26b-a4b-q4-k-m-mtp-rtx5090
+as_of: '2026-09-21'
+display_name: Gemma-4-26B-A4B Q4_K_M MTP (RTX 5090)
+model_release_slug: gemma-4-26b-a4b
+hf_repository: unsloth/gemma-4-26B-A4B-it-GGUF
+hf_revision: c099eb48e663fd284577b04978a94ffccb261841
+devices:
+- nvidia-cuda
+tool_call_parser: gemma4
+reasoning_parser: gemma4
+thinking_policy: enabled
+speculation_policy: enabled-mtp-external-draft
+deployment:
+  artifact_kind: gguf-file-set
+  artifacts:
+  - filename: gemma-4-26B-A4B-it-UD-Q4_K_M.gguf
+    sha256: f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f
+    size_bytes: 16947541728
+  - filename: mtp-gemma-4-26B-A4B-it.gguf
+    sha256: 6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b
+    size_bytes: 461766816
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 5
+    full_kv_heads: 2
+    full_kv_head_dimension: 512
+    sliding_attention_layers: 25
+    sliding_kv_heads: 8
+    sliding_kv_head_dimension: 256
+    sliding_cached_tokens: 3072
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 0
+    constant_state_bytes: 0
+    runtime_overhead_bytes: 2612201600
+  model_filename: gemma-4-26B-A4B-it-UD-Q4_K_M.gguf
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 2048
+    speculative_tokens: 3
+    draft_model_filename: mtp-gemma-4-26B-A4B-it.gguf
+    target_backend_sampling: true
+    draft_backend_sampling: false
+    flash_attention: false
+    disable_fit: false

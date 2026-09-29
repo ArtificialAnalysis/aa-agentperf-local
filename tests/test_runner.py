@@ -152,7 +152,7 @@ class _FinalDelayObserver:
     ("tool_mode", "output_policy", "expected_max_tokens", "expected_sleeps", "expected_tool_durations"),
     [
         ("none", "recorded", [7, 8, 9], [], [0.0, 0.0]),
-        ("recorded", "recorded", [7, 8, 9], [0.005, 0.010], [5.0, 10.0]),
+        ("fixed_delay", "recorded", [7, 8, 9], [0.010, 0.020], [10.0, 20.0]),
         ("live", "recorded", [7, 8, 9], [], [3.0, 3.0]),
         ("none", "fixed", [12, 12, 12], [], [0.0, 0.0]),
     ],
@@ -184,7 +184,6 @@ async def test_run_manifest_executes_every_turn_once_in_source_order(
         output_token_margin=2,
         cache_namespace="1 2 3",
         tool_mode=tool_mode,
-        tool_delay_scale=0.5,
     )
 
     result = await run_manifest(
@@ -621,8 +620,7 @@ async def test_failed_turns_skip_tool_replay(tmp_path: Path) -> None:
             client_backend="python",
             cache_isolation=False,
             output_token_policy="recorded",
-            tool_mode="recorded",
-            tool_delay_scale=1.0,
+            tool_mode="fixed_delay",
         ),
         client=client,
         token_counter=_FakeTokenCounter(),

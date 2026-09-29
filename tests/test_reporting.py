@@ -44,8 +44,7 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
         max_output_tokens=20,
         output_token_margin=2,
         cache_namespace="1 2 3",
-        tool_mode="recorded",
-        tool_delay_scale=0.5,
+        tool_mode="fixed_delay",
     )
     request = CompletionRequest(
         messages=({"role": "user", "content": "sanitized"},),
@@ -93,8 +92,8 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
         tool_replays=(
             ToolReplayResult(
                 call=recorded_call,
-                replayed_duration_ms=50.0,
-                delay_source="scale_recorded",
+                replayed_duration_ms=100.0,
+                delay_source="recorded",
                 command="rg",
                 returncode=0,
                 returncode_matches_recorded=True,
@@ -167,7 +166,7 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
     assert warning["observed_to_target_ratio"] == pytest.approx(0.4)
     assert warning["threshold"] == SHORT_OUTPUT_RATIO_WARNING_THRESHOLD
     tool_call = _objects(turn_rows[0], "tool_calls")[0]
-    assert tool_call["delay_source"] == "scale_recorded"
+    assert tool_call["delay_source"] == "recorded"
     assert tool_call["returncode_matches_recorded"] is True
     # Report v1 keeps the timing-profile keys as null after the profiled mode left.
     assert tool_call["profile_key"] is None
@@ -179,7 +178,7 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
     assert task_totals["successful_turns"] == 1
     assert task_totals["failed_turns"] == 1
     assert task_totals["short_output_warnings"] == 1
-    assert task_totals["total_agentic_replay_ms"] == pytest.approx(1050.0)
+    assert task_totals["total_agentic_replay_ms"] == pytest.approx(1100.0)
     assert task_totals["total_server_cached_prompt_tokens"] == 6
     assert task_totals["total_server_uncached_prompt_tokens"] == 2
 
@@ -187,9 +186,9 @@ def test_write_run_artifacts_emits_versioned_deterministic_summaries(tmp_path: P
     overall_tools = _object(tools["overall"])
     assert overall_tools["calls"] == 1
     assert overall_tools["recorded_duration_ms"] == pytest.approx(100.0)
-    assert overall_tools["replayed_duration_ms"] == pytest.approx(50.0)
+    assert overall_tools["replayed_duration_ms"] == pytest.approx(100.0)
     assert overall_tools["returncode_matches"] == 1
-    assert _objects(tools, "by_delay_source")[0]["key"] == "scale_recorded"
+    assert _objects(tools, "by_delay_source")[0]["key"] == "recorded"
 
     failures = parse_json_object(paths.failures.read_bytes(), paths.failures)
     failure = _objects(failures, "failures")[0]

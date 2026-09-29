@@ -1,0 +1,56 @@
+profile_id: ling3-flash-q4-k-m-dspark-dgx-spark
+as_of: '2026-09-28'
+display_name: Ling 3.0 flash Q4_K_M, DGX Spark DSpark
+model_release_slug: ling-3-0-flash
+hf_repository: inclusionAI/Ling-3.0-flash-GGUF
+hf_revision: 29edce5130491e638f3e5ebec91fa0a5ed4f780e
+devices:
+- nvidia-cuda
+tool_call_parser: glm45
+reasoning_parser: qwen3
+thinking_policy: enabled
+speculation_policy: enabled-dspark-external-draft
+deployment:
+  artifact_kind: gguf-file-set
+  artifacts:
+  - filename: Ling-3.0-flash-DSpark-bf16.gguf
+    sha256: 9141bf96a8d418fd380a3fa11838f7bae54980afd59460c12bafb6c976df9ad2
+    size_bytes: 1929183168
+    source_repository: inclusionAI/Ling-3.0-flash-dspark
+    source_revision: 8e5d9988c9b09de13f1f7c9d999ff2bfa533a149
+  - filename: Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf
+    sha256: 24ff06f1ab74546a91f7c07bd725b3015896bbe9dd82ab0e5838be9ed06a6dcf
+    size_bytes: 49995534208
+  - filename: Q4_K_M/Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf
+    sha256: 1a6a8c91562b817fd8ec5b250453be696b0fc209ed8f2acdb6c13f4e17f7e188
+    size_bytes: 27014610464
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    # MLA caches one 576-value latent per token in each of 8 attention layers. The
+    # floor counts a key and a value per head, so one 288-wide head prices it exactly.
+    full_attention_layers: 8
+    full_kv_heads: 1
+    full_kv_head_dimension: 288
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 707100000
+    # Compute buffers and the draft KV cache (7.0 GB together), plus two
+    # checkpoints that each copy the full draft KV cache (5.45 GB each).
+    runtime_overhead_bytes: 17910000000
+  model_filename: Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 512
+    speculative_tokens: 8
+    draft_model_filename: Ling-3.0-flash-DSpark-bf16.gguf
+    target_backend_sampling: false
+    draft_backend_sampling: false
+    flash_attention: true
+    context_checkpoints: 2
+    disable_fit: true

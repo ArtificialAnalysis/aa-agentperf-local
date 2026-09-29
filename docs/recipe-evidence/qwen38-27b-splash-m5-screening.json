@@ -1,0 +1,105 @@
+{
+  "as_of": "2026-09-23",
+  "profile_id": "qwen38-27b-splash-dflash",
+  "hardware": "Apple M5 Pro, 20 GPU cores, 64 GiB unified memory, macOS 26.5.1, AC power, High Power mode",
+  "runtime": {
+    "splash": "1.0.2",
+    "engine_sha256": "2b82aa99c12cb411aaf3d45120fc8fd8921e4f44cd394a6b068eb5a658f40933",
+    "package": "incoai/Qwen3.8-27B-Splash@9d27070b71f7142c6b6025f03ac011d70a73cb48"
+  },
+  "kv_cache": "symmetric int8 with one float32 scale per 256 values; not configurable in Splash 1.0.2",
+  "short_screen": {
+    "prompts": "the three prompts of the M5 Pro llama.cpp screen, sent as chat messages",
+    "temperature": 0,
+    "seed": 42,
+    "max_tokens": 256,
+    "ignore_eos": "not supported; all three finished on length",
+    "request_wall_seconds": [
+      8.952110833022743,
+      5.569873792002909,
+      5.697392249945551
+    ],
+    "prompt_tokens": [
+      1973,
+      93,
+      99
+    ],
+    "output_tokens": [
+      256,
+      256,
+      256
+    ],
+    "decode_tokens_per_second": [
+      48.85748175583792,
+      48.40654741525308,
+      47.644353763564766
+    ]
+  },
+  "endpoint_qualification": {
+    "passed": 4,
+    "total": 5,
+    "failed": {
+      "parallel_tools": [
+        "tool_transport_invalid",
+        "tool_arguments_mismatch",
+        "unexpected_generation_cap"
+      ]
+    },
+    "file": "qwen38-27b-splash-m5-qualification.json"
+  },
+  "long_context": {
+    "prompt_tokens": 124197,
+    "output_tokens": 1,
+    "cached_tokens": 0,
+    "request_seconds": 380.26229495799635,
+    "served_context_tokens": 131072,
+    "splash_peak_bytes": 23143448576,
+    "recipe_minimum_memory_bytes": 23888265216
+  },
+  "eight_trace_replay": {
+    "dataset": "agentperf-default-v1 (manifest-arm64.json)",
+    "run_id": "3c637037-b386-4587-b8aa-30fb5610fb1c",
+    "output_token_policy": "recorded",
+    "client": "python",
+    "request_timeout_seconds": 3600.0,
+    "sampling": {
+      "extra_body": {
+        "min_p": 0.0,
+        "top_k": 20
+      },
+      "preset": "openlab",
+      "temperature": 0.7,
+      "top_p": 0.8
+    },
+    "context_tokens": 131072,
+    "turns": 168,
+    "successful_turns": 168,
+    "failed_turns": 0,
+    "short_output_warnings": 9,
+    "wall_seconds": 901.7642152500339,
+    "normalized_inference_seconds": 1162.6774211260133,
+    "recorded_output_tokens": 30883,
+    "server_output_tokens": 16741,
+    "server_prompt_tokens": 2577822,
+    "server_cached_prompt_tokens": 2347328,
+    "time_to_first_token_ms": {
+      "count": 168,
+      "mean": 3648.0267502608644,
+      "p50": 2752.3804374504834,
+      "p95": 9396.341256279266
+    },
+    "e2e_ms": {
+      "count": 168,
+      "mean": 5365.85125768657,
+      "p50": 4411.345916450955,
+      "p95": 12374.33216664358
+    },
+    "normalized_e2e_ms": {
+      "count": 168,
+      "mean": 6920.698935273889,
+      "p50": 4554.840893716843,
+      "p95": 12828.007135150156
+    },
+    "longest_prompt_tokens": 56114
+  }
+}

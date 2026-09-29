@@ -76,10 +76,10 @@ from agentperf_local.reports.progress import (
     rate_text,
     reduce_run_boundary,
 )
-from agentperf_local.submission.bundle import (
-    build_submission_bundle,
-    validate_bundle_output_path,
-    write_submission_bundle,
+from agentperf_local.submission.builder import (
+    build_submission_request,
+    encode_submission,
+    write_prepared_submission,
 )
 from agentperf_local.submission.client import (
     SUBMIT_BASE_URL,
@@ -88,9 +88,9 @@ from agentperf_local.submission.client import (
     SubmissionReceipt,
     check_revision_allowlist,
     read_submit_token,
-    submit_bundle_async,
+    submit_body_async,
 )
-from agentperf_local.submission.private_audit import PRIVATE_AUDIT_RETENTION_DAYS
+from agentperf_local.submission.notice import PRIVACY_NOTICE
 from agentperf_local.tui.branding import (
     AA_NEUTRAL_500,
     AA_PURPLE,
@@ -296,11 +296,12 @@ CUSTOM_ENDPOINT_DETAIL = (
     "Enter its URL and model name on the next screen. Press ? for the commands that start each server."
 )
 SUBMIT_CHECKBOX_LABEL = "Submit results to Artificial Analysis (optional)"
-SUBMIT_NOTICE = (
-    "May be published: aggregate results and sanitized turn timings.\n"
-    f"Hardware and verification evidence stays private for {PRIVATE_AUDIT_RETENTION_DAYS} days.\n"
-    "Never sent: prompts, responses, credentials, local paths, URLs or hostnames.\n"
-    "Failed checks are still submitted as self-reported."
+# The panel shows the notice whose version the submission records, word for word.
+SUBMIT_NOTICE = PRIVACY_NOTICE
+# An attached run needs a description of the server, which only the command line collects.
+SUBMIT_ATTACHED_NOTE = (
+    "To submit a run on your own server, use the command line:\n"
+    "agentperf-local run --attached-server FILE, then prepare-submission and submit."
 )
 SUBMIT_SELF_REPORTED_NOTE = "\n" + key_value_block(
     (("Eligibility", "This client version can submit, but cannot reach verified"),)
@@ -308,7 +309,7 @@ SUBMIT_SELF_REPORTED_NOTE = "\n" + key_value_block(
 SUBMIT_ALLOWLIST_UNREACHABLE_NOTE = "\n" + key_value_block(
     (("Eligibility", "Could not check; submission is still available"),)
 )
-UPLOAD_PREPARING_MESSAGE = "Preparing the submission bundle…"
+UPLOAD_PREPARING_MESSAGE = "Preparing the submission…"
 UPLOAD_SENDING_TEMPLATE = "Uploading to Artificial Analysis · {sent:,} / {total:,} bytes"
 UPLOAD_WAITING_MESSAGE = "Upload sent · waiting for Artificial Analysis to confirm the submission…"
 UPLOAD_BUSY_MESSAGE = "Submitting…"
@@ -317,12 +318,12 @@ UPLOAD_QUIT_BLOCKED_MESSAGE = "Submission in progress · wait for confirmation �
 UPLOAD_DONE_TEMPLATE = (
     "Submitted · {submission_id} · {status}{duplicate}\nCheck later: agentperf-local submission-status {submission_id}"
 )
-UPLOAD_DUPLICATE_NOTE = " · this bundle was already on file"
+UPLOAD_DUPLICATE_NOTE = " · this run was already on file"
 UPLOAD_FAILED_TEMPLATE = (
-    "Upload failed · {reason}\nBundle kept at {bundle}\nRetry: agentperf-local submit {bundle} --yes"
+    "Upload failed · {reason}\nSubmission kept at {submission}\nRetry: agentperf-local submit {submission} --yes"
 )
 UPLOAD_CANCELLED_REASON = "canceled before the service answered"
-UPLOAD_NOT_PREPARED_TEMPLATE = "Upload failed · {reason}\nNo bundle was written; the run folder is unchanged."
+UPLOAD_NOT_PREPARED_TEMPLATE = "Upload failed · {reason}\nNo submission was written; the run folder is unchanged."
 # Every back-style button leaves its own page, so all of them share the escape handler.
 BACK_BUTTON_IDS = frozenset(
     {"model-back", "config-back", "preflight-back", "privacy-back", "methodology-back", "result-new"}
@@ -554,7 +555,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         # Captured when the run starts, so a later click on the checkbox cannot change a run in flight.
         self.submit_requested = False
         self.upload_active = False
-        self.upload_bundle_dir: Path | None = None
+        self.upload_submission_path: Path | None = None
         self.submission_receipt: SubmissionReceipt | None = None
         self.cancel_armed = False
         self.cancel_arming_timer: Timer | None = None
@@ -1164,6 +1165,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         with raising_validator_errors():
             return ManagedDeploymentChoice(
                 candidate=candidate,
+                recipe_text=self.catalog.recipe_text(candidate.profile_id),
                 catalog_as_of=self.catalog.as_of,
                 catalog_digest=self.catalog.digest,
                 framework=framework,
@@ -1450,7 +1452,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     async def action_quit(self) -> None:
         """Cancel an active replay, arm a force quit, or leave from an idle screen."""
         if self.upload_active:
-            # The bundle stays on disk, so an interrupted upload costs one retry command.
+            # The submission file stays on disk, so an interrupted upload costs one retry command.
             self.workers.cancel_group(self, "upload")
             self._finish_upload()
             self.exit(self.outcome)
@@ -1940,17 +1942,22 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self._focus_on_page(TuiStep.PREFLIGHT, "#run-start")
 
     def _reset_submit_controls(self, enabled: bool) -> None:
-        """Offer the submit checkbox for every setup that is ready to run."""
+        """Offer the submit checkbox for a managed setup that is ready to run.
+
+        An attached run can be submitted only with a description of the server, which the
+        command line collects, so the panel says how instead of offering the checkbox.
+        """
         panel = self.query_one("#submit-panel", Vertical)
         checkbox = self.query_one("#submit-checkbox", Checkbox)
         notice = self.query_one("#submit-notice", Static)
+        managed = self.request is not None and self.request.managed_deployment is not None
         checkbox.value = False
         self.submit_requested = False
-        checkbox.disabled = not enabled
+        checkbox.disabled = not (enabled and managed)
         panel.display = enabled
-        notice.update(SUBMIT_NOTICE)
+        notice.update(SUBMIT_NOTICE if managed else SUBMIT_ATTACHED_NOTE)
         self.workers.cancel_group(self, "revision")
-        if enabled and self.request is not None and self._submit_token() is not None:
+        if enabled and managed and self.request is not None and self._submit_token() is not None:
             self.check_revision_allowlist(self.request)
 
     @work(thread=True, exclusive=True, group="revision", exit_on_error=False)
@@ -2034,7 +2041,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.progress_state = RunProgressState()
         self.execution = None
         self.submission_receipt = None
-        self.upload_bundle_dir = None
+        self.upload_submission_path = None
         self.submit_requested = self.query_one("#submit-checkbox", Checkbox).value
         self._reset_result_controls()
         self.replay_active = True
@@ -2445,32 +2452,32 @@ class AgentPerfLocalApp(App[TuiOutcome]):
 
     @work(exclusive=True, group="upload", exit_on_error=False)
     async def execute_upload(self, generation: int, output_dir: Path) -> None:
-        """Prepare the bundle beside the run folder, then send it in one request."""
-        bundle_dir = output_dir.with_name(f"{output_dir.name}-submission")
-        prepared = False
+        """Prepare the submission file beside the run folder, then send it in one request."""
+        submission_path = output_dir.with_name(f"{output_dir.name}-submission.json")
+        encoded: bytes | None = None
         try:
-            await asyncio.to_thread(self._prepare_bundle, output_dir, bundle_dir)
-            prepared = True
-            receipt = await submit_bundle_async(
-                bundle_dir,
+            encoded = await asyncio.to_thread(self._prepare_submission, output_dir, submission_path)
+            receipt = await submit_body_async(
+                encoded,
                 base_url=self.defaults.submit_base_url,
                 token=self._submit_token(),
                 progress=self._upload_progress(generation),
             )
         except asyncio.CancelledError:
-            self.post_message(
-                UploadFailedMessage(generation, UPLOAD_CANCELLED_REASON, bundle_dir if prepared else None)
-            )
+            kept = submission_path if encoded is not None else None
+            self.post_message(UploadFailedMessage(generation, UPLOAD_CANCELLED_REASON, kept))
             raise
         except (SubmissionError, ValueError, OSError) as error:
-            self.post_message(UploadFailedMessage(generation, error_text(error), bundle_dir if prepared else None))
+            kept = submission_path if encoded is not None else None
+            self.post_message(UploadFailedMessage(generation, error_text(error), kept))
             return
-        self.post_message(UploadCompletedMessage(generation, receipt, bundle_dir))
+        self.post_message(UploadCompletedMessage(generation, receipt, submission_path))
 
     @staticmethod
-    def _prepare_bundle(output_dir: Path, bundle_dir: Path) -> None:
-        validate_bundle_output_path(output_dir, bundle_dir)
-        write_submission_bundle(bundle_dir, build_submission_bundle(output_dir))
+    def _prepare_submission(output_dir: Path, submission_path: Path) -> bytes:
+        encoded = encode_submission(build_submission_request(output_dir))
+        write_prepared_submission(output_dir, submission_path, encoded)
+        return encoded
 
     def on_upload_progress_message(self, message: UploadProgressMessage) -> None:
         """Advance the upload bar for the active run."""
@@ -2503,7 +2510,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             return
         self._finish_upload()
         self.submission_receipt = message.receipt
-        self.upload_bundle_dir = message.bundle_dir
+        self.upload_submission_path = message.submission_path
         receipt = message.receipt
         card = self.query_one("#result-upload", Static)
         card.set_classes("success-card")
@@ -2517,18 +2524,18 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#result-upload-progress", ProgressBar).update(total=1, progress=1)
 
     def on_upload_failed_message(self, message: UploadFailedMessage) -> None:
-        """Keep the bundle on disk and show the exact command that retries the upload."""
+        """Keep the submission file on disk and show the exact command that retries the upload."""
         if message.generation != self.run_generation:
             return
         self._finish_upload()
-        self.upload_bundle_dir = message.bundle_dir
+        self.upload_submission_path = message.submission_path
         card = self.query_one("#result-upload", Static)
         card.set_classes("error-card")
-        if message.bundle_dir is None:
+        if message.submission_path is None:
             card.update(UPLOAD_NOT_PREPARED_TEMPLATE.format(reason=escape(message.reason)))
         else:
-            bundle = result_path_text(message.bundle_dir)
-            card.update(UPLOAD_FAILED_TEMPLATE.format(reason=escape(message.reason), bundle=bundle))
+            submission = result_path_text(message.submission_path)
+            card.update(UPLOAD_FAILED_TEMPLATE.format(reason=escape(message.reason), submission=submission))
         self.query_one("#result-upload-progress", ProgressBar).display = False
 
     def _render_result_charts(self) -> None:

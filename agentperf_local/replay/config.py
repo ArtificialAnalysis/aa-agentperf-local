@@ -34,7 +34,6 @@ CLEARTEXT_API_KEY_MESSAGE = (
     "refusing to send an API key over http to a non-loopback host; use https:// or remove the API key"
 )
 DEFAULT_OUTPUT_TOKEN_MARGIN = 0
-DEFAULT_TOOL_DELAY_SCALE = 1.0
 
 
 def read_api_key_env(name: str) -> SecretStr | None:
@@ -57,7 +56,11 @@ OUTPUT_TOKEN_POLICIES: tuple[OutputTokenPolicy, ...] = ("exact", "recorded", "fi
 type SamplingPreset = Literal["standard", "custom"]
 type ToolChoice = Literal["none"]
 TOOL_CHOICES: tuple[ToolChoice, ...] = ("none",)
-type ToolReplayMode = Literal["none", "recorded", "live"]
+# How tool time between turns is replayed:
+# - none: no pause between turns.
+# - fixed_delay: each turn sleeps for the tool time recorded after it.
+# - live: the recorded tool calls run again in Docker.
+type ToolReplayMode = Literal["none", "fixed_delay", "live"]
 
 
 def _require_finite(name: str, value: float | None) -> None:
@@ -104,7 +107,6 @@ class RunConfig(BaseModel, frozen=True):
     cache_isolation: bool = True
     cache_namespace: str | None = None
     tool_mode: ToolReplayMode = "none"
-    tool_delay_scale: float = DEFAULT_TOOL_DELAY_SCALE
     live_tool_image: str | None = None
     live_workspace_root: Path | None = None
     live_network: str | None = None
@@ -118,7 +120,6 @@ class RunConfig(BaseModel, frozen=True):
         _require_finite("temperature", self.temperature)
         _require_finite("top_p", self.top_p)
         _require_finite("min_p", self.min_p)
-        _require_finite("tool_delay_scale", self.tool_delay_scale)
         _require_finite("live_timeout_seconds", self.live_timeout_seconds)
         normalized_base_url = normalize_base_url(self.base_url)
         if self.api_key is not None and url_is_cleartext_remote(normalized_base_url):
@@ -148,10 +149,8 @@ class RunConfig(BaseModel, frozen=True):
             raise ValueError("reasoning_effort must not be empty")
         if not self.cache_isolation and self.cache_namespace is not None:
             raise ValueError("cache_namespace requires cache_isolation")
-        if self.tool_mode not in {"none", "recorded", "live"}:
-            raise ValueError("tool_mode must be none, recorded, or live")
-        if self.tool_delay_scale < 0:
-            raise ValueError("tool_delay_scale must be non-negative")
+        if self.tool_mode not in {"none", "fixed_delay", "live"}:
+            raise ValueError("tool_mode must be none, fixed_delay, or live")
         if self.live_timeout_seconds <= 0:
             raise ValueError("live_timeout_seconds must be positive")
         if self.live_tool_image is not None and not self.live_tool_image:
