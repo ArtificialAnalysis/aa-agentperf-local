@@ -2228,7 +2228,11 @@ async def _start_managed_run_with_submit(
     if submit:
         # Replay completion posts a message that starts a second worker. Waiting for
         # the replay worker alone can return before Textual has registered the upload.
-        await _settle_until(pilot, lambda: app.upload_submission_path is not None)
+        deadline = time.monotonic() + UI_SETTLE_TIMEOUT_SECONDS
+        while app.upload_submission_path is None and time.monotonic() < deadline:
+            await pilot.pause()
+        upload_card = str(app.query_one("#result-upload", Static).content)
+        assert app.upload_submission_path is not None, f"submit={app.submit_requested} upload={upload_card!r}"
 
 
 @pytest.mark.parametrize("outcome", ["accepted", "refused"])
