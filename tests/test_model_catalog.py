@@ -48,7 +48,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-09-29"
+    assert catalog.as_of == "2026-09-30"
     # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
@@ -77,6 +77,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen36-27b-q4-k-m-mtp-rtx5090", "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace"),
         ("qwen36-27b-q4-k-m-mtp-strix-halo", "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace"),
         ("qwen36-35b-a3b-nvfp4-mtp-dgx-spark", "1355db6a052410cfd62085d94b58866fd0f2c3c5"),
+        ("qwen36-35b-a3b-q4-k-m-mtp-m5-pro", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen36-35b-a3b-q4-k-m-mtp-rtx5090", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen36-35b-a3b-q4-k-m-mtp-strix-halo", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
@@ -164,6 +165,7 @@ def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> N
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "qwen35-9b-q4-k-m-mtp-m5-pro"),
         ("qwen36-27b-q4-k-m-mtp-rtx5090", "qwen36-27b-q4-k-m-mtp-strix-halo"),
         ("qwen36-35b-a3b-q4-k-m-mtp-rtx5090", "qwen36-35b-a3b-q4-k-m-mtp-strix-halo"),
+        ("qwen36-35b-a3b-q4-k-m-mtp-rtx5090", "qwen36-35b-a3b-q4-k-m-mtp-m5-pro"),
         ("qwen38-27b-q4-k-m-mtp", "qwen38-27b-q4-k-m-mtp-strix-halo"),
         ("qwen38-27b-q4-k-m-mtp", "qwen38-27b-q4-k-m-mtp-m5-pro"),
     ),
