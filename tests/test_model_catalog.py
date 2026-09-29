@@ -69,6 +69,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("qwen35-122b-a10b-nvfp4-mtp-dgx-spark", "98915d837c4e7c87ac8296d02e89de19b3207e6d"),
+        ("qwen35-9b-nvfp4-mtp-dgx-spark", "97aef92393f126bf649f310cd40861be8dad3279"),
         ("qwen35-9b-q4-k-m-mtp-m5-pro", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
@@ -93,7 +94,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 9
+    assert len(dgx_spark) == 10
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
     # Ling 3.0 flash is the one DGX Spark recipe that llama.cpp serves; the rest run vLLM.
