@@ -23,6 +23,7 @@ from agentperf_local.deployment.managed import (
     DEFAULT_DEPLOYMENT_PORT,
     DEFAULT_STARTUP_TIMEOUT_SECONDS,
 )
+from agentperf_local.deployment.managed_run import MANAGED_OUTPUT_TOKEN_POLICIES
 from agentperf_local.deployment.model_cache import (
     MODEL_DOWNLOAD_TOTAL_TIMEOUT_SECONDS,
     default_model_cache_root,
@@ -342,6 +343,15 @@ def _add_managed_run_parser(subparsers: argparse._SubParsersAction[argparse.Argu
         type=float,
         default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
         help="maximum time for each replay model request",
+    )
+    parser.add_argument(
+        "--output-token-policy",
+        choices=MANAGED_OUTPUT_TOKEN_POLICIES,
+        default="exact",
+        help=(
+            "exact generates each turn's recorded length with end-of-sequence ignored (default); "
+            "recorded caps at the recorded length, for a runtime that drops ignore_eos, and is not comparable"
+        ),
     )
     parser.add_argument(
         "--power",

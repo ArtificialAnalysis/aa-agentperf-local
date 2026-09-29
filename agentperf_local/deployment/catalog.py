@@ -42,7 +42,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:2ba10ab9b4c906bc6fc117d20e736e8924d495c29f8b05143f62ad969bbdec64"
+BUNDLED_RECIPES_DIGEST = "sha256:5681280bad94da5a3a08ac5882be8684a7751cd24c94b7cd74cf7e7cd423f601"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -58,7 +58,7 @@ type SpeculationPolicy = Literal[
     "enabled-vllm-external-draft",
 ]
 type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
-type DeploymentFramework = Literal["llama-cpp", "sglang", "splash", "vllm"]
+type DeploymentFramework = Literal["llama-cpp", "mtplx", "sglang", "splash", "vllm"]
 type ArtifactKind = Literal[
     "gguf-single-file", "gguf-file-set", "gguf-target-safetensors-draft", "safetensors-repository"
 ]
@@ -67,6 +67,12 @@ type LlamaCppLoadMode = Literal["none", "mmap"]
 # How Splash stores the target's KV cache. Its default is int8; bf16 doubles the cache.
 type SplashKvFormat = Literal["int8", "bf16"]
 SPLASH_KV_FORMATS: tuple[SplashKvFormat, ...] = ("int8", "bf16")
+# The MTPLX runtime profiles a recipe may name. Each one sets MTPLX's kernel and
+# verify lanes; its other profiles are diagnostic.
+type MtplxProfile = Literal["stable", "sustained", "turbo"]
+MTPLX_PROFILES: tuple[MtplxProfile, ...] = ("stable", "sustained", "turbo")
+# How deep MTPLX lets a native MTP head draft; its Qwen family ceiling is 3.
+MTPLX_MAX_DRAFT_DEPTH = 3
 # How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
 # per-layer-embedding table with explicit reads from disk, so the table is never resident.
 type LlamaCppLazyMode = Literal["on-direct"]
@@ -78,7 +84,7 @@ LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on-direct",)
 # recipe's quantization, so a recipe that needs a particular kernel names it.
 type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
-DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "splash", "vllm")
+DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "mtplx", "sglang", "splash", "vllm")
 DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
@@ -107,6 +113,7 @@ REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
 SPLASH_DRAFT_CONFIG_FILENAME = "config.json"
 # A GGUF variant is a quantization label such as Q4_K_M or UD-Q4_K_M.
 SPLASH_GGUF_VARIANT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+LAUNCH_ENVIRONMENT_NAME_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*")
 
 
 def _revision(value: str, field: str) -> str:
@@ -253,6 +260,23 @@ class LlamaCppLaunch(BaseModel, frozen=True):
         return None
 
 
+def _environment_pairs(value: object, info: ValidationInfo, field: str) -> object:
+    """Read a recipe's name-to-value environment object as pairs sorted by name."""
+    if isinstance(value, dict):
+        return tuple(sorted(value.items()))
+    return _pairs_without_object(value, info, field)
+
+
+def _check_launch_environment(environment: tuple[tuple[str, str], ...], runtime: str) -> None:
+    """Require unique, sorted, uppercase names with printable values."""
+    names = tuple(name for name, _ in environment)
+    if len(set(names)) != len(names) or names != tuple(sorted(names)):
+        raise ValueError(f"{runtime} environment names must be unique and sorted")
+    for name, value in environment:
+        if LAUNCH_ENVIRONMENT_NAME_PATTERN.fullmatch(name) is None or not value or not value.isprintable():
+            raise ValueError(f"{runtime} environment must use uppercase names and printable values")
+
+
 class VllmLaunch(BaseModel, frozen=True):
     """Pin extra vLLM arguments and environment variables for one recipe."""
 
@@ -263,21 +287,41 @@ class VllmLaunch(BaseModel, frozen=True):
     @classmethod
     def _environment_pairs(cls, value: object, info: ValidationInfo) -> object:
         """Read the recipe's name-to-value object as pairs sorted by name."""
-        if isinstance(value, dict):
-            return tuple(sorted(value.items()))
-        return _pairs_without_object(value, info, "deployment.vllm.environment")
+        return _environment_pairs(value, info, "deployment.vllm.environment")
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Require stable arguments and a unique sorted environment."""
         if not self.arguments or any(not argument or not argument.isprintable() for argument in self.arguments):
             raise ValueError("vLLM arguments must be non-empty printable text")
-        names = tuple(name for name, _ in self.environment)
-        if len(set(names)) != len(names) or names != tuple(sorted(names)):
-            raise ValueError("vLLM environment names must be unique and sorted")
-        for name, value in self.environment:
-            if re.fullmatch(r"[A-Z][A-Z0-9_]*", name) is None or not value or not value.isprintable():
-                raise ValueError("vLLM environment must use uppercase names and printable values")
+        _check_launch_environment(self.environment, "vLLM")
+        return self
+
+
+class MtplxLaunch(BaseModel, frozen=True):
+    """Pin the MTPLX profile, draft depth, and environment one recipe serves with.
+
+    MTPLX picks a profile and depth for its own model names. A managed server is
+    served under another name, so the recipe states both.
+    """
+
+    profile: MtplxProfile
+    draft_depth: Annotated[int, Field(ge=1, le=MTPLX_MAX_DRAFT_DEPTH)]
+    # Documented MTPLX_* switches, such as the ones that keep generation guards off.
+    environment: tuple[tuple[str, str], ...] = ()
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def _environment_pairs(cls, value: object, info: ValidationInfo) -> object:
+        """Read the recipe's name-to-value object as pairs sorted by name."""
+        return _environment_pairs(value, info, "deployment.mtplx.environment")
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Require a known profile and a unique sorted environment."""
+        if self.profile not in MTPLX_PROFILES:
+            raise ValueError("mtplx.profile must be stable, sustained, or turbo")
+        _check_launch_environment(self.environment, "MTPLX")
         return self
 
 
@@ -379,6 +423,7 @@ class ModelDeployment(BaseModel, frozen=True):
     moe_runner_backend: MoeRunnerBackend | None = None
     model_filename: str | None = None
     llama_cpp: LlamaCppLaunch | None = None
+    mtplx: MtplxLaunch | None = None
     splash: SplashLaunch | None = None
     vllm: VllmLaunch | None = None
 
@@ -456,7 +501,24 @@ class ModelDeployment(BaseModel, frozen=True):
             raise ValueError("only a vLLM recipe can name vLLM launch settings")
         if self.splash is not None and "splash" not in self.frameworks:
             raise ValueError("only a Splash recipe can name Splash launch settings")
+        if "mtplx" in self.frameworks:
+            self._check_mtplx_recipe()
+        elif self.mtplx is not None:
+            raise ValueError("only an MTPLX recipe can name MTPLX launch settings")
         return self
+
+    def _check_mtplx_recipe(self) -> None:
+        """Require an MTPLX weights folder served by MTPLX alone at one pinned release.
+
+        MTPLX loads one MLX folder: the weights, the native MTP head, and its runtime
+        contract. A recipe pins every file of it and the exact MTPLX release.
+        """
+        if self.frameworks != ("mtplx",) or self.artifact_kind != "safetensors-repository":
+            raise ValueError("an MTPLX recipe pins a safetensors repository and is served by MTPLX alone")
+        if self.mtplx is None:
+            raise ValueError("an MTPLX recipe must carry MTPLX launch settings")
+        if self.runtime_version_for("mtplx") is None:
+            raise ValueError("an MTPLX recipe must pin its MTPLX release in runtime_versions")
 
     def _check_splash_artifacts(self) -> None:
         """Require one GGUF target from the recipe repository and one pinned safetensors draft.
@@ -558,6 +620,11 @@ class ModelCandidate(BaseModel, frozen=True):
             expected_devices = ("apple-silicon",) if llama_cpp.backend == "metal" else ("amd-rocm",)
             if self.devices != expected_devices:
                 raise ValueError("llama.cpp backend must match the recipe's devices")
+        if "mtplx" in self.deployment.frameworks:
+            if self.devices != ("apple-silicon",):
+                raise ValueError("an MTPLX recipe runs on apple-silicon alone")
+            if self.speculation_policy != "enabled-mtp-self-draft":
+                raise ValueError("an MTPLX recipe drafts with the model's own MTP head")
         splash = self.deployment.splash
         if splash is not None:
             if self.devices != ("apple-silicon",):

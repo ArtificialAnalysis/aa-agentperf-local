@@ -91,8 +91,8 @@ class FrameworkIdentity(BaseModel, frozen=True):
 def framework_supported(framework: DeploymentFramework, platform: AcceleratorPlatform) -> bool:
     if framework == "llama-cpp":
         return True
-    # Splash is an engine for Apple Silicon only: its kernels are Metal.
-    if framework == "splash":
+    # Splash and MTPLX are engines for Apple Silicon only: their kernels are Metal.
+    if framework in ("mtplx", "splash"):
         return platform == "apple-metal"
     return platform == "nvidia-cuda"
 
@@ -113,6 +113,8 @@ def framework_display_name(framework: DeploymentFramework) -> str:
         return "vLLM"
     if framework == "splash":
         return "Splash"
+    if framework == "mtplx":
+        return "MTPLX"
     return "SGLang"
 
 
@@ -123,6 +125,8 @@ def installation_hint(framework: DeploymentFramework) -> str:
         return "Install vLLM in the selected CUDA environment."
     if framework == "splash":
         return "Install Splash with `brew install incoai/tap/splash`, or put a source build's splash on PATH."
+    if framework == "mtplx":
+        return "Install MTPLX with `brew install youssofal/mtplx/mtplx` or `pip install mtplx`, so mtplx is on PATH."
     return "Install SGLang in the selected CUDA environment."
 
 
@@ -133,6 +137,10 @@ def _support_note(framework: DeploymentFramework, platform: AcceleratorPlatform)
         if platform == "apple-metal":
             return "Metal engine built for the model, with a DFlash2 draft for speculative decoding."
         raise ValueError("Splash is not supported on this platform")
+    if framework == "mtplx":
+        if platform == "apple-metal":
+            return "MLX engine on Metal, drafting with the model's own MTP head."
+        raise ValueError("MTPLX is not supported on this platform")
     if platform == "nvidia-cuda":
         return "Native weights path using the framework's CUDA backend; this path is not offered on ROCm."
     raise ValueError(f"{framework_display_name(framework)} is not supported on this platform")
@@ -196,6 +204,17 @@ def resolve_framework_executable(
             command_prefix=(splash, "serve"),
             version_command=(splash, "--version"),
             executable_path=Path(splash),
+        )
+    if framework == "mtplx":
+        # MTPLX serves through `mtplx serve` and prints "mtplx 2.12.0" for --version.
+        mtplx = command_finder("mtplx")
+        if mtplx is None:
+            return None
+        return FrameworkExecutable(
+            framework=framework,
+            command_prefix=(mtplx, "serve"),
+            version_command=(mtplx, "--version"),
+            executable_path=Path(mtplx),
         )
     if framework == "vllm":
         # vLLM serves through `vllm serve` and answers `vllm --version` on a zero exit.

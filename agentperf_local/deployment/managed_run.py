@@ -58,7 +58,7 @@ from agentperf_local.provenance.benchmark import (
 )
 from agentperf_local.provenance.context import ContextObservationReason, RunContextFacts
 from agentperf_local.provenance.hardware import AcceleratorPlatform
-from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, RunConfig
+from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, OutputTokenPolicy, RunConfig
 from agentperf_local.replay.runner import CompositeRunObserver, RunObserver, RunResult, run_manifest
 from agentperf_local.reports.reporting import ArtifactPaths, write_run_artifacts
 from agentperf_local.telemetry.power import (
@@ -71,6 +71,11 @@ from agentperf_local.telemetry.power import (
 )
 
 MANAGED_SUITE_ID = "agentperf-local-managed"
+# A managed run either pins every turn to its recorded length or caps it there.
+MANAGED_OUTPUT_TOKEN_POLICIES: tuple[OutputTokenPolicy, ...] = ("exact", "recorded")
+# Runtimes whose released builds accept ignore_eos and drop it. An exact run on one of
+# them is probed first, because its long turns would end early and still look complete.
+IGNORE_EOS_PROBED_FRAMEWORKS: tuple[DeploymentFramework, ...] = ("mtplx", "splash")
 
 
 class RunActivityKind(StrEnum):
@@ -152,6 +157,9 @@ class ManagedRunInputs(BaseModel, frozen=True):
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     download_timeout_seconds: float = MODEL_DOWNLOAD_TOTAL_TIMEOUT_SECONDS
     power: bool = True
+    # The recorded policy runs a runtime that drops ignore_eos, and its results are
+    # not comparable with exact runs.
+    output_token_policy: OutputTokenPolicy = "exact"
     # False keeps replay boundaries away from the observer. The CLI clears it when no
     # progress view is shown, so a plain run reports an unobserved replay.
     observe_replay: bool = True
@@ -172,16 +180,17 @@ class ManagedRunOutcome(BaseModel, frozen=True):
     power_summary: Path | None
 
 
-def _managed_run_config(
-    plan: DeploymentPlan, client_backend: ClientBackend, request_timeout_seconds: float
-) -> RunConfig:
+def _managed_run_config(plan: DeploymentPlan, inputs: ManagedRunInputs) -> RunConfig:
     """Return the replay settings for one owned server."""
+    if inputs.output_token_policy not in MANAGED_OUTPUT_TOKEN_POLICIES:
+        raise ValueError("a managed run uses the exact or the recorded output policy")
     return RunConfig(
         base_url=plan.base_url,
         model=plan.model_alias,
         api_key=None,
-        client_backend=client_backend,
-        request_timeout_seconds=request_timeout_seconds,
+        client_backend=inputs.client_backend,
+        request_timeout_seconds=inputs.request_timeout_seconds,
+        output_token_policy=inputs.output_token_policy,
         # vLLM otherwise defaults exact requests to automatic tool selection and
         # stops at a parsed call. Some llama.cpp grammars reject this option.
         tool_choice="none" if plan.framework == "vllm" else None,
@@ -305,15 +314,17 @@ def _replay_observer(clock: RunObserver | None, observer: RunObserver | None) ->
     return clock if clock is not None else observer
 
 
-async def _require_splash_ignore_eos(plan: DeploymentPlan, client_backend: ClientBackend) -> None:
-    """Refuse a Splash build that drops ignore_eos before any evidence is written.
+async def _require_honoured_ignore_eos(plan: DeploymentPlan, client_backend: ClientBackend) -> None:
+    """Refuse an exact run on a build that drops ignore_eos, before any evidence is written.
 
-    Released Splash builds accept the field and ignore it. The exact policy would then
-    end every long turn early, and the run would still look complete.
+    The exact policy would end every long turn early, and the run would still look complete.
     """
     capability = await probe_ignore_eos(plan.base_url, plan.model_alias, client_backend)
     if capability.support is IgnoreEosSupport.IGNORED:
-        raise RuntimeError(f"{capability.summary}; the exact policy needs a Splash build that honours ignore_eos")
+        raise RuntimeError(
+            f"{capability.summary}; the exact policy needs a {plan.framework} build that honours ignore_eos, "
+            "or the recorded output policy (--output-token-policy recorded), whose results are not comparable"
+        )
 
 
 async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObserver) -> ManagedRunOutcome:
@@ -371,7 +382,7 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
     log_path = output_dir / DEPLOYMENT_LOG_FILENAME
     measurement_path = output_dir / MEASUREMENT_BINDING_FILENAME
     qualification_path = output_dir / QUALIFICATION_FILENAME
-    config = _managed_run_config(plan, inputs.client_backend, inputs.request_timeout_seconds)
+    config = _managed_run_config(plan, inputs)
     deployment: ManagedDeployment | None = None
     try:
         observer.on_activity(
@@ -399,8 +410,8 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         observer.on_activity(
             RunActivity(kind=RunActivityKind.GPU_VERIFIED, accelerator_platform=plan.accelerator_platform)
         )
-        if plan.framework == "splash":
-            await _require_splash_ignore_eos(plan, inputs.client_backend)
+        if config.output_token_policy == "exact" and plan.framework in IGNORE_EOS_PROBED_FRAMEWORKS:
+            await _require_honoured_ignore_eos(plan, inputs.client_backend)
         written_deployment = await asyncio.to_thread(
             write_deployment_record, deployment_path, plan, snapshot, gpu_startup_verified=True
         )

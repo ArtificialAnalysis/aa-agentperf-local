@@ -96,6 +96,7 @@ def _install_fake_runtime(
     """Serve a catalog model from tests.managed_server with a cached artifact and a fake nvidia-smi.
 
     A Splash server runs on Metal and reports the GGUF file it selected, as Splash does.
+    An MTPLX server runs on Metal and reports the folder it loads and its MTP draft head.
     """
     fake_smi = write_looping_nvidia_smi(tmp_path / "bin" / "nvidia-smi")
     monkeypatch.setenv("PATH", f"{fake_smi.parent}{os.pathsep}{os.environ.get('PATH', '')}")
@@ -162,7 +163,10 @@ def _install_fake_runtime(
         del snapshot, context_tokens
         splash = selected.deployment.splash
         server_flags: tuple[str, ...] = ("--platform", "cuda", "--backend", planned_framework)
-        if splash is not None:
+        dropped_ignore_eos = ("--drop-ignore-eos",) if drops_ignore_eos else ()
+        if planned_framework == "mtplx":
+            server_flags = ("--backend", "mtplx", "--model", str(verified.model_path), *dropped_ignore_eos)
+        elif splash is not None:
             server_flags = (
                 "--platform",
                 "metal",
@@ -172,7 +176,7 @@ def _install_fake_runtime(
                 f"{selected.hf_repository}:{splash.gguf_variant}",
                 "--selected",
                 verified.model_path.name,
-                *(("--drop-ignore-eos",) if drops_ignore_eos else ()),
+                *dropped_ignore_eos,
             )
         return DeploymentPlan(
             profile_id=selected.profile_id,
@@ -181,7 +185,7 @@ def _install_fake_runtime(
             catalog_digest=catalog_digest,
             recipe=recipe,
             framework=planned_framework,
-            accelerator_platform="nvidia-cuda" if splash is None else "apple-metal",
+            accelerator_platform="apple-metal" if planned_framework in ("mtplx", "splash") else "nvidia-cuda",
             model_path=verified.model_path,
             artifact_manifest_sha256=verified.manifest_sha256,
             artifact_size_bytes=verified.size_bytes,
@@ -531,24 +535,37 @@ async def test_an_observer_failure_while_stopping_still_stops_the_server(
     assert _port_is_free(runtime.port)
 
 
-@pytest.mark.parametrize("drops_ignore_eos", (False, True), ids=("patched-build", "released-build"))
-def test_a_managed_splash_run_needs_a_build_that_honours_ignore_eos(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], drops_ignore_eos: bool
+@pytest.mark.parametrize(
+    ("framework", "drops_ignore_eos", "policy"),
+    (
+        pytest.param("splash", False, "exact", id="splash-patched-build"),
+        pytest.param("splash", True, "exact", id="splash-released-build"),
+        pytest.param("mtplx", True, "exact", id="mtplx-exact"),
+        pytest.param("mtplx", True, "recorded", id="mtplx-recorded"),
+    ),
+)
+def test_a_managed_run_on_a_build_that_drops_ignore_eos_needs_the_recorded_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    framework: DeploymentFramework,
+    drops_ignore_eos: bool,
+    policy: str,
 ) -> None:
-    """A Splash build that drops ignore_eos would end every long exact turn early, so the run refuses it."""
-    runtime = _install_fake_runtime(tmp_path, monkeypatch, "splash", drops_ignore_eos=drops_ignore_eos)
+    """A build that drops ignore_eos would end every long exact turn early, so only a recorded run proceeds."""
+    runtime = _install_fake_runtime(tmp_path, monkeypatch, framework, drops_ignore_eos=drops_ignore_eos)
     output_dir = tmp_path / "results"
 
     status = main(
         [
             "managed-run",
-            str(write_replay_workload(tmp_path / "workload", name="managed-splash")),
+            str(write_replay_workload(tmp_path / "workload", name=f"managed-{framework}")),
             "--output-dir",
             str(output_dir),
             "--profile-id",
             runtime.candidate.profile_id,
             "--framework",
-            "splash",
+            framework,
             "--device",
             str(CHOSEN_DEVICE_INDEX),
             "--client",
@@ -556,16 +573,19 @@ def test_a_managed_splash_run_needs_a_build_that_honours_ignore_eos(
             "--port",
             str(runtime.port),
             "--no-power",
+            "--output-token-policy",
+            policy,
         ]
     )
 
     captured = capsys.readouterr()
-    if drops_ignore_eos:
+    if drops_ignore_eos and policy == "exact":
         assert status != 0
-        assert "the exact policy needs a Splash build that honours ignore_eos" in captured.err
+        assert f"the exact policy needs a {framework} build that honours ignore_eos" in captured.err
         assert not (output_dir / "measurement.json").exists()
     else:
         assert status == 0, captured.err
         summary = orjson.loads((output_dir / "summary.json").read_bytes())
-        assert summary["config"]["output_tokens"]["policy"] == "exact"
+        assert summary["config"]["output_tokens"]["policy"] == policy
+        assert ("not directly comparable" in captured.err) == (policy == "recorded")
     assert _port_is_free(runtime.port)

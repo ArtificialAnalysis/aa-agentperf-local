@@ -35,6 +35,7 @@ from agentperf_local.deployment.catalog import (
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
+    MtplxLaunch,
     SpeculationPolicy,
     SplashLaunch,
     VllmLaunch,
@@ -1975,6 +1976,130 @@ def test_owned_splash_deployment_must_serve_the_pinned_target(
         framework="splash",
         model_path=tmp_path / SPLASH_TARGET_FILENAME,
         command=(*plan.command, "--backend", "splash", "--model", "example/model-gguf:Q4_0", *startup_log),
+    )
+    log_path = tmp_path / "deployment.log"
+
+    with start_managed_deployment(plan, log_path) as deployment:
+        wait_for_deployment(deployment, timeout_seconds=MANAGED_TEST_STARTUP_TIMEOUT_SECONDS)
+        if expected_error is None:
+            verify_gpu_startup(deployment)
+        else:
+            with pytest.raises(RuntimeError, match=expected_error):
+                verify_gpu_startup(deployment)
+
+
+MTPLX_RELEASE = "2.12.0"
+MTPLX_LAUNCH = MtplxLaunch(
+    profile="turbo",
+    draft_depth=2,
+    environment=(("MTPLX_LOOP_GUARD", "0"), ("MTPLX_REPETITION_STOP", "0")),
+)
+
+
+def _mtplx_candidate() -> ModelCandidate:
+    """Return the weights fixture as an MTPLX folder served on Apple Silicon."""
+    weights = _weights_candidate()
+    return replace_fields(
+        weights,
+        profile_id="fixture-mtplx",
+        devices=("apple-silicon",),
+        speculation_policy="enabled-mtp-self-draft",
+        deployment=replace_fields(
+            weights.deployment,
+            frameworks=("mtplx",),
+            mtplx=MTPLX_LAUNCH,
+            runtime_versions=(("mtplx", MTPLX_RELEASE),),
+        ),
+    )
+
+
+def _mtplx_reporting(tmp_path: Path, version: str) -> CommandFinder:
+    """Return a finder for a stand-in mtplx that reports the given version on `--version`."""
+    executable = write_python_executable(tmp_path / "bin" / "mtplx", f"print('mtplx {version}')\n")
+    return lambda command: str(executable)
+
+
+def test_mtplx_serves_the_verified_folder_offline_with_the_recipe_launch_settings(tmp_path: Path) -> None:
+    """MTPLX loads the snapshot folder by path, under the alias, with the recipe's profile, depth, and switches."""
+    candidate = _mtplx_candidate()
+    snapshot_root = _cached_weights(tmp_path, candidate)
+    cached = ensure_model_artifacts(tmp_path, candidate)
+
+    plan = create_deployment_plan(
+        _hardware("Apple", "Metal"),
+        candidate,
+        "mtplx",
+        cached,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
+        recipe=recipe_source(candidate),
+        command_finder=_mtplx_reporting(tmp_path, MTPLX_RELEASE),
+        alias_nonce="test",
+    )
+
+    assert plan.command[1:3] == ("serve", "--model")
+    for flag, value in (
+        ("--model", str(snapshot_root)),
+        ("--model-id", "fixture-mtplx-test"),
+        ("--context-window", str(PROFILE_CONTEXT_TOKENS)),
+        ("--profile", "turbo"),
+        ("--depth", "2"),
+        ("--no-auth", None),
+        ("--no-stats-footer", None),
+    ):
+        assert flag in plan.command
+        if value is not None:
+            assert plan.command[plan.command.index(flag) + 1] == value
+    assert plan.device_environment == (
+        ("HF_HUB_OFFLINE", "1"),
+        ("MTPLX_CONFIG", os.devnull),
+        ("MTPLX_LOOP_GUARD", "0"),
+        ("MTPLX_REPETITION_STOP", "0"),
+    )
+    assert plan.runtime.version == f"mtplx {MTPLX_RELEASE}"
+    with pytest.raises(ValueError, match=f"verified against mtplx {MTPLX_RELEASE}, but 2.11.0 is installed"):
+        create_deployment_plan(
+            _hardware("Apple", "Metal"),
+            candidate,
+            "mtplx",
+            cached,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
+            command_finder=_mtplx_reporting(tmp_path / "older", "2.11.0"),
+        )
+    with pytest.raises(ValueError, match="mtplx is not supported on nvidia-cuda"):
+        create_deployment_plan(
+            _hardware("NVIDIA", "CUDA"),
+            candidate,
+            "mtplx",
+            cached,
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
+            recipe=recipe_source(candidate),
+            command_finder=_mtplx_reporting(tmp_path, MTPLX_RELEASE),
+        )
+
+
+@pytest.mark.parametrize(
+    ("startup_log", "expected_error"),
+    (
+        pytest.param((), None, id="verified-folder"),
+        pytest.param(("--no-mtp-head",), "did not report installing its MTP draft head", id="no-draft-head"),
+        pytest.param(("--warmup", "failed"), "reported a failed apple-metal backend", id="failed-warmup"),
+        pytest.param(("--model", "/other/folder"), "did not report loading", id="other-folder"),
+    ),
+)
+def test_owned_mtplx_deployment_must_load_the_verified_folder_with_its_draft_head(
+    tmp_path: Path,
+    startup_log: tuple[str, ...],
+    expected_error: str | None,
+) -> None:
+    """MTPLX must warm up on Metal from the verified folder, with its MTP head drafting."""
+    plan = _owned_plan(tmp_path)
+    model_path = tmp_path / "snapshot"
+    plan = replace_fields(
+        plan,
+        framework="mtplx",
+        model_path=model_path,
+        command=(*plan.command, "--backend", "mtplx", "--model", str(model_path), *startup_log),
     )
     log_path = tmp_path / "deployment.log"
 

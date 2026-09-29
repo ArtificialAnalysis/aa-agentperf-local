@@ -44,6 +44,7 @@ from agentperf_local.common.durable_files import (
     validate_new_file_paths,
 )
 from agentperf_local.common.identity import mint_run_id
+from agentperf_local.common.json_fields import one_of
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.common.models import replace_fields
 from agentperf_local.common.units import BYTES_PER_GIB
@@ -68,6 +69,7 @@ from agentperf_local.deployment.managed import (
     DEPLOYMENT_RECORD_FILENAME,
 )
 from agentperf_local.deployment.managed_run import (
+    MANAGED_OUTPUT_TOKEN_POLICIES,
     ManagedRunInputs,
     RunActivity,
     RunActivityKind,
@@ -299,6 +301,15 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
     if selected_offer.memory_fit is not True:
         raise ValueError("detected accelerator memory is unknown or below the requested-context requirement")
     _advise_on_revision(namespace, collect_source_provenance())
+    output_token_policy = one_of(
+        read_string(namespace, "output_token_policy"), MANAGED_OUTPUT_TOKEN_POLICIES, "--output-token-policy"
+    )
+    if output_token_policy == "recorded":
+        print(
+            "warning: the recorded output policy lets the model stop on its own; end-to-end latency is reported "
+            "as a normalized estimate and is not directly comparable with exact-policy runs",
+            file=sys.stderr,
+        )
     inputs = ManagedRunInputs(
         manifest_path=manifest_path,
         output_dir=output_dir,
@@ -316,6 +327,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
         request_timeout_seconds=read_number(namespace, "request_timeout_seconds"),
         download_timeout_seconds=read_number(namespace, "download_timeout_seconds"),
         power=read_boolean(namespace, "power"),
+        output_token_policy=output_token_policy,
         observe_replay=read_boolean(namespace, "progress"),
     )
     outcome = asyncio.run(run_managed_replay(inputs, _managed_observer(namespace, snapshot, catalog)))

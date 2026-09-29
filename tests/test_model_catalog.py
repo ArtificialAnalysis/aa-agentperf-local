@@ -24,6 +24,7 @@ CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
 METAL_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
 SPLASH_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-splash-m5-pro.yaml")
+MTPLX_RECIPE = Path("qwen35-9b", "m5-pro", "qwen35-9b-6bit-mtplx-m5-pro.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -48,7 +49,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-09-28"
+    assert catalog.as_of == "2026-09-29"
     # Recipes load in recipes/<model>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
@@ -69,6 +70,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("qwen35-122b-a10b-nvfp4-mtp-dgx-spark", "98915d837c4e7c87ac8296d02e89de19b3207e6d"),
+        ("qwen35-9b-6bit-mtplx-m5-pro", "86c7eb1b9155a45dd70a898743d7acfc13e12b25"),
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen36-27b-nvfp4-mtp-dgx-spark", "0893e1606ff3d5f97a441f405d5fc541a6bdf404"),
@@ -370,6 +372,54 @@ def test_rejects_splash_recipes_splash_cannot_serve(tmp_path: Path, case: str, m
     else:
         recipe["speculation_policy"] = "disabled-target-only-baseline"
     _write(root, SPLASH_RECIPE, recipe)
+
+    with pytest.raises(ValueError, match=re.escape(message)):
+        load_model_catalog(root)
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("no-launch-settings", "must carry MTPLX launch settings"),
+        ("unpinned-release", "must pin its MTPLX release"),
+        ("second-framework", "served by MTPLX alone"),
+        ("cuda-device", "runs on apple-silicon alone"),
+        ("target-only-policy", "drafts with the model's own MTP head"),
+        ("too-deep", "deployment.mtplx.draft_depth: Input should be less than or equal to 3"),
+        ("unknown-profile", "deployment.mtplx.profile: Input should be 'stable', 'sustained' or 'turbo'"),
+        ("lowercase-environment", "MTPLX environment must use uppercase names"),
+        ("settings-without-framework", "only an MTPLX recipe can name MTPLX launch settings"),
+    ],
+)
+def test_rejects_mtplx_recipes_mtplx_cannot_serve(tmp_path: Path, case: str, message: str) -> None:
+    """Refuse an MTPLX recipe whose runtime, device, or launch settings are not pinned."""
+    root = tmp_path / "recipes"
+    shutil.copytree(CATALOG_PATH, root)
+    recipe = _read(root, MTPLX_RECIPE)
+    deployment = recipe["deployment"]
+    assert isinstance(deployment, dict)
+    launch = deployment["mtplx"]
+    assert isinstance(launch, dict)
+    if case == "no-launch-settings":
+        del deployment["mtplx"]
+    elif case == "unpinned-release":
+        del deployment["runtime_versions"]
+    elif case == "second-framework":
+        deployment["frameworks"] = ["mtplx", "vllm"]
+    elif case == "cuda-device":
+        recipe["devices"] = ["nvidia-cuda"]
+    elif case == "target-only-policy":
+        recipe["speculation_policy"] = "disabled-target-only-baseline"
+    elif case == "too-deep":
+        launch["draft_depth"] = 4
+    elif case == "unknown-profile":
+        launch["profile"] = "max-diagnostic"
+    elif case == "lowercase-environment":
+        launch["environment"] = {"mtplx_loop_guard": "0"}
+    else:
+        deployment["frameworks"] = ["vllm"]
+        del deployment["runtime_versions"]
+    _write(root, MTPLX_RECIPE, recipe)
 
     with pytest.raises(ValueError, match=re.escape(message)):
         load_model_catalog(root)

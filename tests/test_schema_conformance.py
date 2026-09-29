@@ -21,6 +21,7 @@ from agentperf_local.deployment.catalog import (
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
+    MtplxLaunch,
     RecipeSource,
     VllmLaunch,
 )
@@ -48,6 +49,7 @@ SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
     ("recipe-v1.schema.json", "$defs/memory", DeploymentMemory),
     ("recipe-v1.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
     ("recipe-v1.schema.json", "$defs/vllm", VllmLaunch),
+    ("recipe-v1.schema.json", "$defs/mtplx", MtplxLaunch),
     ("recipe-v1.schema.json", "$defs/deployment", ModelDeployment),
     ("recipe-v1.schema.json", "$defs/model", ModelCandidate),
     ("private-audit-v1.schema.json", "$defs/accelerator", AcceleratorSnapshot),

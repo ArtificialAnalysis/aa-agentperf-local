@@ -116,6 +116,7 @@ Use your server's base URL and the model name it reports:
 | vLLM | `http://127.0.0.1:8000/v1` |
 | SGLang | `http://127.0.0.1:30000/v1` |
 | Splash | `http://127.0.0.1:8000/v1` |
+| MTPLX | `http://127.0.0.1:8000/v1` |
 
 The `exact` policy sends `ignore_eos`, which is not part of the OpenAI API.
 Before the replay, `run` checks that the server honours it. If it does not,
@@ -124,6 +125,10 @@ Before the replay, `run` checks that the server honours it. If it does not,
 **Released Splash builds drop `ignore_eos`.** `run` stops, and
 `--output-token-policy recorded` runs them with results that are not
 comparable. A Splash build that honours the field runs the `exact` policy.
+
+**MTPLX drops `ignore_eos` too.** A managed MTPLX run needs
+`--output-token-policy recorded`, and its results are not comparable with
+`exact` runs.
 
 **Ollama cannot honour `ignore_eos`.** The tool detects Ollama before the run
 and warns you. The run then uses the `recorded` policy, which lets the model

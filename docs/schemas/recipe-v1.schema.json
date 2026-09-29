@@ -164,6 +164,39 @@
         }
       }
     },
+    "mtplx": {
+      "description": "The MTPLX runtime profile, native MTP draft depth, and MTPLX_* environment one recipe serves with. An MTPLX recipe pins every file of one MTPLX model folder as a safetensors-repository and pins its MTPLX release in runtime_versions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "draft_depth"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "stable",
+            "sustained",
+            "turbo"
+          ]
+        },
+        "draft_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "splash": {
       "description": "How Splash selects the GGUF target by variant and stores its KV cache. A Splash recipe pins one .gguf target from its own repository and a DFlash2 draft (config.json and safetensors) from one source_repository.",
       "type": "object",
@@ -322,6 +355,7 @@
           "items": {
             "enum": [
               "llama-cpp",
+              "mtplx",
               "sglang",
               "splash",
               "vllm"
@@ -354,6 +388,16 @@
             }
           ]
         },
+        "mtplx": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/mtplx"
+            }
+          ]
+        },
         "splash": {
           "anyOf": [
             {
@@ -379,6 +423,7 @@
           "type": "object",
           "propertyNames": {
             "enum": [
+              "mtplx",
               "sglang",
               "splash",
               "vllm"

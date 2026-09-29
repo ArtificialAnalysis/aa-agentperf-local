@@ -109,6 +109,19 @@ VLLM_KV_CACHE_PATTERN = re.compile(r"kv cache size[:\s]+([0-9,]+)\s*tokens")
 # Splash's engine runs only on Metal and names the Apple GPU family it chose kernels for,
 # as in "Kernel policy for GPU family 10 with 20 cores".
 SPLASH_METAL_MARKER = "kernel policy for gpu family"
+# MTPLX runs on MLX, whose default device on Apple Silicon is the Metal GPU. It
+# generates a short warmup before its server listens, and names the folder it loads
+# and the MTP draft head it installs. The log is read lowercased.
+MTPLX_WARMUP_MARKER = "[6/6] warmup complete in"
+MTPLX_WARMUP_FAILURE_MARKER = "[6/6] warmup failed"
+MTPLX_LOADING_MARKER = "[5/6] loading model weights: "
+MTPLX_MTP_HEAD_MARKER = "[5/6] installing native-mtp draft head"
+# Keep MTPLX from reading the user's ~/.mtplx/config.toml, which can change the
+# profile, KV format, sampler, and API key, and from reaching the Hugging Face Hub.
+MTPLX_ISOLATION_ENVIRONMENT: tuple[tuple[str, str], ...] = (
+    ("HF_HUB_OFFLINE", "1"),
+    ("MTPLX_CONFIG", os.devnull),
+)
 
 # What most often ends a managed server before it ever answers, named per runtime so a
 # failure points at the right thing to check.
@@ -120,6 +133,7 @@ _EARLY_EXIT_HINTS: dict[DeploymentFramework, str] = {
     ),
     "vllm": ("a server killed with status -9 ran out of memory; lower --gpu-memory-utilization or free the device"),
     "splash": "Splash needs macOS 26.4 or later on an M3 or newer Mac, and a build that knows the launch flags",
+    "mtplx": "MTPLX needs an Apple Silicon Mac and the pinned mtplx release; status -9 means it ran out of memory",
 }
 
 
@@ -620,6 +634,38 @@ def _splash_argv(
     )
 
 
+def _mtplx_argv(
+    deployment: ModelDeployment,
+    context_tokens: int,
+    model_path: Path,
+    model_alias: str,
+    endpoint: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the MTPLX server flags for one recipe, after the executable prefix."""
+    launch = deployment.mtplx
+    if launch is None:
+        raise ValueError("MTPLX recipe is missing its MTPLX launch settings")
+    # MTPLX serves the verified snapshot folder as a local path, so it never downloads.
+    # It picks the profile and depth from the served model name, and this server is
+    # served under the alias, so the recipe's values are passed. --no-auth keeps an
+    # MTPLX_API_KEY in the user's environment from locking the loopback server.
+    return (
+        "--model",
+        str(model_path),
+        "--model-id",
+        model_alias,
+        *endpoint,
+        "--context-window",
+        str(context_tokens),
+        "--profile",
+        launch.profile,
+        "--depth",
+        str(launch.draft_depth),
+        "--no-auth",
+        "--no-stats-footer",
+    )
+
+
 def _launch_command(
     executable: FrameworkExecutable,
     candidate: ModelCandidate,
@@ -643,6 +689,8 @@ def _launch_command(
         arguments = _vllm_argv(candidate, deployment, context_tokens, model_path, model_alias, endpoint)
     elif executable.framework == "splash":
         arguments = _splash_argv(candidate, deployment, context_tokens, draft_model_path, model_alias, endpoint)
+    elif executable.framework == "mtplx":
+        arguments = _mtplx_argv(deployment, context_tokens, model_path, model_alias, endpoint)
     else:
         raise ValueError(f"{executable.framework} does not have a complete pinned managed recipe")
     return (*executable.command_prefix, *arguments)
@@ -730,6 +778,8 @@ def create_deployment_plan(
     recipe_environment = deployment.vllm.environment if framework == "vllm" and deployment.vllm is not None else ()
     if framework == "splash":
         recipe_environment = _splash_environment(artifacts)
+    if framework == "mtplx" and deployment.mtplx is not None:
+        recipe_environment = tuple(sorted((*deployment.mtplx.environment, *MTPLX_ISOLATION_ENVIRONMENT)))
     combined_environment = (*recipe_environment, *device_environment)
     environment_names = tuple(name for name, _ in combined_environment)
     if len(set(environment_names)) != len(environment_names):
@@ -944,9 +994,13 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
             platform_markers = ("rocm", "hipblas", "rocblas", "hip platform", "rocmplatform")
     else:
         failure_markers = ("metal unavailable", "metal is not available", "failed to initialize metal")
-        platform_markers = (
-            (SPLASH_METAL_MARKER,) if deployment.plan.framework == "splash" else ("ggml_metal_init", "metal backend")
-        )
+        if deployment.plan.framework == "splash":
+            platform_markers = (SPLASH_METAL_MARKER,)
+        elif deployment.plan.framework == "mtplx":
+            failure_markers = (*failure_markers, MTPLX_WARMUP_FAILURE_MARKER)
+            platform_markers = (MTPLX_WARMUP_MARKER,)
+        else:
+            platform_markers = ("ggml_metal_init", "metal backend")
     if any(marker in log for marker in failure_markers):
         raise RuntimeError(
             _log_hint(
@@ -979,6 +1033,9 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
         _require_splash_selection(deployment.plan, log, log_path)
         # Splash starts only when its engine grants the requested context, and readiness
         # has already read that context back from the model list.
+        return
+    if deployment.plan.framework == "mtplx":
+        _require_mtplx_selection(deployment.plan, log, log_path)
         return
     if deployment.plan.framework == "sglang":
         # SGLang sizes its token pool from free device memory, so a server can advertise the
@@ -1024,6 +1081,19 @@ def _require_splash_selection(plan: DeploymentPlan, log: str, log_path: Path) ->
     installed = f"splash model {model_id} is already installed"
     if selected.lower() not in log and installed.lower() not in log:
         raise RuntimeError(_log_hint(f"managed Splash did not report that it {selected}", log_path))
+
+
+def _require_mtplx_selection(plan: DeploymentPlan, log: str, log_path: Path) -> None:
+    """Require MTPLX to report that it loaded the verified folder with its MTP draft head.
+
+    A recipe that drafts with the model's own head must not fall back to plain
+    decoding, and a folder other than the verified snapshot must not be served.
+    """
+    loading = f"{MTPLX_LOADING_MARKER}{plan.model_path}".lower()
+    if loading not in log:
+        raise RuntimeError(_log_hint(f"managed MTPLX did not report loading {plan.model_path}", log_path))
+    if MTPLX_MTP_HEAD_MARKER not in log:
+        raise RuntimeError(_log_hint("managed MTPLX did not report installing its MTP draft head", log_path))
 
 
 class DeploymentRecord(BaseModel, frozen=True):

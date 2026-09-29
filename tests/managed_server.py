@@ -30,6 +30,11 @@ STARTUP_LINES = {
     "vulkan": "using device Vulkan0 (fixture); Vulkan0 model buffer size = 1 MiB; offloaded 1/1 layers to GPU",
 }
 SPLASH_METAL_LINE = "12:00:00 Kernel policy for GPU family 10 with 20 cores."
+MTPLX_MTP_HEAD_LINE = "[5/6] Installing native-MTP draft head"
+MTPLX_WARMUP_LINES = {
+    "complete": "[6/6] Warmup complete in 0.4s (48.00 tok/s)",
+    "failed": "[6/6] Warmup failed after 0.1s: RuntimeError: fixture",
+}
 
 
 def _events_for(body: bytes, drop_ignore_eos: bool) -> tuple[bytes, ...]:
@@ -68,7 +73,7 @@ def _handler(
             model: dict[str, object] = {"id": model_alias, "object": "model"}
             if served_context_tokens is not None:
                 # llama.cpp reports the served context under meta; SGLang reports max_model_len.
-                if backend in ("sglang", "splash", "vllm"):
+                if backend in ("mtplx", "sglang", "splash", "vllm"):
                     model["max_model_len"] = served_context_tokens
                 else:
                     model["meta"] = {"n_ctx": served_context_tokens}
@@ -95,12 +100,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--hide-ctx", action="store_true", help="omit the served context like a silent server")
     parser.add_argument("--platform", choices=tuple(STARTUP_LINES), default="metal")
     parser.add_argument("--device")
-    parser.add_argument("--backend", default="llama-cpp", choices=("llama-cpp", "sglang", "splash", "vllm"))
+    parser.add_argument("--backend", default="llama-cpp", choices=("llama-cpp", "mtplx", "sglang", "splash", "vllm"))
     parser.add_argument("--token-pool", type=int, default=DEFAULT_SERVED_CONTEXT_TOKENS)
-    parser.add_argument("--model", help="Splash's OWNER/REPO:VARIANT model id")
+    parser.add_argument("--model", help="Splash's OWNER/REPO:VARIANT model id, or the folder MTPLX loads")
     parser.add_argument("--selected", help="the GGUF file Splash reports selecting")
     parser.add_argument("--splash-installed", action="store_true", help="report an existing installation instead")
     parser.add_argument("--drop-ignore-eos", action="store_true", help="answer ignore_eos like released Splash")
+    parser.add_argument("--no-mtp-head", action="store_true", help="leave out MTPLX's MTP draft head line")
+    parser.add_argument("--warmup", choices=tuple(MTPLX_WARMUP_LINES), default="complete", help="MTPLX warmup result")
     namespace = parser.parse_args(argv)
     port = namespace.port
     model_alias = namespace.alias
@@ -132,6 +139,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"Selected {namespace.selected} from {model.split(':')[0]}.", flush=True)
         print(SPLASH_METAL_LINE, flush=True)
+    elif backend == "mtplx":
+        print(f"[5/6] Loading model weights: {namespace.model}", flush=True)
+        if not namespace.no_mtp_head:
+            print(MTPLX_MTP_HEAD_LINE, flush=True)
+        print(MTPLX_WARMUP_LINES[str(namespace.warmup)], flush=True)
     else:
         print(STARTUP_LINES[namespace.platform].replace("1/1", offloaded), file=sys.stderr, flush=True)
     drop_ignore_eos = bool(namespace.drop_ignore_eos)

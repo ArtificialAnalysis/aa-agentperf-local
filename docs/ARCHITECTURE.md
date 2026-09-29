@@ -112,7 +112,8 @@ Custom datasets use the manifest and JSONL trace format in
 - A **GGUF recipe** pins one or more files by size and SHA-256. llama.cpp serves
   it on CUDA, ROCm, or Metal.
 - A **weights recipe** pins every file of a Hugging Face revision that the
-  runtime opens. SGLang or vLLM serves it on CUDA.
+  runtime opens. SGLang or vLLM serves it on CUDA, and MTPLX serves an MLX
+  model folder on Metal.
 
 A weights recipe names the exact runtime release it was checked against, and
 the launcher refuses any other. A server can load the right weights, report

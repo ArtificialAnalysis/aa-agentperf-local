@@ -45,6 +45,11 @@ uv run agentperf-local managed-run \
 - **Splash** recipes do not pin a build, and run on Apple Silicon alone. Put
   a `splash` on `PATH`. `managed-run` refuses a build that drops `ignore_eos`,
   which released builds up to 1.1.0 do.
+- **MTPLX** recipes pin one exact release in `runtime_versions`, and run on
+  Apple Silicon alone. Put an `mtplx` on `PATH` (`brew install
+  youssofal/mtplx/mtplx` or `pip install mtplx==2.12.0`). MTPLX drops
+  `ignore_eos`, so pass `--output-token-policy recorded`. The result is not
+  comparable with `exact` runs.
 
 To try recipes from another folder, pass `--recipes PATH`. The TUI marks
 them as not from the Artificial Analysis catalog.
@@ -98,6 +103,18 @@ schema. Its error messages name the field that is wrong.
   passes the draft as a local directory, so Splash serves only verified files.
   Splash prepares its own weights once, in `~/Library/Caches/Splash/weights`
   (17 GB for the Qwen3.8 27B recipe).
+- **MTPLX serves the verified folder as a local path.** The launcher starts
+  it with `HF_HUB_OFFLINE=1`, and with `MTPLX_CONFIG` pointing at an empty
+  file, so a `~/.mtplx/config.toml` cannot change the launch. MTPLX picks a
+  profile and draft depth from the served model name, and a managed server is
+  served under another name, so the recipe states both in `mtplx:`.
+  The recipe's `mtplx.environment` sets documented `MTPLX_*` switches. The
+  Qwen3.5 9B recipe keeps MTPLX's loop guard, repetition stop, and thinking
+  budget off (`MTPLX_LOOP_GUARD`, `MTPLX_REPETITION_STOP`,
+  `MTPLX_THINKING_BUDGET` set to `0`). They are already off by default in
+  2.12.0; pinning them stops a user's environment from turning them on.
+  MTPLX's SSD session cache stays on, as it ships, and writes KV snapshots
+  under `~/.mtplx/session-bank`.
 - **Quantizations differ between devices.** Q4_K_M, Q4_0, NVFP4, and MXFP4
   are four-bit formats, but they are not identical weights. Compare runs of
   the same recipe.

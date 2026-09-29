@@ -392,7 +392,8 @@
             "llama-cpp",
             "vllm",
             "sglang",
-            "splash"
+            "splash",
+            "mtplx"
           ]
         },
         "accelerator_platform": {

@@ -1,0 +1,80 @@
+profile_id: qwen35-9b-6bit-mtplx-m5-pro
+as_of: '2026-09-29'
+display_name: Qwen3.5 9B 6-bit, M5 Pro MTPLX MTP
+hf_repository: Youssofal/Qwen3.5-9B-MTPLX-Optimized-Speed
+hf_revision: 86c7eb1b9155a45dd70a898743d7acfc13e12b25
+devices:
+- apple-silicon
+tool_call_parser: qwen3_coder
+reasoning_parser: qwen3
+thinking_policy: enabled
+speculation_policy: enabled-mtp-self-draft
+deployment:
+  artifact_kind: safetensors-repository
+  artifacts:
+  - filename: MTPLX_PUBLISH_MANIFEST.json
+    sha256: c22df2d3316914cf2719bc76aaba1178918f21873271377bb282e8fba35abd73
+    size_bytes: 4177
+  - filename: README.md
+    sha256: 8396944d6ef4027250f6dac28046f6f4c8fcb1d134d50c0332a837a89cd47121
+    size_bytes: 2623
+  - filename: chat_template.jinja
+    sha256: a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715
+    size_bytes: 7756
+  - filename: config.json
+    sha256: f6b08a37a18d011c76a256a239b7f25532969b3c18924cd217f72803e79584b4
+    size_bytes: 3544
+  - filename: model-00001-of-00002.safetensors
+    sha256: f9738b8b326e67e5213e46f1ebd59c558f60146ae50f4af9bfebe1ec7a42bc9d
+    size_bytes: 5358172442
+  - filename: model-00002-of-00002.safetensors
+    sha256: 57afa8da33ded0f5ac1801cf4d69b4dcae5318933beb48c86f284a908f4341c5
+    size_bytes: 1918175495
+  - filename: model-vision.safetensors
+    sha256: a51f02c23386845de4f761af45b1c4bd1aeb3a0f4f6fb02837711875c89d484d
+    size_bytes: 912058025
+  - filename: model.safetensors.index.json
+    sha256: fc84eec5ca0d060585ad9ac86ac710b8020aa601a9212e58518c008d0a61200f
+    size_bytes: 115913
+  - filename: mtp.safetensors
+    sha256: b480f630a574a19aa2d1c0efd92bb18de8cb6fa7c05c7cb043eecb07201ce7d2
+    size_bytes: 486582837
+  - filename: mtplx_runtime.json
+    sha256: 5fd7a45add51fd963c5de449042408075add13d86a5df5713d475450bb3e46d2
+    size_bytes: 3322
+  - filename: preprocessor_config.json
+    sha256: 27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516
+    size_bytes: 390
+  - filename: tokenizer.json
+    sha256: 06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523
+    size_bytes: 19989325
+  - filename: tokenizer_config.json
+    sha256: 95c557768e6b88a7128befc7bfd3c7de50e5d51af9b8b33a9f4dee0e04f99679
+    size_bytes: 1161
+  - filename: video_preprocessor_config.json
+    sha256: 7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13
+    size_bytes: 385
+  context_tokens: 65536
+  frameworks:
+  - mtplx
+  memory:
+    full_attention_layers: 8
+    full_kv_heads: 4
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 51511296
+    runtime_overhead_bytes: 3221225472
+  mtplx:
+    profile: turbo
+    draft_depth: 2
+    environment:
+      MTPLX_LOOP_GUARD: '0'
+      MTPLX_REPETITION_STOP: '0'
+      MTPLX_THINKING_BUDGET: '0'
+  runtime_versions:
+    mtplx: 2.12.0
