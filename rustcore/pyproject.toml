@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "agentperf-local-rustcore"
-version = "0.3.0"
+version = "0.3.1"
 description = "Optional Rust streaming client for agentperf-local."
 readme = "README.md"
 requires-python = ">=3.12"
