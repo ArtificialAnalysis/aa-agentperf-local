@@ -15,6 +15,7 @@ from agentperf_local.common.models import error_text
 from agentperf_local.deployment.catalog import ModelCandidate, ModelDeployment
 from agentperf_local.deployment.context_policy import (
     largest_fitting_reduced_context,
+    largest_offered_fitting_context,
     resolve_context_tokens,
     smaller_offered_context_fits,
 )
@@ -60,6 +61,7 @@ from agentperf_local.reports.reporting import (
 )
 from agentperf_local.tui.replay_contract import (
     DEVICE_SELECTION_REQUIRED_MESSAGE,
+    PLATFORM_MISMATCH_REASON,
     SERVER_REFUSED_MESSAGE,
     SERVER_UNREACHABLE_MESSAGE,
     EndpointProblem,
@@ -408,14 +410,21 @@ class LocalManagedReplayController:
         except ValueError as error:
             return ManagedModelAvailability(hardware=safe_hardware, offers=(), reason=error_text(error))
         deployable = tuple(offer for offer in offers if offer.installed and offer.memory_fit is True)
+        reduced_context_tokens = None
         if deployable:
             reason = None
         elif not offers:
-            reason = "None of this model's frameworks support the detected accelerator."
+            reason = PLATFORM_MISMATCH_REASON
         elif all(offer.memory_fit is False for offer in offers):
             reason = _insufficient_memory_reason(
                 candidate.deployment,
                 context_tokens,
+                offers[0].available_memory_bytes,
+                replay_floor_tokens,
+            )
+            reduced_context_tokens = largest_offered_fitting_context(
+                candidate.deployment,
+                resolve_context_tokens(candidate.deployment, context_tokens),
                 offers[0].available_memory_bytes,
                 replay_floor_tokens,
             )
@@ -424,7 +433,9 @@ class LocalManagedReplayController:
         else:
             installation_hints = tuple(offer.installation_hint for offer in offers if not offer.installed)
             reason = installation_hints[0] if installation_hints else "No compatible framework is ready to launch."
-        return ManagedModelAvailability(hardware=safe_hardware, offers=offers, reason=reason)
+        return ManagedModelAvailability(
+            hardware=safe_hardware, offers=offers, reason=reason, reduced_context_tokens=reduced_context_tokens
+        )
 
     def _selected_offer(self, choice: ManagedDeploymentChoice, bound: BoundDeploymentDevice) -> FrameworkOffer:
         """Return the installed framework offer one choice names on its already-bound device."""

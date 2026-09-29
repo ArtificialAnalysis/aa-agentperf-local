@@ -139,6 +139,23 @@ def smaller_offered_context_fits(
     )
 
 
+def largest_offered_fitting_context(
+    deployment: ModelDeployment,
+    requested_tokens: int,
+    available_memory_bytes: int | None,
+    replay_floor_tokens: int | None,
+) -> int | None:
+    """Return the largest offered context below the requested one that fits the device, or None."""
+    return max(
+        (
+            rung
+            for rung in reduced_context_rungs(deployment, replay_floor_tokens)
+            if rung < requested_tokens and context_fit(deployment, rung, available_memory_bytes) is True
+        ),
+        default=None,
+    )
+
+
 def largest_fitting_reduced_context(deployment: ModelDeployment, available_memory_bytes: int | None) -> int | None:
     """Return the largest reduced context that fits the device, ignoring any replay floor."""
     return max(

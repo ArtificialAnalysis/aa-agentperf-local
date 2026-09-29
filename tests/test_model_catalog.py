@@ -213,6 +213,7 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("multiline-model-name", "model_name must be short printable text"),
         ("model-name-mismatch", "every recipe in gemma4-12b must share the model_name Gemma 4 12B"),
         ("hardware-field", f"{GEMMA_RECIPE.as_posix()}: hardware: Extra inputs are not permitted"),
+        ("same-shown-name", "would show the same name; give one a variant"),
         ("llama-backend-device", "backend must match the recipe's devices"),
         (
             "llama-threads-zero",
@@ -259,6 +260,10 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         deployment["context_tokens"] = 32768
     elif case == "multiline-model-name":
         gemma["model_name"] = "spoofed heading\nAA VERIFIED"
+    elif case == "same-shown-name":
+        gemma["profile_id"] = "gemma4-12b-it-q4-0-twin"
+        _write(root, GEMMA_RECIPE.with_name("gemma4-12b-it-q4-0-twin.yaml"), gemma)
+        gemma = _read(root, GEMMA_RECIPE)
     elif case == "hardware-field":
         gemma["hardware"] = "rtx-5090"
     elif case == "model-name-mismatch":

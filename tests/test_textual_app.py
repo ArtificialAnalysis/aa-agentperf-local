@@ -1869,16 +1869,26 @@ def _only_llama_server(command: str) -> str | None:
 
 
 @pytest.mark.parametrize(
-    ("hardware", "heading", "marks"),
+    ("hardware", "replay_id", "heading", "marks"),
     [
+        # The default replay needs its full context, so a recipe that only fits smaller is too large.
         (
             _single_device_hardware(),
+            "agentperf-default-v1",
             "THIS COMPUTER: NVIDIA GeForce RTX 5090 · 32 GiB",
             {"qwen38-27b-q4-k-m-mtp": "●", "gemma4-26b-a4b-nvfp4": "▲", "qwen38-27b-nvfp4-dgx-spark": "✗"},
+        ),
+        # The mini replay allows a reduced context, which that recipe fits.
+        (
+            _single_device_hardware(),
+            "aa-mini-v1",
+            "THIS COMPUTER: NVIDIA GeForce RTX 5090 · 32 GiB",
+            {"qwen38-27b-q4-k-m-mtp": "●", "qwen38-27b-nvfp4-dgx-spark": "▲"},
         ),
         # With no device chosen yet, the best device stands for the computer.
         (
             _multi_device_hardware(),
+            "agentperf-default-v1",
             "THIS COMPUTER: 3 accelerators",
             {"qwen38-27b-q4-k-m-mtp": "●", "gemma4-26b-a4b-nvfp4": "▲", "qwen38-27b-nvfp4-dgx-spark": "▲"},
         ),
@@ -1887,6 +1897,7 @@ def _only_llama_server(command: str) -> str | None:
 async def test_model_list_puts_what_this_computer_can_run_first(
     tmp_path: Path,
     hardware: HardwareSnapshot,
+    replay_id: str,
     heading: str,
     marks: dict[str, str],
 ) -> None:
@@ -1899,7 +1910,7 @@ async def test_model_list_puts_what_this_computer_can_run_first(
             hardware=hardware,
             offer_collector=partial(framework_offers, command_finder=_only_llama_server),
         ),
-        defaults=TuiDefaults(output_dir=tmp_path / "results"),
+        defaults=TuiDefaults(output_dir=tmp_path / "results", replay_id=replay_id),
     )
 
     async with app.run_test(size=(96, 30)) as pilot:
@@ -1968,6 +1979,12 @@ async def test_computer_without_a_supported_accelerator_still_opens(tmp_path: Pa
         assert prompts[0] == "THIS COMPUTER: 2 accelerators"
         assert prompts.index("No recipe runs on this computer.") < prompts.index("OTHER HARDWARE")
         assert _custom_endpoint_highlighted(app)
+
+        # An accelerator the app cannot classify keeps its own error rather than a platform list.
+        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
+        detail = str(app.query_one("#model-detail", Static).content)
+        assert "does not expose CUDA, ROCm, or Apple Metal" in detail
+        assert "It runs on" not in detail
 
 
 def _installed_sglang_offer(

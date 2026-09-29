@@ -16,11 +16,12 @@ from rich.markup import escape
 from agentperf_local.common.units import BYTES_PER_GIB, MILLISECONDS_PER_SECOND
 from agentperf_local.deployment.catalog import (
     DEVICE_IDS,
+    SPECULATION_METHODS,
     ArtifactKind,
     DeploymentFramework,
     DeviceId,
+    LlamaCppBackend,
     ModelCandidate,
-    SpeculationPolicy,
 )
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
@@ -33,6 +34,7 @@ from agentperf_local.provenance.hardware import AcceleratorPlatform
 from agentperf_local.replay.runner import TurnCompletedBoundary
 from agentperf_local.reports.progress import RunTurnSample, rate_text
 from agentperf_local.tui.replay_contract import (
+    PLATFORM_MISMATCH_REASON,
     ManagedModelAvailability,
     PreflightBlockCode,
     RecipeStanding,
@@ -65,20 +67,11 @@ DEVICE_PLATFORM_NAMES: dict[DeviceId, str] = {
     "amd-rocm": "AMD (ROCm)",
     "apple-silicon": "Apple silicon",
 }
-# The speed-up a speculation policy names; the target-only baseline has none.
-SPEEDUP_NAMES: dict[SpeculationPolicy, str | None] = {
-    "disabled-target-only-baseline": None,
-    "enabled-mtp-self-draft": "MTP",
-    "enabled-mtp-external-draft": "MTP",
-    "enabled-dflash-external-draft": "DFlash",
-    "enabled-dflash-draft": "DFlash",
-    "enabled-dspark-external-draft": "DSpark",
-    "enabled-dspark-draft": "DSpark",
-    "enabled-vllm-external-draft": "Draft model",
-}
+LLAMA_CPP_BACKEND_NAMES: dict[LlamaCppBackend, str] = {"rocm": "ROCm", "vulkan": "Vulkan", "metal": "Metal"}
 STANDING_HEADLINES: dict[RecipeStanding, str] = {
     RecipeStanding.READY: "Runs on this computer",
     RecipeStanding.NEEDS_SETUP: "Needs setup on this computer",
+    RecipeStanding.REDUCED_ONLY: "Fits only at a reduced context",
     RecipeStanding.TOO_LARGE: "Too large for this computer",
     RecipeStanding.OTHER_HARDWARE: "Made for other hardware",
 }
@@ -183,13 +176,30 @@ def hardware_target_text(candidate: ModelCandidate, hardware: str) -> str:
 
 def speedup_text(candidate: ModelCandidate) -> str | None:
     """Name a recipe's speculative decoding method, or return None for a target-only recipe."""
-    return SPEEDUP_NAMES[candidate.speculation_policy]
+    return SPECULATION_METHODS[candidate.speculation_policy]
+
+
+def quantization_text(candidate: ModelCandidate) -> str:
+    """Name a recipe's weight format, with its variant when it has one, such as NVFP4 · b12x."""
+    return candidate.quantization if candidate.variant is None else f"{candidate.quantization} · {candidate.variant}"
 
 
 def recipe_build_text(candidate: ModelCandidate) -> str:
-    """Name a recipe's weight format and speed-up, such as Q4_K_M · MTP."""
+    """Name a recipe's weight format, variant, and speed-up, such as Q4_K_M · MTP."""
     speedup = speedup_text(candidate)
-    return candidate.quantization if speedup is None else f"{candidate.quantization} · {speedup}"
+    quantization = quantization_text(candidate)
+    return quantization if speedup is None else f"{quantization} · {speedup}"
+
+
+def recipe_frameworks_text(candidate: ModelCandidate) -> str:
+    """Name the frameworks a recipe runs with, and llama.cpp's backend when the recipe pins one."""
+    launch = candidate.deployment.llama_cpp
+    names: list[str] = []
+    for framework in candidate.deployment.frameworks:
+        name = framework_display_name(framework)
+        backend = launch.backend if framework == "llama-cpp" and launch is not None else None
+        names.append(name if backend is None else f"{name} ({LLAMA_CPP_BACKEND_NAMES[backend]})")
+    return " / ".join(names)
 
 
 def recipe_title_text(candidate: ModelCandidate, hardware: str) -> str:
@@ -219,8 +229,16 @@ def standing_reason_text(candidate: ModelCandidate, availability: ManagedModelAv
     standing = availability.standing
     if standing is RecipeStanding.READY:
         return None
+    reduced = availability.reduced_context_tokens
+    if standing is RecipeStanding.REDUCED_ONLY and reduced is not None:
+        return (
+            f"It fits at {reduced:,} tokens, not the full {candidate.deployment.context_tokens:,}. "
+            "Reduced runs are recorded separately from full-context results."
+        )
     accelerator = availability.hardware.accelerator_name
-    if standing is RecipeStanding.OTHER_HARDWARE and accelerator is not None:
+    # Only a plain platform mismatch is worded here; an accelerator the app could not
+    # classify keeps its own error, which says what is actually wrong.
+    if availability.reason == PLATFORM_MISMATCH_REASON and accelerator is not None:
         platforms = " or ".join(DEVICE_PLATFORM_NAMES[device] for device in candidate.devices)
         return f"It runs on {platforms}. This computer has {accelerator}."
     return availability.reason or "This app cannot start models on this computer."

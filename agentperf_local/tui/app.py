@@ -141,6 +141,7 @@ from agentperf_local.tui.labels import (
     platform_suffix,
     probe_activity_text,
     recipe_build_text,
+    recipe_frameworks_text,
     recipe_title_text,
     result_path_text,
     seconds_label,
@@ -552,6 +553,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.step = TuiStep.WELCOME
         self.setup_return_step = TuiStep.MODEL
         self._information_bookmark: _NavigationBookmark | None = None
+        # Bundled replay manifests are tiny package files; their declared context
+        # demand is read once and reused by every context-ladder rebuild.
+        self.replay_floor_cache: dict[str, int | None] = {}
         self.listed_recipes = self._listed_recipes()
         self.selection = (
             BenchmarkSelection.custom(self.defaults.endpoint_model)
@@ -585,9 +589,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.run_context_probe: ContextProbeResult | None = None
         self.preflight_spinner_timer: Timer | None = None
         self.preflight_spinner_tick = 0
-        # Bundled replay manifests are tiny package files; their declared context
-        # demand is read once and reused by every context-ladder rebuild.
-        self.replay_floor_cache: dict[str, int | None] = {}
 
     def compose(self) -> ComposeResult:
         """Compose the permanent shell and all stateful pages."""
@@ -981,7 +982,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if run_compact and self._showing_server_log():
             # A compact page shows either the log or the details; keep the log the user opened.
             run_page.remove_class("show-details")
-        # The gauge draws a narrower bar once the run page carries the compact class.
+        # The context line shortens once the run page carries the compact class.
         self._render_context_gauge()
         self._sync_kitty()
         if restored_supported_size:
@@ -1017,23 +1018,23 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         return accelerator_summary_text(self.managed_controller.hardware_summary())
 
     def _listing_availability(self, candidate: ModelCandidate) -> ManagedModelAvailability | None:
-        """Return what the model screen shows for one recipe at the chosen context.
+        """Return what the model screen shows for one recipe at its full context.
 
-        With several accelerators and none chosen yet, the best device's result stands
-        for the computer, because the device is picked only on the next screen.
+        The full context, not the setup picker's choice for some earlier recipe, keeps one
+        recipe's mark from depending on what was looked at before; a smaller context the
+        replay allows still counts, as a reduced-only fit. With several accelerators and
+        none chosen yet, the best device's result stands for the computer, because the
+        device is picked only on the next screen.
         """
         controller = self.managed_controller
         if controller is None:
             return None
-        context_tokens = self._chosen_context_tokens(candidate.deployment)
         device_index = self._selected_device_index()
         if device_index is not None or len(self.device_options) <= 1:
             device_indexes: tuple[int | None, ...] = (device_index,)
         else:
             device_indexes = tuple(option.index for option in self.device_options)
-        results = tuple(
-            self._device_availability(controller, candidate, index, context_tokens) for index in device_indexes
-        )
+        results = tuple(self._device_availability(controller, candidate, index) for index in device_indexes)
         return min(results, key=lambda availability: RECIPE_STANDING_ORDER.index(availability.standing))
 
     def _device_availability(
@@ -1041,7 +1042,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         controller: ManagedReplayController,
         candidate: ModelCandidate,
         device_index: int | None,
-        context_tokens: int,
     ) -> ManagedModelAvailability:
         """Return one device's availability, counting a device no framework can serve as other hardware.
 
@@ -1050,10 +1050,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         """
         try:
             return controller.availability(
-                candidate,
-                device_index=device_index,
-                context_tokens=context_tokens,
-                replay_floor_tokens=self._replay_context_floor(),
+                candidate, device_index=device_index, replay_floor_tokens=self._replay_context_floor()
             )
         except ValueError as error:
             return ManagedModelAvailability(hardware=controller.hardware_summary(), offers=(), reason=error_text(error))
@@ -1213,8 +1210,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         A custom manifest is read off-thread at preflight; this render path stays free
         of user file I/O, so its demand is unknown here.
         """
-        replay_id = self._select_text("#replay-workload-select", ReplayWorkloadSelect)
-        if replay_id is None or replay_id == CUSTOM_REPLAY_ID:
+        # Before the setup form mounts, the replay is the one the app opens with.
+        replay_id = self._select_text("#replay-workload-select", ReplayWorkloadSelect) or self.defaults.replay_id
+        if replay_id == CUSTOM_REPLAY_ID:
             return None
         replay = find_bundled_replay(replay_id)
         if replay is None:
@@ -1290,7 +1288,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             if selected_context_tokens < candidate.deployment.context_tokens
             else f"{candidate.deployment.context_tokens:,} tokens"
         )
-        frameworks = " / ".join(framework_display_name(framework) for framework in candidate.deployment.frameworks)
+        frameworks = recipe_frameworks_text(candidate)
         rows = (
             ("Built for", hardware_target_text(candidate, self.catalog.hardware_of(candidate))),
             ("Runs with", f"{frameworks} · needs {minimum_memory_need} GiB"),

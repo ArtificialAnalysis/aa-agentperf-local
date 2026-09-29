@@ -28,6 +28,9 @@ The TUI names a recipe from two fields and its folder:
   model folder uses the same name.
 - `quantization` is the weight format the files use, such as `Q4_K_M`,
   `UD-Q4_K_M`, or `NVFP4`.
+- `variant` is optional. It tells two builds apart that would otherwise show
+  the same name, such as two kernels for one NVFP4 model on the same hardware.
+  The loader rejects two recipes that would show the same name.
 - The hardware it was built for is its hardware folder, such as `rtx-5090` or
   `any`; a recipe does not repeat it. The TUI shows a label for the folders the
   catalog ships, set in [`labels.py`](../agentperf_local/tui/labels.py), and

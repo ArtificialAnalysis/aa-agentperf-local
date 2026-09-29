@@ -20,7 +20,7 @@ from textual.widgets.option_list import Option
 from agentperf_local.deployment.catalog import ModelCandidate, ModelCatalog
 from agentperf_local.tui.branding import AA_LIME, AA_NEUTRAL_500, AA_ORANGE, AA_PLACEHOLDER, AA_RED
 from agentperf_local.tui.evidence import SelectionKind
-from agentperf_local.tui.labels import hardware_target_text, speedup_text
+from agentperf_local.tui.labels import hardware_target_text, quantization_text, speedup_text
 from agentperf_local.tui.replay_contract import RECIPE_STANDING_ORDER, ManagedModelAvailability, RecipeStanding
 
 CUSTOM_ENDPOINT_LABEL = "Other model or server"
@@ -30,6 +30,7 @@ NOTHING_RUNS_HERE = "No recipe runs on this computer."
 STANDING_MARKS: dict[RecipeStanding, tuple[str, str | None]] = {
     RecipeStanding.READY: ("●", AA_LIME),
     RecipeStanding.NEEDS_SETUP: ("▲", AA_ORANGE),
+    RecipeStanding.REDUCED_ONLY: ("▲", AA_ORANGE),
     RecipeStanding.TOO_LARGE: ("✗", AA_RED),
     RecipeStanding.OTHER_HARDWARE: ("·", None),
 }
@@ -186,7 +187,7 @@ def _column_widths(recipes: tuple[ListedRecipe, ...]) -> tuple[int, int]:
 
     Both parts share these widths, so their columns line up with each other.
     """
-    quantization_width = max((len(recipe.candidate.quantization) for recipe in recipes), default=0)
+    quantization_width = max((len(quantization_text(recipe.candidate)) for recipe in recipes), default=0)
     speedup_width = max((len(_speedup_cell(recipe.candidate)) for recipe in recipes), default=0)
     return (
         max(QUANTIZATION_OFFSET + quantization_width, len(MODEL_COLUMN_HEADING)),
@@ -215,7 +216,7 @@ def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, greyed: bool) 
     row = Text(RECIPE_INDENT)
     row.append_text(Text(UNASSESSED_MARK) if availability is None else standing_mark(availability.standing))
     row.append(
-        f"{MARK_GAP}{candidate.quantization.ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
+        f"{MARK_GAP}{quantization_text(candidate).ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
         f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{hardware_target_text(candidate, recipe.hardware)}"
     )
     if greyed:

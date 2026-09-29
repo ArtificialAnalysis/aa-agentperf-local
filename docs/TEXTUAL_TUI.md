@@ -121,14 +121,17 @@ recipe's standing:
 | Mark | Standing |
 | --- | --- |
 | Green `●` | Runs on this computer. |
-| Amber `▲` | Needs setup first: install a framework, or memory could not be checked. |
-| Red `✗` | Too large for this computer's memory at the chosen context. |
+| Amber `▲` | Needs setup first (install a framework, or memory could not be checked), or fits only at a reduced context the replay allows. |
+| Red `✗` | Too large for this computer's memory at any context the replay allows. |
 | Grey `·` | Made for other hardware. |
 
 Within a part, models follow in name order, and a model's recipes go best
-standing first. With several accelerators and no device chosen yet, a recipe
-shows its best standing across them. The detail pane leads with the standing
-and, when a recipe cannot start, the reason. Recipes loaded with `--recipes`
+standing first. Each recipe is checked at its full context, whatever context
+setup last held, against the selected replay's minimum. With several
+accelerators and no device chosen yet, a recipe shows its best standing across
+them. The detail pane leads with the standing and, when a recipe cannot start,
+the reason; for llama.cpp it also names the backend a recipe pins, such as
+Vulkan. Recipes loaded with `--recipes`
 also carry a note that they are not from Artificial Analysis.
 
 Every catalog candidate is evaluated through the same selection surface. A
@@ -254,9 +257,8 @@ Press `d` to reveal the first-token range chart and per-turn trend. A managed ru
 model download progress in GiB and can swap the activity log for the server's
 own log with `l`. Below 100 columns the run screen shows the activity log by
 default, because its metrics column is wider than other side panels; `d`
-switches to the metrics. Terminals narrower than 90 columns also shorten the
-context line. Terminals shorter than 28 rows omit the trend, and shorter than
-21 rows omit the first-token chart.
+switches to the metrics, and the context line shortens. Terminals shorter than
+28 rows omit the trend, and shorter than 21 rows omit the first-token chart.
 
 The result screen leads with the outcome, tokens per second, median response
 times, and the folder containing the reports. **Result details** reveals p90

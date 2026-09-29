@@ -76,6 +76,17 @@ DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
 THINKING_POLICIES: tuple[ThinkingPolicy, ...] = ("disabled", "enabled", "enabled-medium-candidate")
+# The speculative decoding method each policy uses; the target-only baseline uses none.
+SPECULATION_METHODS: dict[SpeculationPolicy, str | None] = {
+    "disabled-target-only-baseline": None,
+    "enabled-mtp-self-draft": "MTP",
+    "enabled-mtp-external-draft": "MTP",
+    "enabled-dflash-external-draft": "DFlash",
+    "enabled-dflash-draft": "DFlash",
+    "enabled-dspark-external-draft": "DSpark",
+    "enabled-dspark-draft": "DSpark",
+    "enabled-vllm-external-draft": "Draft model",
+}
 SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "disabled-target-only-baseline",
     "enabled-mtp-self-draft",
@@ -456,6 +467,9 @@ class ModelCandidate(BaseModel, frozen=True):
     model_name: str
     # The weight format as its files name it, such as Q4_K_M, UD-Q4_K_M, or NVFP4.
     quantization: str
+    # What tells this build apart from another of the same model, quantization, speed-up, and
+    # hardware, such as a kernel or a packing; left out when nothing needs telling apart.
+    variant: str | None = None
     hf_repository: str
     hf_revision: str
     # The accelerator platforms this recipe may launch on, in canonical order.
@@ -473,6 +487,8 @@ class ModelCandidate(BaseModel, frozen=True):
         _iso_date(self.as_of, "as_of")
         _label(self.model_name, "model_name")
         _label(self.quantization, "quantization")
+        if self.variant is not None:
+            _label(self.variant, "variant")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")
         _revision(self.hf_revision, "hf_revision")
@@ -601,6 +617,8 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     models: list[ModelCandidate] = []
     model_names: dict[str, str] = {}
     hardware_folders: dict[str, str] = {}
+    # A recipe is shown by model, quantization, variant, speed-up, and hardware, so no two may share all five.
+    shown_as: dict[tuple[str, str, str | None, str | None, str], str] = {}
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -611,6 +629,16 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         model_folder = path.parent.parent.name
         if model_names.setdefault(model_folder, model.model_name) != model.model_name:
             raise ValueError(f"every recipe in {model_folder} must share the model_name {model_names[model_folder]}")
+        shown = (
+            model.model_name,
+            model.quantization,
+            model.variant,
+            SPECULATION_METHODS[model.speculation_policy],
+            path.parent.name,
+        )
+        twin = shown_as.setdefault(shown, relative)
+        if twin != relative:
+            raise ValueError(f"recipes {twin} and {relative} would show the same name; give one a variant")
         models.append(model)
         hardware_folders[model.profile_id] = path.parent.name
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()

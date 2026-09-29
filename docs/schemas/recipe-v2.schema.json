@@ -405,6 +405,11 @@
           "minLength": 1,
           "maxLength": 160
         },
+        "variant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
         "hf_repository": {
           "$ref": "#/$defs/repository"
         },
