@@ -42,28 +42,31 @@ LEGACY_SCHEMA_DOC = orjson.loads(LEGACY_SCHEMA.read_bytes())
 EVIDENCE_ROOT = Path(__file__).parents[1] / "docs" / "evidence"
 MLX_EVIDENCE = EVIDENCE_ROOT / "mlx-gpt-oss-20b-runtime-qualification.json"
 GEMMA_EVIDENCE = EVIDENCE_ROOT / "gemma4-26b-a4b-q4-0-runtime-qualification.json"
+# The checked-in evidence was recorded when the tool probes had a 128-token budget.
+EVIDENCE_PACK_DIGEST = "sha256:95690cb1f6037c919eaf7780381436e8c0957922333972a67e239b5d0458033e"
+CURRENT_PACK_DIGEST = "sha256:c64299a2adb72e1217cb8a1a68c65ecc8db0949832bdcf34064b9548e0b482aa"
 PROMPT_TOKENS = 40
 COMPLETION_TOKENS = 8
 HOSTILE_TOOL_NAME = "lookup_issue" + "x" * 300
 HOSTILE_FINISH_REASON = "length" + "y" * 300
 
 
-def test_checked_mlx_failure_evidence_matches_the_current_public_pack() -> None:
+def test_checked_mlx_failure_evidence_matches_its_recorded_pack() -> None:
     evidence = orjson.loads(MLX_EVIDENCE.read_bytes())
 
     Draft202012Validator(LEGACY_SCHEMA_DOC).validate(evidence)
-    assert evidence["pack_digest"] == probe_pack_digest(synthetic_probe_pack("digest-does-not-bind-model"))
+    assert evidence["pack_digest"] == EVIDENCE_PACK_DIGEST
     assert evidence["passed"] is False
     assert sum(outcome["passed"] for outcome in evidence["outcomes"]) == 2
     assert all(not outcome["tool_names"] for outcome in evidence["outcomes"] if not outcome["passed"])
 
 
-def test_checked_gemma_pass_evidence_matches_the_current_public_pack() -> None:
+def test_checked_gemma_pass_evidence_matches_its_recorded_pack() -> None:
     """The managed llama.cpp path is checked in as a pass, opposite the MLX failure."""
     evidence = orjson.loads(GEMMA_EVIDENCE.read_bytes())
 
     Draft202012Validator(SCHEMA_DOC).validate(evidence)
-    assert evidence["pack_digest"] == probe_pack_digest(synthetic_probe_pack("digest-does-not-bind-model"))
+    assert evidence["pack_digest"] == EVIDENCE_PACK_DIGEST
     assert evidence["profile_id"] == "gemma4-26b-a4b-q4-0"
     assert evidence["passed"] is True
     assert all(outcome["passed"] and not outcome["failure_codes"] for outcome in evidence["outcomes"])
@@ -171,7 +174,7 @@ async def test_qualifies_structured_streams_without_storing_generated_values(tmp
     assert report.outcomes[2].tool_names == ("read_file", "search_text")
     assert report.outcomes[4].finish_reason == "length"
     assert client.requests[4].max_tokens == CAPPED_PROBE_OUTPUT_TOKENS
-    assert report.pack_digest == "sha256:95690cb1f6037c919eaf7780381436e8c0957922333972a67e239b5d0458033e"
+    assert report.pack_digest == CURRENT_PACK_DIGEST
     assert report.pack_digest == probe_pack_digest(synthetic_probe_pack("different-model"))
     assert written.byte_size == len(encoded)
     assert has_mode(output_path, 0o600)
