@@ -516,6 +516,9 @@ def _sglang_argv(
         str(context_tokens),
         *state_pool,
         *moe_backend,
+        # A managed submission needs the cached prompt tokens of every turn, and SGLang
+        # leaves them out of usage unless asked.
+        "--enable-cache-report",
         "--tool-call-parser",
         candidate.tool_call_parser,
         "--reasoning-parser",
@@ -569,6 +572,9 @@ def _vllm_argv(
         "1",
         "--max-num-seqs",
         "1",
+        # A managed submission needs the cached prompt tokens of every turn, and vLLM
+        # leaves them out of usage unless asked.
+        "--enable-prompt-tokens-details",
         "--enable-auto-tool-choice",
         "--tool-call-parser",
         candidate.tool_call_parser,
