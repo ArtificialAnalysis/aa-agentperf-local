@@ -233,7 +233,7 @@ async def _async_request(
     transport: httpx.AsyncBaseTransport | None,
     content: AsyncIterator[bytes] | None = None,
 ) -> httpx.Response:
-    """Send one cancellable request and keep transport details out of errors."""
+    """Send one cancelable request and keep transport details out of errors."""
     async with httpx.AsyncClient(timeout=timeout_seconds, transport=transport, follow_redirects=False) as client:
         try:
             return await client.request(method, url, headers=headers, content=content)
@@ -271,7 +271,7 @@ def _receipt(response: httpx.Response, bytes_sent: int) -> SubmissionReceipt:
 def build_submission_body(bundle: ValidatedSubmissionBundle) -> bytes:
     """Encode the validated bundle exactly as the service expects it.
 
-    The files travel as the exact bytes the manifest digests; the acknowledgement
+    The files travel as the exact bytes the manifest digests; the acknowledgment
     records which notice wording the user agreed to before these bytes left the disk.
     The size cap is checked from the manifest before any file is expanded.
     """

@@ -2,7 +2,7 @@
 
 - `probe_served_context_tokens`: one GET /models that reads the served context length.
 - `is_ollama_endpoint`: two cheap GETs that name an Ollama server before any long probe.
-- `probe_ignore_eos`: the behavioural probe the exact policy depends on.
+- `probe_ignore_eos`: the behavioral probe the exact policy depends on.
 - `probe_request`, `stream_usage`, `PROBE_MAX_CONNECTIONS`: the request, usage reader, and
   connection cap every endpoint probe shares, runtime qualification included.
 """
@@ -35,7 +35,7 @@ CONTEXT_PROBE_TIMEOUT_SECONDS = 5.0
 
 # The budget must exceed what a thinking model spends on a one-word answer, or both probe
 # requests fill it and the verdict is undetermined on exactly the endpoints the probe is
-# for. 512 leaves room for reasoning at low effort; an honouring server generates it all
+# for. 512 leaves room for reasoning at low effort; an honoring server generates it all
 # once per run, which also warms the model before the first measured turn.
 IGNORE_EOS_PROBE_OUTPUT_TOKENS = 512
 IGNORE_EOS_PROBE_TIMEOUT_SECONDS = 180.0
@@ -47,7 +47,7 @@ OLLAMA_VERSION_PATH = "/api/version"
 OLLAMA_TAGS_PATH = "/api/tags"
 # The CLI prints this and the TUI shows it, so both say the same thing about Ollama.
 OLLAMA_RECORDED_POLICY_WARNING = (
-    "this server is Ollama, which cannot honour ignore_eos, so the run uses the recorded output policy; "
+    "this server is Ollama, which cannot honor ignore_eos, so the run uses the recorded output policy; "
     "end-to-end latency is reported as a normalized estimate and is not directly comparable with exact-policy runs"
 )
 
@@ -211,9 +211,9 @@ class IgnoreEosProbeResult(BaseModel, frozen=True):
         """State the observation in one sentence for a log line or an error."""
         budget = f"{IGNORE_EOS_PROBE_OUTPUT_TOKENS}-token probe"
         if self.support is IgnoreEosSupport.HONOURED:
-            return f"server honours ignore_eos: the {budget} generated its whole budget"
+            return f"server honors ignore_eos: the {budget} generated its whole budget"
         if self.support is IgnoreEosSupport.UNDETERMINED:
-            return "could not determine whether the server honours ignore_eos"
+            return "could not determine whether the server honors ignore_eos"
         if self.observed is None:
             return f"server ignores ignore_eos: it refused a {budget}"
         tokens = "" if self.observed.completion_tokens is None else f" after {self.observed.completion_tokens} tokens"
@@ -308,7 +308,7 @@ def _needs_control(asked: ProbeOutcome) -> bool:
 def _support(asked: ProbeOutcome, control: ProbeOutcome | None) -> IgnoreEosSupport:
     """Judge the field from the answer with it and, when needed, the answer without it.
 
-    A server that honours the field always returns the whole budget, so a shorter answer
+    A server that honors the field always returns the whole budget, so a shorter answer
     proves it was dropped. A full budget proves nothing on its own: only a control that
     stops early shows the field made the difference, because a model long-winded enough
     to reach the cap by itself fills it either way. A refusal is read the same way: a

@@ -1,4 +1,4 @@
-"""Rewrite a scripted SSE response the way a server that honours ignore_eos does.
+"""Rewrite a scripted SSE response the way a server that honors ignore_eos does.
 
 A request with ignore_eos generates exactly max_tokens and finishes on "length". Both
 localhost test servers share this transform so each emulates a real server the same way.

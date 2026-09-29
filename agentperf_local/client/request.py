@@ -20,7 +20,7 @@ class CompletionRequest(BaseModel, frozen=True):
     temperature: float | None = None
     top_p: float | None = None
     # Ask the server to keep generating past end-of-sequence up to max_tokens, so the
-    # output length is the request's choice rather than the model's. Honoured by
+    # output length is the request's choice rather than the model's. Honored by
     # llama.cpp, SGLang, and vLLM on the chat completions endpoint.
     ignore_eos: bool = False
     extra_headers: tuple[tuple[str, str], ...] = ()

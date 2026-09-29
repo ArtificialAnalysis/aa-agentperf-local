@@ -501,7 +501,7 @@ async def test_a_stopped_replay_leaves_a_reusable_output_folder(
         if not cancel_run:
             raise RuntimeError("private endpoint failure detail")
         await asyncio.Event().wait()
-        raise AssertionError("a cancelled replay never finishes")
+        raise AssertionError("a canceled replay never finishes")
 
     monkeypatch.setattr("agentperf_local.tui.controller.run_manifest", stopped_run_manifest)
     request = ReplayRequest(

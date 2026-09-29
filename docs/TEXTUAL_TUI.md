@@ -126,7 +126,7 @@ server process is pinned to that device so the private records describe only it.
 
 The managed setup screen also has a Context selector. It offers the full
 65,536-token benchmark context plus a fixed ladder of reduced choices (32,768 /
-16,384 / 8,192 tokens), each labelled with the accelerator memory it needs. A
+16,384 / 8,192 tokens), each labeled with the accelerator memory it needs. A
 reduced choice appears only when the selected replay's floor allows it, so the
 default replay offers the full context alone. The default is the full context
 when it fits the selected device, otherwise the largest reduced option that
@@ -165,7 +165,7 @@ bytes sent; 100% does not mean the service has confirmed the submission. A spinn
 stays visible beside New run and says “Waiting for confirmation…” until the
 service responds. While submission is in flight, New run is disabled and `q`
 and Escape wait; `Ctrl+C` cancels the upload
-and quits. A failed or cancelled upload keeps the bundle on disk and shows the
+and quits. A failed or canceled upload keeps the bundle on disk and shows the
 exact `submit` command that retries it.
 
 ## Network and evidence boundary
@@ -189,7 +189,7 @@ server reports is bound into the run's evidence the same way the `run` command
 binds it.
 
 The same check sends `GET /api/version` and `GET /api/tags` to detect Ollama.
-Ollama cannot honour `ignore_eos`, so the app warns before you press Run and
+Ollama cannot honor `ignore_eos`, so the app warns before you press Run and
 uses the `recorded` output policy. End-to-end latency is then a normalized estimate and is not
 directly comparable with `exact` runs. For other servers, the app probes
 `ignore_eos` before the replay and falls back to `recorded` the same way if the
@@ -263,7 +263,7 @@ runtime fingerprint, artifact digest, detected hardware, and pre-inference
 measurement binding.
 
 Cancellation before result finalization discards the active replay, removes the
-measurement binding, and removes the run folder when it is empty. A cancelled or
+measurement binding, and removes the run folder when it is empty. A canceled or
 failed managed run keeps `deployment.log`, `deployment.json`, and
 `measurement.json` in its own run folder as diagnostics; the next attempt names
 a fresh run folder, so those leftovers never block it. Cancellation is disabled

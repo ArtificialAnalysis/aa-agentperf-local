@@ -129,7 +129,7 @@ async def _execute_validated_replay(
 
 
 def _display_log_line(raw: bytes) -> str:
-    """Make one server log line safe to draw: decoded, colour codes and control characters dropped, length bounded."""
+    """Make one server log line safe to draw: decoded, color codes and control characters dropped, length bounded."""
     plain = ANSI_SEQUENCE_PATTERN.sub("", raw.decode("utf-8", errors="replace"))
     text = "".join(character for character in plain if character.isprintable() or character == "\t").rstrip()
     if len(text) <= SERVER_LOG_MAX_LINE_CHARS:
@@ -177,7 +177,7 @@ def _tail_server_log(path: Path, deliver: Callable[[tuple[str, ...]], None], sto
 
 
 async def _stop_log_tail(tail: asyncio.Task[None], stop: threading.Event) -> None:
-    """Let the tail drain the final server lines even when the replay worker is cancelled."""
+    """Let the tail drain the final server lines even when the replay worker is canceled."""
     stop.set()
     try:
         await asyncio.shield(tail)
@@ -274,7 +274,7 @@ class LocalReplayController:
         )
         # The exact policy needs an endpoint that generates past end-of-sequence. Asking
         # here, rather than reading N short turns as N failures, names the cause once,
-        # and asking before the binding write leaves nothing on disk if the wait is cancelled.
+        # and asking before the binding write leaves nothing on disk if the wait is canceled.
         # Ollama is known to drop ignore_eos, so its cheap identity check stands in for the
         # generation probe, and the consent step has already warned the user.
         output_token_policy: OutputTokenPolicy

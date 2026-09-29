@@ -68,7 +68,7 @@ def _confirm_private_audit_notice(namespace: argparse.Namespace) -> None:
         raise ValueError("submit needs --yes when it cannot ask on a terminal")
     answer = input("Send this bundle to Artificial Analysis? [y/N] ")
     if answer.strip().lower() not in ("y", "yes"):
-        raise ValueError("submission cancelled; nothing was sent")
+        raise ValueError("submission canceled; nothing was sent")
 
 
 def _upload_progress_printer() -> Callable[[int, int], None]:

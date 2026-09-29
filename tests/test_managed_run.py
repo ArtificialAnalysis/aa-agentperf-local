@@ -370,7 +370,7 @@ async def test_a_stopped_managed_replay_stops_the_server_and_drops_its_binding(
         if not cancel_run:
             raise RuntimeError("fixture replay failure")
         await asyncio.Event().wait()
-        raise AssertionError("a cancelled replay never finishes")
+        raise AssertionError("a canceled replay never finishes")
 
     monkeypatch.setattr("agentperf_local.deployment.managed_run.run_manifest", stopped_run_manifest)
     controller, request = _tui_launch(
