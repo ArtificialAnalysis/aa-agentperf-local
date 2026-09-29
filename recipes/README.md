@@ -42,6 +42,9 @@ uv run agentperf-local managed-run \
 - **llama.cpp** recipes do not pin a build. Put a `llama-server` on `PATH`.
 - **SGLang** and **vLLM** recipes pin one exact release in
   `runtime_versions`. Run them where `import sglang` or `import vllm` works.
+- **Splash** recipes do not pin a build, and run on Apple Silicon alone. Put
+  a `splash` on `PATH`. `managed-run` refuses a build that drops `ignore_eos`,
+  which released builds up to 1.1.0 do.
 
 To try recipes from another folder, pass `--recipes PATH`. The TUI marks
 them as not from the Artificial Analysis catalog.
@@ -89,6 +92,12 @@ schema. Its error messages name the field that is wrong.
   `gpt-oss-120b-mxfp4` does not load on a 119 GiB GB10.
 - **Metal will not give one process all host memory.** A Mac that passes the
   memory check can still fail to load a recipe near its floor.
+- **Splash reads the hub cache itself.** A Splash recipe pins the GGUF
+  target and a DFlash2 draft from a second repository. The launcher verifies
+  both, then starts Splash with `HF_HUB_OFFLINE=1` at the pinned revision and
+  passes the draft as a local directory, so Splash serves only verified files.
+  Splash prepares its own weights once, in `~/Library/Caches/Splash/weights`
+  (17 GB for the Qwen3.8 27B recipe).
 - **Quantizations differ between devices.** Q4_K_M, Q4_0, NVFP4, and MXFP4
   are four-bit formats, but they are not identical weights. Compare runs of
   the same recipe.

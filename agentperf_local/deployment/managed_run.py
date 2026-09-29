@@ -24,6 +24,8 @@ from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandida
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
+    IgnoreEosSupport,
+    probe_ignore_eos,
 )
 from agentperf_local.deployment.managed import (
     DEPLOYMENT_LOG_FILENAME,
@@ -303,6 +305,17 @@ def _replay_observer(clock: RunObserver | None, observer: RunObserver | None) ->
     return clock if clock is not None else observer
 
 
+async def _require_splash_ignore_eos(plan: DeploymentPlan, client_backend: ClientBackend) -> None:
+    """Refuse a Splash build that drops ignore_eos before any evidence is written.
+
+    Released Splash builds accept the field and ignore it. The exact policy would then
+    end every long turn early, and the run would still look complete.
+    """
+    capability = await probe_ignore_eos(plan.base_url, plan.model_alias, client_backend)
+    if capability.support is IgnoreEosSupport.IGNORED:
+        raise RuntimeError(f"{capability.summary}; the exact policy needs a Splash build that honours ignore_eos")
+
+
 async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObserver) -> ManagedRunOutcome:
     """Fetch the model, own its server, qualify it, replay the manifest, and write every evidence file.
 
@@ -386,6 +399,8 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         observer.on_activity(
             RunActivity(kind=RunActivityKind.GPU_VERIFIED, accelerator_platform=plan.accelerator_platform)
         )
+        if plan.framework == "splash":
+            await _require_splash_ignore_eos(plan, inputs.client_backend)
         written_deployment = await asyncio.to_thread(
             write_deployment_record, deployment_path, plan, snapshot, gpu_startup_verified=True
         )
