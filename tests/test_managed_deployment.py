@@ -120,6 +120,7 @@ def _candidate() -> ModelCandidate:
         profile_id="fixture-q4-0",
         as_of="2026-09-21",
         display_name="Fixture Q4_0",
+        model_release_slug="fixture",
         hf_repository="example/model-gguf",
         hf_revision="a" * 40,
         devices=("nvidia-cuda", "amd-rocm", "apple-silicon"),

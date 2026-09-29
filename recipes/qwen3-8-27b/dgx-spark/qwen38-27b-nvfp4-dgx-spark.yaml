@@ -1,0 +1,90 @@
+profile_id: qwen38-27b-nvfp4-dgx-spark
+as_of: '2026-09-21'
+display_name: Qwen3.8 27B NVFP4, DGX Spark vLLM
+model_release_slug: qwen3-8-27b
+hf_repository: RadixArk/Qwen3.8-27B-NVFP4
+hf_revision: 319f741cce68d7914884900c138a1fbb70a42f30
+devices:
+- nvidia-cuda
+tool_call_parser: qwen3_xml
+reasoning_parser: qwen3
+thinking_policy: enabled-medium-candidate
+speculation_policy: enabled-dflash-draft
+deployment:
+  artifact_kind: safetensors-repository
+  artifacts:
+  - filename: chat_template.jinja
+    sha256: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+    size_bytes: 8952
+  - filename: config.json
+    sha256: 7ff41ec6f96ad50efea3c92751cd261b63839d39936eb6e6ffc9066db8672740
+    size_bytes: 73003
+  - filename: generation_config.json
+    sha256: a4cef85934ea1fdcb207944dbc6eee70dbbf16806874428556ae33023336c0a4
+    size_bytes: 214
+  - filename: hf_quant_config.json
+    sha256: 0f39e8cd23abdfb79adc89ac1b19acad990aa6ac32973f9ab0a67d1e3449535c
+    size_bytes: 53749
+  - filename: merges.txt
+    sha256: a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d
+    size_bytes: 3353259
+  - filename: model-00001-of-00003.safetensors
+    sha256: fbcdb5ba1cdda462b5f38592d071e772c4d398afea61a0aa9188b32d1a239a79
+    size_bytes: 9965652544
+  - filename: model-00002-of-00003.safetensors
+    sha256: db6146a5464fb0a891181b93c81593f0ca65c602eb14120a1c2b1b09bca11f85
+    size_bytes: 9985757064
+  - filename: model-00003-of-00003.safetensors
+    sha256: d3cfb92742e30c8b46564665791dbe0a86ed64cfc02b1275081530793c0c9581
+    size_bytes: 1970287672
+  - filename: model.safetensors.index.json
+    sha256: 7aa103a2582b7d26631988de33dea19e8a308ee9c239e8e14feb374af30905e2
+    size_bytes: 214866
+  - filename: preprocessor_config.json
+    sha256: 27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516
+    size_bytes: 390
+  - filename: tokenizer.json
+    sha256: 0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3
+    size_bytes: 12809320
+  - filename: tokenizer_config.json
+    sha256: e5d078b00e6c1223b32444db8c1001dc71d86ceef8ee706b5bf084c3a43a1f9c
+    size_bytes: 1121
+  - filename: video_preprocessor_config.json
+    sha256: 7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13
+    size_bytes: 385
+  - filename: vocab.json
+    sha256: ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003
+    size_bytes: 6722759
+  context_tokens: 65536
+  frameworks:
+  - vllm
+  memory:
+    full_attention_layers: 16
+    full_kv_heads: 4
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 1
+    recurrent_state_slots: 10
+    constant_state_bytes: 1782411428
+    runtime_overhead_bytes: 9064728579
+  runtime_versions:
+    vllm: 0.28.0
+  vllm:
+    arguments:
+    - --trust-remote-code
+    - --kv-cache-dtype
+    - fp8
+    - --gpu-memory-utilization
+    - '0.8'
+    - --max-num-batched-tokens
+    - '16384'
+    - --enable-chunked-prefill
+    - --async-scheduling
+    - --enable-prefix-caching
+    - --speculative-config
+    - '{"method":"dflash","model":"z-lab/Qwen3.8-27B-DFlash2","num_speculative_tokens":8}'
+    - --load-format
+    - safetensors

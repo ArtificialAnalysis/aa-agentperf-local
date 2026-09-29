@@ -732,7 +732,7 @@ def _external_recipes(tmp_path: Path, old: bytes, new: bytes) -> Path:
     """Copy the bundled recipes and edit the Gemma 4 12B recipe."""
     root = tmp_path / "external-recipes"
     shutil.copytree(CATALOG_PATH, root)
-    recipe = root / "gemma4-12b" / "any" / "gemma4-12b-it-q4-0.yaml"
+    recipe = root / "gemma-4-12b" / "any" / "gemma4-12b-it-q4-0.yaml"
     encoded = recipe.read_bytes()
     assert old in encoded
     recipe.write_bytes(encoded.replace(old, new))

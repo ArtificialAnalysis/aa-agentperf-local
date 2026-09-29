@@ -6,10 +6,14 @@ floor. Every YAML file in this folder is one recipe. The tool loads all of
 them, and the TUI lists them.
 
 ```text
-recipes/<model>/<hardware>/<profile_id>.yaml
+recipes/<model_release_slug>/<hardware>/<profile_id>.yaml
 ```
 
-- `<model>` is the base model, such as `qwen38-27b`.
+- `<model_release_slug>` is the Artificial Analysis `model_releases.slug` of
+  the base model, such as `qwen3-8-27b`. Each recipe states it in its
+  `model_release_slug` field, and the loader refuses a recipe in any other
+  folder. For a release with dated checkpoints, use the slug of the checkpoint
+  that matches the recipe's `hf_revision`.
 - `<hardware>` is where the recipe was built for: `any` for portable GGUF
   recipes that run on CUDA, ROCm, or Metal; `nvidia-cuda` for any NVIDIA GPU
   with FP4 support; or a device, such as `rtx-5090`, `dgx-spark`,
@@ -48,8 +52,9 @@ them as not from the Artificial Analysis catalog.
 
 ## Add a recipe
 
-1. Copy the recipe closest to yours into `recipes/<model>/<hardware>/`, and
-   name the file after the new `profile_id`.
+1. Copy the recipe closest to yours into
+   `recipes/<model_release_slug>/<hardware>/`, and name the file after the new
+   `profile_id`.
 2. Set `as_of` to today's date, in quotes: `as_of: '2026-09-27'`.
 3. Pin every file. This prints the size and SHA-256 of each file for the
    `artifacts` list:

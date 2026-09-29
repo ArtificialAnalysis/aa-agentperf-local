@@ -26,12 +26,14 @@ MAX_ARTIFACT_PATH_CHARACTERS = 255
 HF_REVISION_HEX_DIGITS = 40
 SHA256_HEX_DIGITS = 64
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+# The Artificial Analysis model_releases.slug of the recipe's base model, such as qwen3-8-27b.
+MODEL_RELEASE_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$")
 RELEASE_VERSION_PARTS = 3
 # A development build is pinned by its exact version string, such as 0.1.dev20073+g8e685d198:
 # a base version, a commit count, and the abbreviated commit it was built from.
 DEVELOPMENT_BUILD_PATTERN = re.compile(r"^\d+\.\d+\.dev\d+\+g[0-9a-f]{7,40}$")
 ARTIFACT_PATH_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9._+-]*[A-Za-z0-9_])?$")
-# Recipes live at recipes/<model>/<hardware>/<profile_id>.yaml.
+# Recipes live at recipes/<model_release_slug>/<hardware>/<profile_id>.yaml.
 # libyaml's loader parses the recipes about four times faster; the pure-Python one is the fallback.
 _YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 RECIPE_SUFFIX = ".yaml"
@@ -40,7 +42,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:3814f36b629873beb148e8a5fb3c385c4d2fcee4c174bc3adafb428ae07b86b2"
+BUNDLED_RECIPES_DIGEST = "sha256:b52bb81ee2fd8cea902ff83ed096ed15c4a010e8f5f081d7170f5c3039279b6b"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -452,6 +454,7 @@ class ModelCandidate(BaseModel, frozen=True):
     profile_id: str
     as_of: str
     display_name: str
+    model_release_slug: str
     hf_repository: str
     hf_revision: str
     # The accelerator platforms this recipe may launch on, in canonical order.
@@ -471,6 +474,8 @@ class ModelCandidate(BaseModel, frozen=True):
             raise ValueError("display_name must be short printable text")
         if not self.display_name.isprintable():
             raise ValueError("display_name must be short printable text")
+        if MODEL_RELEASE_SLUG_PATTERN.fullmatch(self.model_release_slug) is None:
+            raise ValueError("model_release_slug must be letters and digits joined by single dots or hyphens")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")
         _revision(self.hf_revision, "hf_revision")
@@ -561,7 +566,7 @@ def _subfolders(folder: Path, skip: str | None = None) -> tuple[Path, ...]:
 
 
 def _recipe_paths(root: Path) -> tuple[Path, ...]:
-    """Return every recipe file under root/<model>/<hardware>/, in path order."""
+    """Return every recipe file under root/<model_release_slug>/<hardware>/, in path order."""
     if root.is_symlink() or not root.is_dir():
         raise ValueError("recipe folder must be a directory, not a symbolic link")
     paths: list[Path] = []
@@ -577,7 +582,7 @@ def _recipe_paths(root: Path) -> tuple[Path, ...]:
 
 
 def load_model_catalog(root: Path) -> ModelCatalog:
-    """Load every recipe under root/<model>/<hardware>/<profile_id>.yaml, in path order.
+    """Load every recipe under root/<model_release_slug>/<hardware>/<profile_id>.yaml, in path order.
 
     The digest is the SHA-256 of the `sha256sum */*/*.yaml` listing, so running
     `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
@@ -590,6 +595,10 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         model = read_object(ModelCandidate, _parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
+        if model.model_release_slug != path.parent.parent.name:
+            raise ValueError(
+                f"recipe {relative} must sit in the folder of its model_release_slug {model.model_release_slug}"
+            )
         models.append(model)
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
     return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))

@@ -21,8 +21,8 @@ from agentperf_local.deployment.catalog import (
 )
 
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
-GEMMA_RECIPE = Path("gemma4-12b", "any", "gemma4-12b-it-q4-0.yaml")
-METAL_RECIPE = Path("qwen38-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+GEMMA_RECIPE = Path("gemma-4-12b", "any", "gemma4-12b-it-q4-0.yaml")
+METAL_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -48,7 +48,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     catalog = load_model_catalog(CATALOG_PATH)
 
     assert catalog.as_of == "2026-09-28"
-    # Recipes load in recipes/<model>/<hardware>/ order, and "any" sorts first within a model.
+    # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
         ("gemma4-26b-a4b-q4-0", "d1c082be9cf3c8a514acf63b8761f4b41935842e"),
@@ -63,10 +63,10 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("ling3-flash-q4-k-m-dspark-strix-halo", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("muse-glimmer-30b-q4-k-m-dflash-rtx5090", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("muse-glimmer-30b-q4-k-m-dflash-strix-halo", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
-        ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark", "bee7596271d1495f6992ae224aefde4410e816b8"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo", "f2d3fe3694501008786e81e5f20360cbf715496a"),
+        ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("qwen35-122b-a10b-nvfp4-mtp-dgx-spark", "98915d837c4e7c87ac8296d02e89de19b3207e6d"),
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
@@ -201,6 +201,8 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("malformed-as-of", "as_of must be an ISO date"),
         ("unquoted-as-of", "quote dates"),
         ("misnamed-file", "must be named after its profile_id"),
+        ("slug-folder-mismatch", "must sit in the folder of its model_release_slug gemma-4-31b"),
+        ("malformed-slug", "model_release_slug must be letters and digits joined by single dots or hyphens"),
         ("model-alias", f"{GEMMA_RECIPE.as_posix()}: deployment.model_alias: Extra inputs are not permitted"),
         ("stray-file", "recipes must be .yaml files"),
         ("flat-recipe", "may only hold folders"),
@@ -237,6 +239,10 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         (root / GEMMA_RECIPE).write_text((root / GEMMA_RECIPE).read_text().replace("'2026-09-21'", "2026-09-21"))
     elif case == "misnamed-file":
         (root / GEMMA_RECIPE).rename(root / GEMMA_RECIPE.with_name("gemma.yaml"))
+    elif case == "slug-folder-mismatch":
+        gemma["model_release_slug"] = "gemma-4-31b"
+    elif case == "malformed-slug":
+        gemma["model_release_slug"] = "gemma--4"
     elif case == "model-alias":
         deployment = gemma.get("deployment")
         assert isinstance(deployment, dict)

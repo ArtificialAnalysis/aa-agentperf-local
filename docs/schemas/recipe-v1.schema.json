@@ -377,6 +377,7 @@
         "profile_id",
         "as_of",
         "display_name",
+        "model_release_slug",
         "hf_repository",
         "hf_revision",
         "devices",
@@ -398,6 +399,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 160
+        },
+        "model_release_slug": {
+          "description": "The Artificial Analysis model_releases.slug of the base model. The recipe's model folder has this name.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$"
         },
         "hf_repository": {
           "$ref": "#/$defs/repository"
