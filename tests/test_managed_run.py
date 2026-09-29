@@ -11,10 +11,10 @@ from pathlib import Path
 
 import orjson
 import pytest
-from jsonschema import Draft202012Validator
 from pydantic import BaseModel
 
 from agentperf_local.cli import main
+from agentperf_local.common.models import read_record
 from agentperf_local.deployment.catalog import (
     BUNDLED_RECIPES_DIGEST,
     BUNDLED_RECIPES_ROOT,
@@ -27,20 +27,31 @@ from agentperf_local.deployment.frameworks import FrameworkIdentity, FrameworkOf
 from agentperf_local.deployment.managed import DeploymentPlan
 from agentperf_local.deployment.managed_run import RunActivity, RunActivityKind
 from agentperf_local.deployment.model_cache import VerifiedArtifact, VerifiedDeployment
+from agentperf_local.deployment.qualification import QUALIFICATION_PROBE_IDS
+from agentperf_local.provenance.benchmark import SourceProvenance
 from agentperf_local.provenance.hardware import HardwareSnapshot
 from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
 from agentperf_local.replay.config import RunConfig
 from agentperf_local.replay.runner import RunBoundaryEvent, RunObserver, RunResult
-from agentperf_local.submission.bundle import validate_submission_bundle
+from agentperf_local.submission.contract import ManagedDeployment, SubmissionRequest
+from agentperf_local.submission.framework_commit import GITHUB_API_URL_ENV
 from agentperf_local.tui.controller import LocalManagedReplayController
 from agentperf_local.tui.evidence import SelectionKind
 from agentperf_local.tui.replay_contract import ManagedDeploymentChoice, ReplayRequest
 from tests.fake_nvidia_smi import write_looping_nvidia_smi
 from tests.replay_workload import write_replay_workload
-from tests.submission_server import LocalSubmissionServer
+from tests.submission_server import LocalSubmissionServer, fake_commit
 
 CHOSEN_DEVICE_INDEX = 1
 CHOSEN_ACCELERATOR = "NVIDIA RTX PRO 6000"
+DRIVER_VERSION = "580.95.05"
+RELEASE_REVISION = "3" * 40
+# Each fake runtime reports its version the way the real one does, so the submission can name its commit.
+FAKE_RUNTIME_VERSIONS: dict[DeploymentFramework, str] = {
+    "llama-cpp": "version: 6890 (c1d0e7a00)",
+    "vllm": "0.11.0",
+}
+FAKE_RUNTIME_REFS: dict[DeploymentFramework, str] = {"llama-cpp": "c1d0e7a00", "vllm": "v0.11.0"}
 SUBMIT_TOKEN_ENV = "AGENTPERF_TEST_SUBMIT_TOKEN"
 REPLAY_TIMEOUT_SECONDS = 30.0
 
@@ -57,7 +68,12 @@ def _closed_loopback_port() -> int:
 
 def _accelerator(name: str) -> AcceleratorSnapshot:
     return AcceleratorSnapshot(
-        vendor="NVIDIA", name=name, memory_bytes=96 * 1024**3, core_count=None, driver_version=None, api="CUDA"
+        vendor="NVIDIA",
+        name=name,
+        memory_bytes=96 * 1024**3,
+        core_count=None,
+        driver_version=DRIVER_VERSION,
+        api="CUDA",
     )
 
 
@@ -86,12 +102,16 @@ class _FakeRuntime(BaseModel, frozen=True):
 
 
 def _install_fake_runtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, framework: DeploymentFramework
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, framework: DeploymentFramework, *server_arguments: str
 ) -> _FakeRuntime:
     """Serve a catalog model from tests.managed_server with a cached artifact and a fake nvidia-smi."""
     fake_smi = write_looping_nvidia_smi(tmp_path / "bin" / "nvidia-smi")
     monkeypatch.setenv("PATH", f"{fake_smi.parent}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr("agentperf_local.cli.options.collect_hardware_snapshot", _two_gpu_hardware)
+    monkeypatch.setattr(
+        "agentperf_local.provenance.benchmark.collect_source_provenance",
+        lambda: SourceProvenance(client_version="0.3.0", source_revision=RELEASE_REVISION, source_state="release"),
+    )
     catalog = load_model_catalog(BUNDLED_RECIPES_ROOT)
     candidate = next(model for model in catalog.models if framework in model.deployment.frameworks)
     recipe = candidate.deployment
@@ -153,11 +173,13 @@ def _install_fake_runtime(
         del snapshot, context_tokens
         return DeploymentPlan(
             profile_id=selected.profile_id,
+            model_release_slug=selected.model_release_slug,
             hf_repository=selected.hf_repository,
             hf_revision=selected.hf_revision,
             catalog_digest=catalog_digest,
             framework=planned_framework,
             accelerator_platform="nvidia-cuda",
+            accelerator_backend="cuda",
             model_path=verified.model_path,
             artifact_manifest_sha256=verified.manifest_sha256,
             artifact_size_bytes=verified.size_bytes,
@@ -177,8 +199,14 @@ def _install_fake_runtime(
                 "cuda",
                 "--backend",
                 planned_framework,
+                *server_arguments,
             ),
-            runtime=FrameworkIdentity(version="fixture", executable_sha256=runtime_digest, fingerprint=runtime_digest),
+            server_launch_command="python -m tests.managed_server",
+            runtime=FrameworkIdentity(
+                version=FAKE_RUNTIME_VERSIONS[planned_framework],
+                executable_sha256=runtime_digest,
+                fingerprint=runtime_digest,
+            ),
             device_environment=device_environment,
         )
 
@@ -219,6 +247,7 @@ def _tui_launch(
     assert recipe is not None
     choice = ManagedDeploymentChoice(
         candidate=runtime.candidate,
+        recipe_text=runtime.catalog.recipe_text(runtime.candidate.profile_id),
         catalog_as_of=runtime.catalog.as_of,
         catalog_digest=BUNDLED_RECIPES_DIGEST,
         framework=runtime.framework,
@@ -335,24 +364,29 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     assert power["phases"][0]["sampled_power_energy_valid"] is True, power["phases"][0]
     assert _port_is_free(runtime.port)
 
-    bundle_dir = tmp_path / "bundle"
-    assert main(["prepare-submission", str(output_dir), "--output-dir", str(bundle_dir)]) == 0
-    prepared = orjson.loads(capsys.readouterr().out)
-    audit = orjson.loads((bundle_dir / "private-audit.json").read_bytes())
-    audit_schema = orjson.loads(
-        (Path(__file__).parents[1] / "docs" / "schemas" / "private-audit-v1.schema.json").read_bytes()
-    )
-    Draft202012Validator(audit_schema).validate(audit)
-    assert prepared["private_audit"] == {
-        "deployment_record": True,
-        "runtime_qualification": True,
-        "power_summary": True,
-    }
-    assert audit["deployment"]["record_digest"] == measurement["deployment_digest"]
-    assert audit["deployment"]["profile_id"] == runtime.candidate.profile_id
-    assert audit["runtime_qualification"]["run_id"] == run_id
-    assert b"model.gguf" not in (bundle_dir / "private-audit.json").read_bytes()
-    assert validate_submission_bundle(bundle_dir).aggregate_payload_digest == prepared["aggregate_payload_digest"]
+    submission_path = tmp_path / "submission.json"
+    with LocalSubmissionServer() as service:
+        monkeypatch.setenv(GITHUB_API_URL_ENV, service.base_url)
+        assert main(["prepare-submission", str(output_dir), "--output", str(submission_path)]) == 0
+        assert main(["submit", str(submission_path), "--base-url", service.base_url, "--yes"]) == 0
+    capsys.readouterr()
+    encoded = submission_path.read_bytes()
+    request = read_record(SubmissionRequest, encoded, "submission")
+    body = request.deployment
+    assert isinstance(body, ManagedDeployment)
+    assert [captured.status for captured in service.service.captured] == [202]
+    assert request.run_id == run_id
+    assert body.profile_id == runtime.candidate.profile_id
+    assert body.model_release_slug == runtime.candidate.model_release_slug
+    assert body.recipe == runtime.catalog.recipe_text(runtime.candidate.profile_id)
+    assert body.framework_version == FAKE_RUNTIME_VERSIONS[framework]
+    assert body.framework_commit == fake_commit(FAKE_RUNTIME_REFS[framework])
+    assert request.hardware.accelerator.product == CHOSEN_ACCELERATOR
+    assert request.hardware.accelerator.driver_version == DRIVER_VERSION
+    assert request.power is not None and request.power.sampled_power_energy_valid
+    assert [outcome.probe_id for outcome in request.qualification.outcomes] == list(QUALIFICATION_PROBE_IDS)
+    assert all(turn.cached_input_tokens is not None for turn in request.turns)
+    assert str(tmp_path).encode() not in encoded
 
 
 @pytest.mark.parametrize("cancel_run", (True, False))
@@ -393,6 +427,7 @@ async def test_a_stopped_managed_replay_stops_the_server_and_drops_its_binding(
         RunActivityKind.SERVER_STARTING,
         RunActivityKind.SERVER_READY,
         RunActivityKind.GPU_VERIFIED,
+        RunActivityKind.OUTPUT_POLICY_CHOSEN,
         RunActivityKind.QUALIFYING,
         RunActivityKind.QUALIFIED,
         RunActivityKind.REPLAY_STARTING,
@@ -438,6 +473,71 @@ def test_a_cli_managed_run_without_progress_or_power_runs_unobserved(
     summary = orjson.loads((output_dir / "summary.json").read_bytes())
     assert summary["observer"]["enabled"] is False
     assert summary["observer"]["duration_ms"] == 0
+
+
+@pytest.mark.parametrize(
+    ("entry_point", "requested_policy", "expected_policy"),
+    (
+        pytest.param("cli", "exact", None, id="cli-exact-refused"),
+        pytest.param("cli", "recorded", "recorded", id="cli-recorded"),
+        pytest.param("tui", None, "recorded", id="tui-adopts-recorded"),
+    ),
+)
+def test_a_runtime_that_drops_ignore_eos_runs_only_under_the_recorded_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    entry_point: str,
+    requested_policy: str | None,
+    expected_policy: str | None,
+) -> None:
+    """A runtime without ignore_eos, such as Splash, fails every exact turn, so the policy is settled first."""
+    runtime = _install_fake_runtime(tmp_path, monkeypatch, "llama-cpp", "--drop-ignore-eos")
+    manifest_path = write_replay_workload(tmp_path / "workload", name="managed-policy")
+    output_dir = tmp_path / "results"
+    if entry_point == "cli":
+        assert requested_policy is not None
+        status = main(
+            [
+                "managed-run",
+                str(manifest_path),
+                "--output-dir",
+                str(output_dir),
+                "--profile-id",
+                runtime.candidate.profile_id,
+                "--framework",
+                "llama-cpp",
+                "--client",
+                "python",
+                "--port",
+                str(runtime.port),
+                "--no-power",
+                "--output-token-policy",
+                requested_policy,
+            ]
+        )
+        captured = capsys.readouterr()
+        assert status == (1 if expected_policy is None else 0), captured.err
+        if expected_policy is None:
+            assert "server ignores ignore_eos" in captured.err
+            assert "--output-token-policy recorded" in captured.err
+            assert not (output_dir / "measurement.json").exists()
+            assert not (output_dir / "deployment.json").exists()
+            return
+    else:
+        controller, request = _tui_launch(runtime, manifest_path, output_dir)
+        observer = _RecordingObserver()
+        execution = asyncio.run(controller.execute(request, observer))
+        assert execution.output_token_policy == expected_policy
+        chosen = next(
+            activity for activity in observer.activities if activity.kind is RunActivityKind.OUTPUT_POLICY_CHOSEN
+        )
+        assert chosen.ignore_eos_probe is not None
+        assert chosen.ignore_eos_probe.output_token_policy == expected_policy
+
+    summary = orjson.loads((output_dir / "summary.json").read_bytes())
+    assert summary["config"]["output_tokens"]["policy"] == expected_policy
+    assert _port_is_free(runtime.port)
 
 
 @pytest.mark.parametrize("precreated", (True, False), ids=("user-folder", "pipeline-folder"))

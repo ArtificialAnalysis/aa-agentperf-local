@@ -13,7 +13,7 @@ import orjson
 import pytest
 from pydantic import BaseModel
 
-from agentperf_local.common.json_records import json_field_names
+from agentperf_local.common.json_records import json_field_names, required_json_field_names
 from agentperf_local.common.json_types import JsonObject
 from agentperf_local.deployment.catalog import (
     DeploymentArtifact,
@@ -24,20 +24,8 @@ from agentperf_local.deployment.catalog import (
     VllmLaunch,
 )
 from agentperf_local.deployment.qualification import ProbeOutcome
-from agentperf_local.provenance.benchmark import SubmissionContext
-from agentperf_local.provenance.hardware import PublicAcceleratorProfile
-from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
-from agentperf_local.submission.aggregate import (
-    ArtifactDigests,
-    PublicDistribution,
-    PublicLatencyDistributions,
-    PublicRunResult,
-    PublicTotals,
-)
-from agentperf_local.submission.bundle import BundleArtifact
-from agentperf_local.submission.evidence import SanitizedTiming, SanitizedTurn
-from agentperf_local.telemetry.nvidia import TelemetryFooter
-from agentperf_local.telemetry.power import PowerPhaseSummary
+from agentperf_local.submission import contract
+from agentperf_local.submission.spec import SUBMISSION_SPEC_PATH
 
 SCHEMA_ROOT = pathlib.Path(__file__).parents[1] / "docs" / "schemas"
 
@@ -49,22 +37,25 @@ SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
     ("recipe-v2.schema.json", "$defs/vllm", VllmLaunch),
     ("recipe-v2.schema.json", "$defs/deployment", ModelDeployment),
     ("recipe-v2.schema.json", "$defs/model", ModelCandidate),
-    ("private-audit-v1.schema.json", "$defs/accelerator", AcceleratorSnapshot),
-    ("private-audit-v1.schema.json", "$defs/outcome", ProbeOutcome),
-    ("private-audit-v1.schema.json", "$defs/phase", PowerPhaseSummary),
-    ("private-audit-v1.schema.json", "$defs/power/properties/collection", TelemetryFooter),
-    ("public-submission-v2.schema.json", "$defs/benchmark", SubmissionContext),
-    ("public-submission-v2.schema.json", "$defs/accelerator", PublicAcceleratorProfile),
-    ("public-submission-v2.schema.json", "$defs/evidenceDigests", ArtifactDigests),
-    ("public-submission-v2.schema.json", "$defs/totals", PublicTotals),
-    ("public-submission-v2.schema.json", "$defs/distribution", PublicDistribution),
-    ("public-submission-v2.schema.json", "$defs/latencyDistributions", PublicLatencyDistributions),
-    ("public-submission-v2.schema.json", "$defs/run", PublicRunResult),
     ("runtime-qualification-v1.schema.json", "$defs/outcome", ProbeOutcome),
     ("runtime-qualification-v2.schema.json", "$defs/outcome", ProbeOutcome),
-    ("sanitized-turn-evidence-v1.schema.json", "$defs/timing", SanitizedTiming),
-    ("sanitized-turn-evidence-v1.schema.json", "$defs/turn", SanitizedTurn),
-    ("submission-bundle-v2.schema.json", "$defs/artifact", BundleArtifact),
+)
+# Each request component of the service's pinned spec, and the client model that writes it.
+SPEC_COMPONENTS: tuple[tuple[str, type[BaseModel]], ...] = (
+    ("SubmissionRequest", contract.SubmissionRequest),
+    ("Client", contract.Client),
+    ("Benchmark", contract.Benchmark),
+    ("Hardware", contract.Hardware),
+    ("Accelerator", contract.Accelerator),
+    ("ManagedDeployment", contract.ManagedDeployment),
+    ("AttachedDeployment", contract.AttachedDeployment),
+    ("CappedOutputPolicy", contract.CappedOutputPolicy),
+    ("FreeOutputPolicy", contract.FreeOutputPolicy),
+    ("Run", contract.Run),
+    ("Turn", contract.Turn),
+    ("Qualification", contract.Qualification),
+    ("QualificationOutcome", contract.QualificationOutcome),
+    ("Power", contract.Power),
 )
 
 
@@ -105,3 +96,14 @@ def test_every_schema_is_a_valid_draft_and_is_covered_or_named() -> None:
     mapped = {name for name, _, _ in SCHEMA_OBJECTS}
 
     assert mapped | unmapped == present
+
+
+@pytest.mark.parametrize(("component", "record"), SPEC_COMPONENTS, ids=[name for name, _ in SPEC_COMPONENTS])
+def test_pinned_spec_component_describes_exactly_its_request_model(component: str, record: type[BaseModel]) -> None:
+    """A field the spec gains or loses fails here, before the service refuses a body."""
+    spec = orjson.loads(SUBMISSION_SPEC_PATH.read_bytes())
+    node = spec["components"]["schemas"][component]
+
+    assert frozenset(node["properties"]) == json_field_names(record)
+    assert frozenset(node.get("required", ())) == required_json_field_names(record)
+    assert node.get("additionalProperties") is False

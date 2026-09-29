@@ -60,9 +60,10 @@ Choose a model & config → Setup → Confirm → Running → Result
 
 **Use existing server** on the welcome screen goes directly to Setup. Back returns
 to the route you came from, and keeps your field values. Ticking the run
-confirmation for a managed run keeps focus on it. For your own server, focus moves
-to the optional submission checkbox once the server answers its check. Down from
-the submission checkbox reaches **Run benchmark**.
+confirmation for a managed run keeps focus on it; Down from the optional
+submission checkbox reaches **Run benchmark**. For your own server, focus moves to
+**Run benchmark** once the server answers its check, because that run is submitted
+from the command line.
 
 - Up and Down choose an option.
 - Left and Right move between controls, including the welcome choices and model details.
@@ -170,27 +171,27 @@ in Setup.
 
 The confirm screen groups a second checkbox and a compact upload summary in one
 panel: "Submit this run to Artificial Analysis." It is offered for every ready
-managed or attached-endpoint run. A token is optional; an upload without one is
-anonymous and self-reported. The summary separates what may be published, what
-stays private for 180 days, what is never sent, and how failed verification
-checks are handled. When a token is set, the app also asks the service whether
-this client commit is inside the allowlist window and adds a short eligibility
-note. That note is advisory; the service decides.
+managed run. A run on a server you started needs a description of that server,
+which only the command line collects, so for it the panel shows the commands
+instead. A token is optional; an upload without one is anonymous. The summary
+separates what may be published, what the service keeps privately with no end
+date, what is never sent, and how failed qualification probes are handled. When
+a token is set, the app also asks the service whether this client commit is
+inside the allowlist window and adds a short eligibility note. That note is
+advisory; the service decides.
 
-A managed run with Submit ticked probes the server's agent protocol before the
-replay and samples GPU power around it on NVIDIA hosts. Failed probes are still
-uploaded with `passed: false`, so the service can classify the run as
-self-reported. An attached run records
-a self-reported benchmark binding before inference. When either run finishes,
-the result page adds an upload stage: the bundle is prepared beside the run
-folder, sent in one request with a progress bar, and the submission identifier
+A managed run probes the server's agent protocol before the replay and samples
+GPU power around it on NVIDIA hosts. Failed probes are still uploaded with
+`passed: false`. When the run finishes, the result page adds an upload stage:
+the submission file is prepared beside the run folder, sent in one request with
+a progress bar, and the submission identifier
 and status are shown with the command that reads them back later. The bar tracks
 bytes sent; 100% does not mean the service has confirmed the submission. A spinner
 stays visible beside New run and says “Waiting for confirmation…” until the
 service responds. While submission is in flight, New run is disabled and `q`
 and Escape wait; `Ctrl+C` cancels the upload
-and quits. A failed or canceled upload keeps the bundle on disk and shows the
-exact `submit` command that retries it.
+and quits. A failed or canceled upload keeps the submission file on disk and
+shows the exact `submit` command that retries it.
 
 ## Network and evidence boundary
 

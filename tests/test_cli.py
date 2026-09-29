@@ -263,7 +263,7 @@ def test_prepare_submission_explains_an_unbound_results_directory(
     results_dir.mkdir()
     (results_dir / "summary.json").write_bytes(b"{}")
 
-    status = main(["prepare-submission", str(results_dir), "--output-dir", str(tmp_path / "public")])
+    status = main(["prepare-submission", str(results_dir), "--output", str(tmp_path / "submission.json")])
 
     captured = capsys.readouterr()
     assert status == 1
@@ -331,7 +331,6 @@ def test_main_reports_an_interrupt_without_a_traceback(
             ("--output-token-policy", "fixed", "--output-token-margin", "8"),
             "output token margin applies only to the recorded policy",
         ),
-        (("--tool-delay-scale", "2.0"), "tool delay scale requires a tool replay mode"),
     ),
 )
 def test_run_rejects_a_flag_combination_it_would_otherwise_ignore(
@@ -557,13 +556,13 @@ def test_run_removes_its_measurement_binding_when_the_run_never_finishes(
 ) -> None:
     manifest_path = _converted_manifest(tmp_path, capsys)
     monkeypatch.setattr(
-        "agentperf_local.cli.replay.collect_hardware_snapshot", lambda: _deployment_hardware("NVIDIA", "CUDA")
+        "agentperf_local.cli.options.collect_hardware_snapshot", lambda: _deployment_hardware("NVIDIA", "CUDA")
     )
 
     def interrupt(*arguments: object, **keywords: object) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("agentperf_local.cli.replay.run_manifest", interrupt)
+    monkeypatch.setattr("agentperf_local.deployment.managed_run.run_manifest", interrupt)
     output_dir = tmp_path / "results"
 
     status = main(_run_arguments(manifest_path, output_dir))

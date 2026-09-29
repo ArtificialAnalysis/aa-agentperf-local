@@ -1,0 +1,1623 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgentPerf Infrastructure",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/readyz": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/revisions": {
+      "get": {
+        "summary": "Revisions",
+        "operationId": "revisions_v1_revisions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/submissions": {
+      "post": {
+        "summary": "Submit",
+        "description": "Submit one AgentPerf run.\n\n`run_id` is the idempotency key. A retry with the same content returns 200 and the same\n`submission_id`. The same `run_id` with different content returns 409.\n\nThe service keeps the exact request body indefinitely in private storage. Sending\n`privacy_notice_version` acknowledges the privacy notice of that version.",
+        "operationId": "submit_v1_submissions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "The run is stored and queryable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionAccepted"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The run was already accepted with this content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Content-Length is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The run_id was already accepted with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is over 33554432 bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The body does not match SubmissionRequest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage is unavailable; retry the same body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/submissions/{submission_id}": {
+      "get": {
+        "summary": "Status",
+        "operationId": "status_v1_submissions__submission_id__get",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The submission ID is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No submission has this ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage is unavailable; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "request_too_large",
+              "validation_failed",
+              "idempotency_conflict",
+              "not_found",
+              "storage_unavailable",
+              "warehouse_unavailable"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "detail"
+        ],
+        "title": "Error",
+        "description": "Describe one refused request."
+      },
+      "ErrorDetail": {
+        "properties": {
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reasons"
+        ],
+        "title": "ErrorDetail",
+        "description": "List why a request was refused."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "Wrap every error the API returns."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JsonObject": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "type": "object"
+      },
+      "JsonValue": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "StatusReason": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "resubmit_required",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "StatusReason",
+        "description": "Tell the client what to do about a queued submission."
+      },
+      "SubmissionAccepted": {
+        "properties": {
+          "submission_id": {
+            "type": "string",
+            "title": "Submission Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "accepted",
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "submission_id",
+          "status"
+        ],
+        "title": "SubmissionAccepted",
+        "description": "Confirm that a submission is stored and queryable."
+      },
+      "SubmissionStatus": {
+        "properties": {
+          "submission_id": {
+            "type": "string",
+            "title": "Submission Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "queued"
+            ],
+            "title": "Status"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/StatusReason"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "submitted_at": {
+            "type": "string",
+            "title": "Submitted At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "submission_id",
+          "status",
+          "reasons",
+          "submitted_at"
+        ],
+        "title": "SubmissionStatus",
+        "description": "Report whether a stored submission has its BigQuery row."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "Accelerator": {
+        "additionalProperties": false,
+        "description": "Describe the one accelerator the run used, as its driver reports it.\n\nmemory_bytes is required unless memory_is_unified. On nvidia, driver_version is required\nand is dotted numbers, such as 580.178.04.",
+        "properties": {
+          "vendor": {
+            "enum": [
+              "nvidia",
+              "apple",
+              "amd",
+              "intel"
+            ],
+            "title": "Vendor",
+            "type": "string"
+          },
+          "product": {
+            "minLength": 1,
+            "title": "Product",
+            "type": "string"
+          },
+          "memory_bytes": {
+            "anyOf": [
+              {
+                "maximum": 9223372036854775807,
+                "minimum": 1073741824,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Bytes"
+          },
+          "memory_is_unified": {
+            "title": "Memory Is Unified",
+            "type": "boolean"
+          },
+          "core_count": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Core Count"
+          },
+          "driver_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driver Version"
+          },
+          "max_graphics_clock_mhz": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Graphics Clock Mhz"
+          },
+          "max_memory_clock_mhz": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Memory Clock Mhz"
+          },
+          "power_limit_w": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Power Limit W"
+          }
+        },
+        "required": [
+          "vendor",
+          "product",
+          "memory_is_unified"
+        ],
+        "title": "Accelerator",
+        "type": "object"
+      },
+      "AttachedDeployment": {
+        "additionalProperties": false,
+        "description": "Describe a server the user started on the same machine.\n\nSend framework_commit, framework_container_reference, or both.",
+        "properties": {
+          "model_release_slug": {
+            "pattern": "^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$",
+            "title": "Model Release Slug",
+            "type": "string"
+          },
+          "hf_repository": {
+            "minLength": 1,
+            "title": "Hf Repository",
+            "type": "string"
+          },
+          "hf_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Hf Revision",
+            "type": "string"
+          },
+          "framework": {
+            "enum": [
+              "llama-cpp",
+              "vllm",
+              "sglang",
+              "splash"
+            ],
+            "title": "Framework",
+            "type": "string"
+          },
+          "framework_version": {
+            "minLength": 1,
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "framework_commit": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Framework Commit"
+          },
+          "framework_container_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[^\\s@]+@sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Framework Container Reference"
+          },
+          "server_launch_command": {
+            "minLength": 1,
+            "title": "Server Launch Command",
+            "type": "string"
+          },
+          "accelerator_backend": {
+            "enum": [
+              "cuda",
+              "metal",
+              "rocm",
+              "vulkan",
+              "sycl",
+              "xpu"
+            ],
+            "title": "Accelerator Backend",
+            "type": "string"
+          },
+          "deployment_mode": {
+            "const": "attached",
+            "title": "Deployment Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_release_slug",
+          "hf_repository",
+          "hf_revision",
+          "framework",
+          "framework_version",
+          "server_launch_command",
+          "accelerator_backend",
+          "deployment_mode"
+        ],
+        "title": "AttachedDeployment",
+        "type": "object"
+      },
+      "Benchmark": {
+        "additionalProperties": false,
+        "description": "Identify the workload and the context window the server ran with.\n\nobserved_context_tokens must be at least context_tokens.",
+        "properties": {
+          "workload_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Workload Digest",
+            "type": "string"
+          },
+          "workload_context_tokens": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Workload Context Tokens",
+            "type": "integer"
+          },
+          "context_tokens": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Context Tokens",
+            "type": "integer"
+          },
+          "observed_context_tokens": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Observed Context Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workload_digest",
+          "workload_context_tokens",
+          "context_tokens",
+          "observed_context_tokens"
+        ],
+        "title": "Benchmark",
+        "type": "object"
+      },
+      "CappedOutputPolicy": {
+        "additionalProperties": false,
+        "description": "Cap each turn's output at its target length.",
+        "properties": {
+          "client_backend": {
+            "enum": [
+              "python",
+              "rust"
+            ],
+            "title": "Client Backend",
+            "type": "string"
+          },
+          "transport_policy_id": {
+            "const": "direct-sse-no-retry-v1",
+            "title": "Transport Policy Id",
+            "type": "string"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Temperature"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top P"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "maximum": 9223372036854775807,
+                "minimum": -9223372036854775808,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top K"
+          },
+          "min_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min P"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reasoning Effort"
+          },
+          "cache_isolation_enabled": {
+            "const": true,
+            "title": "Cache Isolation Enabled",
+            "type": "boolean"
+          },
+          "cache_isolation_mode": {
+            "const": "run_namespace_prefix",
+            "title": "Cache Isolation Mode",
+            "type": "string"
+          },
+          "tool_replay_mode": {
+            "default": "none",
+            "enum": [
+              "none",
+              "live",
+              "fixed_delay"
+            ],
+            "title": "Tool Replay Mode",
+            "type": "string"
+          },
+          "output_token_policy": {
+            "enum": [
+              "exact",
+              "recorded"
+            ],
+            "title": "Output Token Policy",
+            "type": "string"
+          },
+          "output_token_fallback": {
+            "const": 16384,
+            "title": "Output Token Fallback",
+            "type": "integer"
+          },
+          "output_token_margin": {
+            "const": 0,
+            "title": "Output Token Margin",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "client_backend",
+          "transport_policy_id",
+          "cache_isolation_enabled",
+          "cache_isolation_mode",
+          "output_token_policy",
+          "output_token_fallback",
+          "output_token_margin"
+        ],
+        "title": "CappedOutputPolicy",
+        "type": "object"
+      },
+      "Client": {
+        "additionalProperties": false,
+        "description": "Identify the client build that measured the run.",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          },
+          "source_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Source Revision",
+            "type": "string"
+          },
+          "source_state": {
+            "enum": [
+              "release",
+              "clean"
+            ],
+            "title": "Source State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "source_revision",
+          "source_state"
+        ],
+        "title": "Client",
+        "type": "object"
+      },
+      "FreeOutputPolicy": {
+        "additionalProperties": false,
+        "description": "Let each turn generate until the model stops.",
+        "properties": {
+          "client_backend": {
+            "enum": [
+              "python",
+              "rust"
+            ],
+            "title": "Client Backend",
+            "type": "string"
+          },
+          "transport_policy_id": {
+            "const": "direct-sse-no-retry-v1",
+            "title": "Transport Policy Id",
+            "type": "string"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Temperature"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top P"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "maximum": 9223372036854775807,
+                "minimum": -9223372036854775808,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top K"
+          },
+          "min_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min P"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reasoning Effort"
+          },
+          "cache_isolation_enabled": {
+            "const": true,
+            "title": "Cache Isolation Enabled",
+            "type": "boolean"
+          },
+          "cache_isolation_mode": {
+            "const": "run_namespace_prefix",
+            "title": "Cache Isolation Mode",
+            "type": "string"
+          },
+          "tool_replay_mode": {
+            "default": "none",
+            "enum": [
+              "none",
+              "live",
+              "fixed_delay"
+            ],
+            "title": "Tool Replay Mode",
+            "type": "string"
+          },
+          "output_token_policy": {
+            "const": "free",
+            "title": "Output Token Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_backend",
+          "transport_policy_id",
+          "cache_isolation_enabled",
+          "cache_isolation_mode",
+          "output_token_policy"
+        ],
+        "title": "FreeOutputPolicy",
+        "type": "object"
+      },
+      "Hardware": {
+        "additionalProperties": false,
+        "description": "Describe the machine that ran both the server and the client.",
+        "properties": {
+          "platform_family": {
+            "enum": [
+              "linux",
+              "macos",
+              "windows"
+            ],
+            "title": "Platform Family",
+            "type": "string"
+          },
+          "operating_system_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Operating System Version"
+          },
+          "kernel_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kernel Version"
+          },
+          "architecture": {
+            "enum": [
+              "x86_64",
+              "arm64"
+            ],
+            "title": "Architecture",
+            "type": "string"
+          },
+          "cpu_model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cpu Model"
+          },
+          "logical_cpu_count": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Logical Cpu Count"
+          },
+          "memory_bytes": {
+            "maximum": 9223372036854775807,
+            "minimum": 1073741824,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "accelerator": {
+            "$ref": "#/components/schemas/Accelerator"
+          }
+        },
+        "required": [
+          "platform_family",
+          "architecture",
+          "memory_bytes",
+          "accelerator"
+        ],
+        "title": "Hardware",
+        "type": "object"
+      },
+      "ManagedDeployment": {
+        "additionalProperties": false,
+        "description": "Describe a server the client started from a catalog recipe.\n\nSend framework_commit, framework_container_reference, or both.",
+        "properties": {
+          "model_release_slug": {
+            "pattern": "^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$",
+            "title": "Model Release Slug",
+            "type": "string"
+          },
+          "hf_repository": {
+            "minLength": 1,
+            "title": "Hf Repository",
+            "type": "string"
+          },
+          "hf_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Hf Revision",
+            "type": "string"
+          },
+          "framework": {
+            "enum": [
+              "llama-cpp",
+              "vllm",
+              "sglang",
+              "splash"
+            ],
+            "title": "Framework",
+            "type": "string"
+          },
+          "framework_version": {
+            "minLength": 1,
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "framework_commit": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Framework Commit"
+          },
+          "framework_container_reference": {
+            "anyOf": [
+              {
+                "pattern": "^[^\\s@]+@sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Framework Container Reference"
+          },
+          "server_launch_command": {
+            "minLength": 1,
+            "title": "Server Launch Command",
+            "type": "string"
+          },
+          "accelerator_backend": {
+            "enum": [
+              "cuda",
+              "metal",
+              "rocm",
+              "vulkan",
+              "sycl",
+              "xpu"
+            ],
+            "title": "Accelerator Backend",
+            "type": "string"
+          },
+          "deployment_mode": {
+            "const": "managed",
+            "title": "Deployment Mode",
+            "type": "string"
+          },
+          "profile_id": {
+            "minLength": 1,
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "model_artifact_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Model Artifact Digest",
+            "type": "string"
+          },
+          "recipe": {
+            "minLength": 1,
+            "title": "Recipe",
+            "type": "string"
+          },
+          "model_size_bytes": {
+            "maximum": 9223372036854775807,
+            "minimum": 1,
+            "title": "Model Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_release_slug",
+          "hf_repository",
+          "hf_revision",
+          "framework",
+          "framework_version",
+          "server_launch_command",
+          "accelerator_backend",
+          "deployment_mode",
+          "profile_id",
+          "model_artifact_digest",
+          "recipe",
+          "model_size_bytes"
+        ],
+        "title": "ManagedDeployment",
+        "type": "object"
+      },
+      "Power": {
+        "additionalProperties": false,
+        "description": "Hold the power telemetry of the measured phase.",
+        "properties": {
+          "collector_id": {
+            "const": "aa-nvidia-smi-v1",
+            "title": "Collector Id",
+            "type": "string"
+          },
+          "sampled_power_energy_valid": {
+            "title": "Sampled Power Energy Valid",
+            "type": "boolean"
+          },
+          "power_coverage": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Power Coverage",
+            "type": "number"
+          },
+          "power_integration_coverage": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Power Integration Coverage",
+            "type": "number"
+          },
+          "energy_joules": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Energy Joules"
+          },
+          "power_w_mean": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Power W Mean"
+          },
+          "power_w_max": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Power W Max"
+          },
+          "temperature_c_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Temperature C Max"
+          },
+          "gpu_utilization_percent_mean": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gpu Utilization Percent Mean"
+          },
+          "graphics_clock_mhz_median": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Graphics Clock Mhz Median"
+          },
+          "memory_clock_mhz_median": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Clock Mhz Median"
+          },
+          "memory_used_mib_maximum": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Used Mib Maximum"
+          }
+        },
+        "required": [
+          "collector_id",
+          "sampled_power_energy_valid",
+          "power_coverage",
+          "power_integration_coverage"
+        ],
+        "title": "Power",
+        "type": "object"
+      },
+      "Qualification": {
+        "additionalProperties": false,
+        "description": "Hold the synthetic probe results from before the run.\n\nSend exactly one outcome for each probe.",
+        "properties": {
+          "synthetic_pack_id": {
+            "const": "aa-runtime-synthetic-v1",
+            "title": "Synthetic Pack Id",
+            "type": "string"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/QualificationOutcome"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "synthetic_pack_id",
+          "outcomes"
+        ],
+        "title": "Qualification",
+        "type": "object"
+      },
+      "QualificationOutcome": {
+        "additionalProperties": false,
+        "description": "Hold one runtime qualification probe result.",
+        "properties": {
+          "probe_id": {
+            "enum": [
+              "single_tool",
+              "no_tool",
+              "parallel_tools",
+              "tool_history",
+              "capped_finish"
+            ],
+            "title": "Probe Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "failure_codes": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Failure Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "probe_id",
+          "passed",
+          "failure_codes"
+        ],
+        "title": "QualificationOutcome",
+        "type": "object"
+      },
+      "Run": {
+        "additionalProperties": false,
+        "description": "Hold the run durations that the turns cannot show.",
+        "properties": {
+          "wall_duration_ms": {
+            "minimum": 0,
+            "title": "Wall Duration Ms",
+            "type": "number"
+          },
+          "observer_duration_ms": {
+            "minimum": 0,
+            "title": "Observer Duration Ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "wall_duration_ms",
+          "observer_duration_ms"
+        ],
+        "title": "Run",
+        "type": "object"
+      },
+      "Turn": {
+        "additionalProperties": false,
+        "description": "Hold one successful turn's timing and token counts.\n\nEach turn has a decode window: at least 2 output tokens and a positive generation_ms.\ntime_to_first_token_ms and generation_ms must not exceed e2e_latency_ms. Send\ncached_input_tokens and uncached_input_tokens together; they add up to server_prompt_tokens.",
+        "properties": {
+          "turn_ordinal": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Turn Ordinal",
+            "type": "integer"
+          },
+          "task_ordinal": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Task Ordinal",
+            "type": "integer"
+          },
+          "turn_in_task": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Turn In Task",
+            "type": "integer"
+          },
+          "finish_reason": {
+            "minLength": 1,
+            "title": "Finish Reason",
+            "type": "string"
+          },
+          "response_chunks": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Response Chunks",
+            "type": "integer"
+          },
+          "replayed_pacing_ms": {
+            "minimum": 0,
+            "title": "Replayed Pacing Ms",
+            "type": "number"
+          },
+          "e2e_latency_ms": {
+            "minimum": 0,
+            "title": "E2E Latency Ms",
+            "type": "number"
+          },
+          "time_to_first_token_ms": {
+            "minimum": 0,
+            "title": "Time To First Token Ms",
+            "type": "number"
+          },
+          "generation_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Generation Ms",
+            "type": "number"
+          },
+          "server_prompt_tokens": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Server Prompt Tokens",
+            "type": "integer"
+          },
+          "server_output_tokens": {
+            "maximum": 2147483647,
+            "minimum": 2,
+            "title": "Server Output Tokens",
+            "type": "integer"
+          },
+          "target_output_tokens": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Target Output Tokens",
+            "type": "integer"
+          },
+          "cached_input_tokens": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cached Input Tokens"
+          },
+          "uncached_input_tokens": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Uncached Input Tokens"
+          }
+        },
+        "required": [
+          "turn_ordinal",
+          "task_ordinal",
+          "turn_in_task",
+          "finish_reason",
+          "response_chunks",
+          "replayed_pacing_ms",
+          "e2e_latency_ms",
+          "time_to_first_token_ms",
+          "generation_ms",
+          "server_prompt_tokens",
+          "server_output_tokens",
+          "target_output_tokens"
+        ],
+        "title": "Turn",
+        "type": "object"
+      },
+      "SubmissionRequest": {
+        "additionalProperties": false,
+        "description": "Hold one complete AgentPerf run. `run_id` is the idempotency key.\n\nturn_ordinal counts 0, 1, 2 and so on. Each task's turns form one block in task order, with\nturn_in_task counting from 0. Managed runs send cache counts on every turn. Runs on an\nnvidia accelerator send power.",
+        "properties": {
+          "run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "privacy_notice_version": {
+            "minLength": 1,
+            "title": "Privacy Notice Version",
+            "type": "string"
+          },
+          "client": {
+            "$ref": "#/components/schemas/Client"
+          },
+          "benchmark": {
+            "$ref": "#/components/schemas/Benchmark"
+          },
+          "hardware": {
+            "$ref": "#/components/schemas/Hardware"
+          },
+          "deployment": {
+            "discriminator": {
+              "mapping": {
+                "attached": "#/components/schemas/AttachedDeployment",
+                "managed": "#/components/schemas/ManagedDeployment"
+              },
+              "propertyName": "deployment_mode"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ManagedDeployment"
+              },
+              {
+                "$ref": "#/components/schemas/AttachedDeployment"
+              }
+            ],
+            "title": "Deployment"
+          },
+          "policy": {
+            "discriminator": {
+              "mapping": {
+                "exact": "#/components/schemas/CappedOutputPolicy",
+                "free": "#/components/schemas/FreeOutputPolicy",
+                "recorded": "#/components/schemas/CappedOutputPolicy"
+              },
+              "propertyName": "output_token_policy"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CappedOutputPolicy"
+              },
+              {
+                "$ref": "#/components/schemas/FreeOutputPolicy"
+              }
+            ],
+            "title": "Policy"
+          },
+          "run": {
+            "$ref": "#/components/schemas/Run"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "minItems": 1,
+            "title": "Turns",
+            "type": "array"
+          },
+          "qualification": {
+            "$ref": "#/components/schemas/Qualification"
+          },
+          "power": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Power"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "run_id",
+          "privacy_notice_version",
+          "client",
+          "benchmark",
+          "hardware",
+          "deployment",
+          "policy",
+          "run",
+          "turns",
+          "qualification"
+        ],
+        "title": "SubmissionRequest",
+        "type": "object"
+      }
+    }
+  }
+}

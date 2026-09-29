@@ -1,35 +1,19 @@
 """Exercise replay workloads shipped with the package."""
 
 import json
-from pathlib import Path
 
 import pytest
 
 from agentperf_local.cli.options import DEFAULT_MANAGED_PROFILE_ID
 from agentperf_local.client.request import DEFAULT_MAX_OUTPUT_TOKENS
-from agentperf_local.common.models import replace_fields
 from agentperf_local.deployment.catalog import BUNDLED_RECIPES_ROOT, load_model_catalog
 from agentperf_local.deployment.context_policy import REDUCED_CONTEXT_LADDER, reduced_context_rungs
 from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
-    MEASUREMENT_BINDING_FILENAME,
-    SourceProvenance,
-    create_attached_submission_context,
-    create_measurement_binding,
-    write_measurement_binding,
 )
-from agentperf_local.provenance.context import ContextObservationReason, RunContextFacts
-from agentperf_local.provenance.hardware import HardwareSnapshot
-from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
 from agentperf_local.replay.cache_isolation import CACHE_NAMESPACE_DIGITS, cache_namespace_prefix
 from agentperf_local.replay.config import OutputTokenPolicy, RunConfig
 from agentperf_local.replay.runner import run_manifest
-from agentperf_local.reports.reporting import write_run_artifacts
-from agentperf_local.submission.bundle import (
-    build_submission_bundle,
-    validate_submission_bundle,
-    write_submission_bundle,
-)
 from agentperf_local.workload.bundled import BUNDLED_REPLAYS, DEFAULT_BUNDLED_REPLAY, find_bundled_replay
 from agentperf_local.workload.schema import load_manifest, load_trace, parse_json_object
 from tests.localhost_sse import LocalSseServer
@@ -57,21 +41,6 @@ SUMMARY_RESPONSE = (
     b'data: {"choices":[{"delta":{"content":"Orion is reference only."},"finish_reason":"stop"}]}\n\n',
     b'data: {"choices":[],"usage":{"prompt_tokens":763,"completion_tokens":62,"total_tokens":825}}\n\n',
     b"data: [DONE]\n\n",
-)
-TEST_HARDWARE = HardwareSnapshot(
-    operating_system="Linux",
-    operating_system_version="test-os",
-    kernel_version="test-kernel",
-    architecture="x86_64",
-    cpu_model="test-cpu",
-    logical_cpu_count=None,
-    memory_bytes=None,
-    accelerators=(
-        AcceleratorSnapshot(
-            vendor="NVIDIA", name="Synthetic GPU", memory_bytes=None, core_count=None, driver_version=None, api="CUDA"
-        ),
-    ),
-    warnings=(),
 )
 
 
@@ -162,8 +131,8 @@ def test_default_replay_declares_the_smallest_rung_that_holds_its_largest_turn()
         ("recorded", MINI_MAX_OUTPUT_TOKENS // 2, MINI_MAX_OUTPUT_TOKENS // 2),
     ),
 )
-async def test_mini_replay_fits_8k_and_validates_submission_outputs(
-    tmp_path: Path, policy: OutputTokenPolicy, output_limit: int, expected_limit: int
+async def test_mini_replay_fits_8k_under_every_output_policy(
+    policy: OutputTokenPolicy, output_limit: int, expected_limit: int
 ) -> None:
     replay = find_bundled_replay("aa-mini-v1")
     assert replay is not None
@@ -199,17 +168,6 @@ async def test_mini_replay_fits_8k_and_validates_submission_outputs(
             max_output_tokens=output_limit,
             output_token_policy=policy,
         )
-        context = replace_fields(
-            create_attached_submission_context(replay.manifest_path, config.model), context_tokens=MINI_CONTEXT_TOKENS
-        )
-        binding = create_measurement_binding(
-            context,
-            replay.manifest_path,
-            config.model,
-            TEST_HARDWARE,
-            SourceProvenance(client_version="test", source_revision=None, source_state="unavailable"),
-            observed_context_tokens=MINI_CONTEXT_TOKENS,
-        )
         result = await run_manifest(
             replay.manifest_path,
             config,
@@ -226,27 +184,3 @@ async def test_mini_replay_fits_8k_and_validates_submission_outputs(
             assert request.get("ignore_eos", False) is (policy == "exact")
             assert request.get("tool_choice") is None
             assert len(captured.body) + row.max_output_tokens + CHAT_TEMPLATE_RESERVE_TOKENS <= MINI_CONTEXT_TOKENS
-
-    results_dir = tmp_path / "results"
-    run_context = RunContextFacts(
-        requested_tokens=MINI_CONTEXT_TOKENS,
-        observed_tokens=MINI_CONTEXT_TOKENS,
-        observed_reason=ContextObservationReason.REPORTED,
-    )
-    write_run_artifacts(result, results_dir, config, run_context=run_context, run_id=binding.run_id)
-    write_measurement_binding(results_dir / MEASUREMENT_BINDING_FILENAME, binding)
-    if policy != "exact":
-        with pytest.raises(ValueError, match="short or unmeasurable output"):
-            build_submission_bundle(results_dir)
-        return
-
-    bundle = build_submission_bundle(results_dir)
-    assert len(bundle.evidence.turns) == task.model_calls
-    assert bundle.aggregate.run.totals.short_output_warnings == 0
-    for turn in bundle.evidence.turns:
-        assert turn.tokens.target_output_tokens == MINI_MAX_OUTPUT_TOKENS
-        assert turn.tokens.observed_output_tokens == expected_limit
-    bundle_dir = tmp_path / "bundle"
-    write_submission_bundle(bundle_dir, bundle)
-    validated = validate_submission_bundle(bundle_dir)
-    assert validated.manifest.run_id == binding.run_id

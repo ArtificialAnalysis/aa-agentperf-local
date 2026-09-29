@@ -1,6 +1,8 @@
 """Run one managed replay: own a local model server, measure it, and write its evidence.
 
 - `run_managed_replay`: the one pipeline the CLI and the TUI both call.
+- `measure_endpoint` / `EndpointMeasurement`: qualify a ready server, replay the manifest under power
+  telemetry, and write the evidence; managed runs and attached `run` share it.
 - `ManagedRunInputs` / `ManagedRunOutcome`: what one run takes and leaves behind.
 - `ManagedRunObserver`, `RunActivity`, `RunActivityKind`: what a run reports as it goes.
 - `write_run_artifacts_uncancellable`, `discard_unfinished_output`: report commit and cleanup.
@@ -24,6 +26,8 @@ from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandida
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
+    probe_ignore_eos,
+    require_measurable_exact_policy,
 )
 from agentperf_local.deployment.managed import (
     DEPLOYMENT_LOG_FILENAME,
@@ -44,7 +48,8 @@ from agentperf_local.deployment.model_cache import (
 )
 from agentperf_local.deployment.qualification import (
     QUALIFICATION_FILENAME,
-    qualify_managed_endpoint,
+    RuntimeQualification,
+    qualify_endpoint,
     write_runtime_qualification,
 )
 from agentperf_local.provenance.benchmark import (
@@ -56,7 +61,7 @@ from agentperf_local.provenance.benchmark import (
 )
 from agentperf_local.provenance.context import ContextObservationReason, RunContextFacts
 from agentperf_local.provenance.hardware import AcceleratorPlatform
-from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, RunConfig
+from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, OutputTokenPolicy, RunConfig
 from agentperf_local.replay.runner import CompositeRunObserver, RunObserver, RunResult, run_manifest
 from agentperf_local.reports.reporting import ArtifactPaths, write_run_artifacts
 from agentperf_local.telemetry.power import (
@@ -135,6 +140,8 @@ class ManagedRunInputs(BaseModel, frozen=True):
     manifest_path: Path
     output_dir: Path
     candidate: ModelCandidate
+    # The recipe file's exact text; the deployment record keeps it for the submission.
+    recipe_text: str
     framework: DeploymentFramework
     device: BoundDeploymentDevice
     catalog_as_of: str
@@ -147,6 +154,9 @@ class ManagedRunInputs(BaseModel, frozen=True):
     client_backend: ClientBackend
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     download_timeout_seconds: float = MODEL_DOWNLOAD_TOTAL_TIMEOUT_SECONDS
+    # "exact" refuses a server that drops ignore_eos, and "recorded" never asks.
+    # None asks the server and runs under the strongest policy it supports.
+    output_token_policy: OutputTokenPolicy | None = None
     power: bool = True
     # False keeps replay boundaries away from the observer. The CLI clears it when no
     # progress view is shown, so a plain run reports an unobserved replay.
@@ -159,6 +169,7 @@ class ManagedRunOutcome(BaseModel, frozen=True):
     result: RunResult
     run_id: str
     run_context: RunContextFacts
+    output_token_policy: OutputTokenPolicy
     artifacts: ArtifactPaths
     deployment_record: Path
     deployment_log: Path
@@ -169,7 +180,10 @@ class ManagedRunOutcome(BaseModel, frozen=True):
 
 
 def _managed_run_config(
-    plan: DeploymentPlan, client_backend: ClientBackend, request_timeout_seconds: float
+    plan: DeploymentPlan,
+    client_backend: ClientBackend,
+    request_timeout_seconds: float,
+    output_token_policy: OutputTokenPolicy,
 ) -> RunConfig:
     """Return the replay settings for one owned server."""
     return RunConfig(
@@ -178,6 +192,7 @@ def _managed_run_config(
         api_key=None,
         client_backend=client_backend,
         request_timeout_seconds=request_timeout_seconds,
+        output_token_policy=output_token_policy,
         # vLLM otherwise defaults exact requests to automatic tool selection and
         # stops at a parsed call. Some llama.cpp grammars reject this option.
         tool_choice="none" if plan.framework == "vllm" else None,
@@ -278,6 +293,25 @@ async def _close_owned_deployment(deployment: ManagedDeployment) -> None:
         raise
 
 
+async def _measurable_output_token_policy(
+    plan: DeploymentPlan, inputs: ManagedRunInputs, observer: ManagedRunObserver
+) -> OutputTokenPolicy:
+    """Return the policy this run measures under, asking the ready server when the policy depends on it.
+
+    A server that drops ignore_eos, as Splash does, fails every exact-policy turn. An
+    explicit exact policy is refused on such a server; an unset one falls back to the
+    recorded policy, as an attached run does.
+    """
+    requested = inputs.output_token_policy
+    if requested is not None and requested != "exact":
+        return requested
+    capability = await probe_ignore_eos(plan.base_url, plan.model_alias, inputs.client_backend)
+    if requested == "exact":
+        require_measurable_exact_policy(capability)
+    observer.on_activity(RunActivity(kind=RunActivityKind.OUTPUT_POLICY_CHOSEN, ignore_eos_probe=capability))
+    return capability.output_token_policy
+
+
 def _start_power_collector(collector: NvidiaPowerCollector) -> bool:
     """Start the collector child and give it its head start before the first request."""
     collector.start()
@@ -299,6 +333,110 @@ def _replay_observer(clock: RunObserver | None, observer: RunObserver | None) ->
     if clock is not None and observer is not None:
         return CompositeRunObserver(observers=(clock, observer))
     return clock if clock is not None else observer
+
+
+class EndpointMeasurement(BaseModel, frozen=True):
+    """Describe one measurement of a ready server: where it writes, what it replays, and what it samples."""
+
+    manifest_path: Path
+    output_dir: Path
+    config: RunConfig
+    run_id: str
+    run_context: RunContextFacts
+    # The qualification report names the recipe it probed, or "attached" for a user's server.
+    # None skips the probes, for a run that cannot be submitted anyway.
+    qualification_profile_id: str | None
+    # None when the accelerator is not one that power telemetry can sample.
+    accelerator_platform: AcceleratorPlatform | None
+    device_index: int
+    power: bool
+    observe_replay: bool
+
+
+class MeasuredEndpoint(BaseModel, frozen=True):
+    """Store the replay result and the evidence files one measurement wrote."""
+
+    result: RunResult
+    artifacts: ArtifactPaths
+    qualification: RuntimeQualification | None
+    power_summary: Path | None
+
+
+async def _qualify(
+    measurement: EndpointMeasurement, profile_id: str, observer: ManagedRunObserver
+) -> RuntimeQualification:
+    """Run the synthetic protocol probes against the ready server and write their report."""
+    config = measurement.config
+    observer.on_activity(RunActivity(kind=RunActivityKind.QUALIFYING))
+    qualification = await qualify_endpoint(
+        config.base_url, config.model, profile_id, config.client_backend, measurement.run_id, api_key=config.api_key
+    )
+    await asyncio.to_thread(write_runtime_qualification, measurement.output_dir / QUALIFICATION_FILENAME, qualification)
+    observer.on_activity(
+        RunActivity(
+            kind=RunActivityKind.QUALIFIED,
+            probes_passed=sum(1 for outcome in qualification.required_outcomes if outcome.passed),
+            probes_total=len(qualification.required_outcomes),
+        )
+    )
+    return qualification
+
+
+async def measure_endpoint(measurement: EndpointMeasurement, observer: ManagedRunObserver) -> MeasuredEndpoint:
+    """Probe the ready server, replay the manifest under power telemetry, and write every evidence file.
+
+    The protocol probes run before any measured request, and their report shares the
+    run identifier with the binding. Power is sampled only on an NVIDIA accelerator.
+    """
+    output_dir = measurement.output_dir
+    config = measurement.config
+    qualification = (
+        None
+        if measurement.qualification_profile_id is None
+        else await _qualify(measurement, measurement.qualification_profile_id, observer)
+    )
+    power_collector = (
+        nvidia_power_collector(
+            measurement.accelerator_platform,
+            measurement.device_index,
+            measurement.run_id,
+            output_dir / TELEMETRY_FILENAME,
+        )
+        if measurement.power and measurement.accelerator_platform is not None
+        else None
+    )
+    if measurement.power and power_collector is None:
+        observer.on_activity(
+            RunActivity(kind=RunActivityKind.POWER_UNAVAILABLE, accelerator_platform=measurement.accelerator_platform)
+        )
+    observer.on_activity(RunActivity(kind=RunActivityKind.REPLAY_STARTING))
+    clock = PhaseClockObserver() if power_collector is not None else None
+    run_observer = _replay_observer(clock, observer if measurement.observe_replay else None)
+    if power_collector is not None:
+        first_sample = await asyncio.to_thread(_start_power_collector, power_collector)
+        observer.on_activity(RunActivity(kind=RunActivityKind.POWER_STARTED, power_first_sample=first_sample))
+    try:
+        result = await run_manifest(measurement.manifest_path, config, observer=run_observer)
+    finally:
+        if power_collector is not None:
+            await _stop_power_collector(power_collector)
+    await observer.on_finalizing()
+    artifacts = await write_run_artifacts_uncancellable(
+        result, output_dir, config, measurement.run_context, measurement.run_id
+    )
+    power_path: Path | None = None
+    if power_collector is not None and clock is not None:
+        power_path = output_dir / POWER_SUMMARY_FILENAME
+        power_summary = await asyncio.to_thread(power_collector.summarize, clock.measured_phase())
+        await asyncio.to_thread(write_power_summary, power_path, power_summary)
+        observer.on_activity(
+            RunActivity(
+                kind=RunActivityKind.POWER_RECORDED,
+                energy_joules=power_summary.measured.sampled_power_energy_joules,
+                power_valid=power_summary.measured.sampled_power_energy_valid,
+            )
+        )
+    return MeasuredEndpoint(result=result, artifacts=artifacts, qualification=qualification, power_summary=power_path)
 
 
 async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObserver) -> ManagedRunOutcome:
@@ -354,8 +492,6 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
     deployment_path = output_dir / DEPLOYMENT_RECORD_FILENAME
     log_path = output_dir / DEPLOYMENT_LOG_FILENAME
     measurement_path = output_dir / MEASUREMENT_BINDING_FILENAME
-    qualification_path = output_dir / QUALIFICATION_FILENAME
-    config = _managed_run_config(plan, inputs.client_backend, inputs.request_timeout_seconds)
     deployment: ManagedDeployment | None = None
     try:
         observer.on_activity(
@@ -383,8 +519,16 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         observer.on_activity(
             RunActivity(kind=RunActivityKind.GPU_VERIFIED, accelerator_platform=plan.accelerator_platform)
         )
+        # Settled before the records land, so a refused policy leaves no deployment record behind.
+        output_token_policy = await _measurable_output_token_policy(plan, inputs, observer)
+        config = _managed_run_config(plan, inputs.client_backend, inputs.request_timeout_seconds, output_token_policy)
         written_deployment = await asyncio.to_thread(
-            write_deployment_record, deployment_path, plan, snapshot, gpu_startup_verified=True
+            write_deployment_record,
+            deployment_path,
+            plan,
+            snapshot,
+            recipe_text=inputs.recipe_text,
+            gpu_startup_verified=True,
         )
         # The readiness check proved the served context, so it joins the binding
         # before the binding lands on disk, and the deployment record's exact
@@ -398,72 +542,38 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
                 deployment_digest=written_deployment.file_digest,
             ),
         )
-        # The protocol probes run against the ready server, before any measured
-        # request, and their report shares the run identifier with the binding.
-        observer.on_activity(RunActivity(kind=RunActivityKind.QUALIFYING))
-        qualification = await qualify_managed_endpoint(
-            plan.base_url, plan.model_alias, inputs.candidate.profile_id, inputs.client_backend, binding.run_id
-        )
-        await asyncio.to_thread(write_runtime_qualification, qualification_path, qualification)
-        observer.on_activity(
-            RunActivity(
-                kind=RunActivityKind.QUALIFIED,
-                probes_passed=sum(1 for outcome in qualification.required_outcomes if outcome.passed),
-                probes_total=len(qualification.required_outcomes),
-            )
-        )
-        power_collector = (
-            nvidia_power_collector(
-                plan.accelerator_platform, inputs.device.device_index, binding.run_id, output_dir / TELEMETRY_FILENAME
-            )
-            if inputs.power
-            else None
-        )
-        if inputs.power and power_collector is None:
-            observer.on_activity(
-                RunActivity(kind=RunActivityKind.POWER_UNAVAILABLE, accelerator_platform=plan.accelerator_platform)
-            )
         run_context = RunContextFacts(
             requested_tokens=plan.context_tokens,
             observed_tokens=served_context_tokens,
             observed_reason=ContextObservationReason.REPORTED,
         )
-        observer.on_activity(RunActivity(kind=RunActivityKind.REPLAY_STARTING))
-        clock = PhaseClockObserver() if power_collector is not None else None
-        run_observer = _replay_observer(clock, observer if inputs.observe_replay else None)
-        if power_collector is not None:
-            first_sample = await asyncio.to_thread(_start_power_collector, power_collector)
-            observer.on_activity(RunActivity(kind=RunActivityKind.POWER_STARTED, power_first_sample=first_sample))
-        try:
-            result = await run_manifest(inputs.manifest_path, config, observer=run_observer)
-        finally:
-            if power_collector is not None:
-                await _stop_power_collector(power_collector)
-        await observer.on_finalizing()
-        artifacts = await write_run_artifacts_uncancellable(result, output_dir, config, run_context, binding.run_id)
-        power_path: Path | None = None
-        if power_collector is not None and clock is not None:
-            power_path = output_dir / POWER_SUMMARY_FILENAME
-            power_summary = await asyncio.to_thread(power_collector.summarize, clock.measured_phase())
-            await asyncio.to_thread(write_power_summary, power_path, power_summary)
-            observer.on_activity(
-                RunActivity(
-                    kind=RunActivityKind.POWER_RECORDED,
-                    energy_joules=power_summary.measured.sampled_power_energy_joules,
-                    power_valid=power_summary.measured.sampled_power_energy_valid,
-                )
-            )
+        measurement = await measure_endpoint(
+            EndpointMeasurement(
+                manifest_path=inputs.manifest_path,
+                output_dir=output_dir,
+                config=config,
+                run_id=binding.run_id,
+                run_context=run_context,
+                qualification_profile_id=inputs.candidate.profile_id,
+                accelerator_platform=plan.accelerator_platform,
+                device_index=inputs.device.device_index,
+                power=inputs.power,
+                observe_replay=inputs.observe_replay,
+            ),
+            observer,
+        )
         return ManagedRunOutcome(
-            result=result,
+            result=measurement.result,
             run_id=binding.run_id,
             run_context=run_context,
-            artifacts=artifacts,
+            output_token_policy=output_token_policy,
+            artifacts=measurement.artifacts,
             deployment_record=deployment_path,
             deployment_log=log_path,
             measurement=measurement_path,
-            qualification=qualification_path,
-            qualification_passed=qualification.passed,
-            power_summary=power_path,
+            qualification=output_dir / QUALIFICATION_FILENAME,
+            qualification_passed=measurement.qualification is not None and measurement.qualification.passed,
+            power_summary=measurement.power_summary,
         )
     except BaseException:
         discard_unfinished_output(measurement_path, output_dir, created_output_dir=created_output_dir)

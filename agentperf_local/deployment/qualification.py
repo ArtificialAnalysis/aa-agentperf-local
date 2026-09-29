@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Self
 
 import orjson
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationInfo, field_validator, model_validator
 
 from agentperf_local.client.backends import ClientBackend, streaming_client
 from agentperf_local.client.protocol import CompletionClient, CompletionError, CompletionResult
@@ -636,24 +636,31 @@ async def qualify_runtime(
     )
 
 
+def load_qualification_file(path: Path) -> QualificationFile:
+    """Read and validate one qualification report as its file states it."""
+    encoded = read_bounded_file(path, MAX_QUALIFICATION_BYTES, label="qualification report")
+    return read_record(QualificationFile, encoded, str(path))
+
+
 def load_runtime_qualification(path: Path) -> RuntimeQualification:
     """Read and validate one qualification report."""
-    encoded = read_bounded_file(path, MAX_QUALIFICATION_BYTES, label="qualification report")
-    return read_record(QualificationFile, encoded, str(path)).report()
+    return load_qualification_file(path).report()
 
 
-async def qualify_managed_endpoint(
+async def qualify_endpoint(
     base_url: str,
     model: str,
     profile_id: str,
     client_backend: ClientBackend,
     run_id: str,
+    *,
+    api_key: SecretStr | None = None,
 ) -> RuntimeQualification:
-    """Probe an owned localhost server with the public synthetic pack and bind the report to the run."""
+    """Probe a ready server with the public synthetic pack and bind the report to the run."""
     client = streaming_client(
         client_backend,
         base_url=base_url,
-        api_key=None,
+        api_key=api_key,
         timeout_seconds=DEFAULT_REQUEST_TIMEOUT_SECONDS,
         max_connections=PROBE_MAX_CONNECTIONS,
     )

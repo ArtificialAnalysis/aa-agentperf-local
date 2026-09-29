@@ -229,6 +229,8 @@ class ManagedDeploymentChoice(BaseModel, frozen=True):
     """Bind one catalog model to a local framework choice."""
 
     candidate: ModelCandidate
+    # The recipe file's exact text, which the deployment record keeps for a submission.
+    recipe_text: str
     catalog_as_of: str
     # The catalog file this candidate came from. It travels into the deployment record
     # so a submission names the release its recipe belongs to.

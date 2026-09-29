@@ -246,7 +246,9 @@ def standing_reason_text(candidate: ModelCandidate, availability: ManagedModelAv
 
 def artifact_kind_text(artifact_kind: ArtifactKind) -> str:
     """Name what a recipe downloads, so a weights repository is not called a GGUF."""
-    return "GGUF" if artifact_kind in ("gguf-single-file", "gguf-file-set") else "weights"
+    if artifact_kind in ("gguf-single-file", "gguf-file-set"):
+        return "GGUF"
+    return "Splash package" if artifact_kind == "splash-package" else "weights"
 
 
 def framework_text(framework: DeploymentFramework | None) -> str:

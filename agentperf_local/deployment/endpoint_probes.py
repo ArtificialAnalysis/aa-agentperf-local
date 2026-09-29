@@ -1,8 +1,10 @@
 """Ask an OpenAI-compatible endpoint what it serves and how it behaves.
 
 - `probe_served_context_tokens`: one GET /models that reads the served context length.
+- `model_entry`, `reported_context_tokens`: the model-list reading that managed readiness shares.
 - `is_ollama_endpoint`: two cheap GETs that name an Ollama server before any long probe.
 - `probe_ignore_eos`: the behavioral probe the exact policy depends on.
+- `require_measurable_exact_policy`: the refusal both run commands apply to its result.
 - `probe_request`, `stream_usage`, `PROBE_MAX_CONNECTIONS`: the request, usage reader, and
   connection cap every endpoint probe shares, runtime qualification included.
 """
@@ -43,6 +45,9 @@ IGNORE_EOS_PROBE_PROMPT = "Reply with exactly the word: hi"
 
 OLLAMA_IDENTITY_TIMEOUT_SECONDS = 5.0
 OPENAI_COMPATIBLE_PATH_SUFFIX = "/v1"
+# Splash lists its models as owned by "splash" and reports the granted context on its status endpoint.
+SPLASH_MODEL_OWNER = "splash"
+SPLASH_STATUS_PATH = "/status"
 OLLAMA_VERSION_PATH = "/api/version"
 OLLAMA_TAGS_PATH = "/api/tags"
 # The CLI prints this and the TUI shows it, so both say the same thing about Ollama.
@@ -115,6 +120,31 @@ def served_context_tokens(raw_model: JsonObject) -> int | None:
     return None
 
 
+def _splash_status_context_tokens(client: httpx.Client, base_url: str) -> int | None:
+    """Return the context window a Splash server reports on its status endpoint.
+
+    Splash lists its models without a context length. Its status endpoint reports
+    the window the engine granted, and the server exits rather than grant a smaller
+    window than it was asked for.
+    """
+    status_url = base_url.rstrip("/").removesuffix(OPENAI_COMPATIBLE_PATH_SUFFIX) + SPLASH_STATUS_PATH
+    try:
+        response = client.get(status_url)
+        response.raise_for_status()
+        payload = normalize_json_object(orjson.loads(response.content))
+    except (httpx.HTTPError, orjson.JSONDecodeError, ValueError):
+        return None
+    return lenient_integer(payload, "maximum_context_tokens")
+
+
+def reported_context_tokens(client: httpx.Client, base_url: str, raw_model: JsonObject) -> int | None:
+    """Return the context length a server reports for one listed model, wherever it reports it."""
+    served = served_context_tokens(raw_model)
+    if served is None and raw_model.get("owned_by") == SPLASH_MODEL_OWNER:
+        return _splash_status_context_tokens(client, base_url)
+    return served
+
+
 class ContextProbeResult(BaseModel, frozen=True):
     """Store one served-context probe outcome and why an observation is missing."""
 
@@ -141,24 +171,24 @@ def probe_served_context_tokens(base_url: str, model: str, api_key: SecretStr | 
     reason, because an unknown context is itself non-comparable evidence.
     """
     headers = {} if api_key is None else {"Authorization": f"Bearer {api_key.get_secret_value()}"}
-    try:
-        with httpx.Client(timeout=CONTEXT_PROBE_TIMEOUT_SECONDS, headers=headers) as client:
+    with httpx.Client(timeout=CONTEXT_PROBE_TIMEOUT_SECONDS, headers=headers) as client:
+        try:
             response = client.get(f"{base_url.rstrip('/')}/models")
-    except httpx.HTTPError:
-        return _unobserved(ContextObservationReason.ENDPOINT_UNREACHABLE)
-    if not response.is_success:
-        return _unobserved(ContextObservationReason.HTTP_ERROR)
-    try:
-        payload = normalize_json_object(orjson.loads(response.content))
-    except (orjson.JSONDecodeError, ValueError):
-        return _unobserved(ContextObservationReason.MALFORMED_RESPONSE)
-    raw_models = payload.get("data")
-    if not isinstance(raw_models, list):
-        return _unobserved(ContextObservationReason.MALFORMED_RESPONSE)
-    entry = model_entry(raw_models, model)
-    if entry is None:
-        return _unobserved(ContextObservationReason.MODEL_NOT_LISTED)
-    served = served_context_tokens(entry)
+        except httpx.HTTPError:
+            return _unobserved(ContextObservationReason.ENDPOINT_UNREACHABLE)
+        if not response.is_success:
+            return _unobserved(ContextObservationReason.HTTP_ERROR)
+        try:
+            payload = normalize_json_object(orjson.loads(response.content))
+        except (orjson.JSONDecodeError, ValueError):
+            return _unobserved(ContextObservationReason.MALFORMED_RESPONSE)
+        raw_models = payload.get("data")
+        if not isinstance(raw_models, list):
+            return _unobserved(ContextObservationReason.MALFORMED_RESPONSE)
+        entry = model_entry(raw_models, model)
+        if entry is None:
+            return _unobserved(ContextObservationReason.MODEL_NOT_LISTED)
+        served = reported_context_tokens(client, base_url, entry)
     if served is None:
         return _unobserved(ContextObservationReason.CONTEXT_NOT_REPORTED)
     if served <= 0:
@@ -228,6 +258,20 @@ class IgnoreEosProbeResult(BaseModel, frozen=True):
         guess that silently weakened it would not.
         """
         return "recorded" if self.support is IgnoreEosSupport.IGNORED else "exact"
+
+
+def require_measurable_exact_policy(capability: IgnoreEosProbeResult) -> None:
+    """Refuse the exact policy against a server that drops ignore_eos.
+
+    Such a server fails every exact-policy turn with a message that blames the model.
+    The command-line policy is an explicit flag, so this never switches it on the
+    user's behalf; the error names the flag that does.
+    """
+    if capability.output_token_policy != "exact":
+        raise RuntimeError(
+            f"{capability.summary}; pass --output-token-policy {capability.output_token_policy} "
+            "(its results are normalized, not exact, and are not comparable)"
+        )
 
 
 def is_ollama_endpoint(

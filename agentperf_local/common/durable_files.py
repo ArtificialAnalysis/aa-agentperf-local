@@ -15,7 +15,6 @@ from agentperf_local.common.identity import sha256_bytes
 
 PRIVATE_FILE_PERMISSIONS = 0o600
 PUBLIC_FILE_PERMISSIONS = 0o644
-PUBLIC_DIRECTORY_PERMISSIONS = 0o755
 COMMIT_MARKER_TEMP_NONCE_BYTES = 8
 
 # Every descriptor this package opens for writing stays private to this process and never
@@ -134,20 +133,6 @@ def fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def create_new_directory(path: Path, *, permissions: int = PUBLIC_DIRECTORY_PERMISSIONS) -> None:
-    """Create one new directory and sync its parent entry."""
-    if path.name in {"", ".", ".."}:
-        raise ValueError("new directory path must name a directory")
-    if _exists_without_following(path):
-        raise FileExistsError(f"new directory must not replace an existing path: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    parent_metadata = path.parent.lstat()
-    if not stat.S_ISDIR(parent_metadata.st_mode):
-        raise ValueError("new directory parent must be a directory, not a symbolic link")
-    os.mkdir(path, permissions)
-    fsync_directory(path.parent)
-
-
 def write_new_file(file: NewFile, *, permissions: int = PRIVATE_FILE_PERMISSIONS) -> None:
     """Write and sync one new file and its directory entry."""
     validate_new_file_paths((file.path,))
@@ -182,11 +167,11 @@ def _require_outside(private_root: Path, output_path: Path, label: str) -> None:
         raise ValueError(f"{label} must be outside the private results directory")
 
 
-def validate_public_output_directory(private_root: Path, output_dir: Path, label: str) -> None:
-    """Reject a new public directory inside the private results tree or over an existing path."""
-    _require_outside(private_root, output_dir, label)
-    if output_dir.exists() or output_dir.is_symlink():
-        raise FileExistsError(f"{label} already exists: {output_dir}")
+def validate_public_output_path(private_root: Path, output_path: Path, label: str) -> None:
+    """Reject a new output file or folder inside the private results tree or over an existing path."""
+    _require_outside(private_root, output_path, label)
+    if output_path.exists() or output_path.is_symlink():
+        raise FileExistsError(f"{label} already exists: {output_path}")
 
 
 class WrittenFile(BaseModel, frozen=True):

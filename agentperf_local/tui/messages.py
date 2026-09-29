@@ -34,21 +34,21 @@ class UploadProgressMessage(Message):
 class UploadCompletedMessage(Message):
     """Carry the service's receipt for the active run's upload."""
 
-    def __init__(self, generation: int, receipt: SubmissionReceipt, bundle_dir: Path) -> None:
+    def __init__(self, generation: int, receipt: SubmissionReceipt, submission_path: Path) -> None:
         super().__init__()
         self.generation = generation
         self.receipt = receipt
-        self.bundle_dir = bundle_dir
+        self.submission_path = submission_path
 
 
 class UploadFailedMessage(Message):
-    """Report a failed or canceled upload with a display-safe reason and the bundle left behind."""
+    """Report a failed or canceled upload with a display-safe reason and the submission file left behind."""
 
-    def __init__(self, generation: int, reason: str, bundle_dir: Path | None) -> None:
+    def __init__(self, generation: int, reason: str, submission_path: Path | None) -> None:
         super().__init__()
         self.generation = generation
         self.reason = reason
-        self.bundle_dir = bundle_dir
+        self.submission_path = submission_path
 
 
 class RevisionAdviceMessage(Message):

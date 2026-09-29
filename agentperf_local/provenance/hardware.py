@@ -10,14 +10,21 @@ from agentperf_local.common.json_fields import (
     optional_integer,
     optional_number,
     optional_string,
+    required_boolean,
     required_string,
 )
-from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import JsonObject, JsonValue
-from agentperf_local.common.units import (
-    BYTES_PER_GIB,
+from agentperf_local.common.models import replace_fields
+from agentperf_local.provenance.accelerator_probes import (
+    AMD_VENDOR,
+    INTEL_VENDOR,
+    MACOS_DEFAULT_VENDOR,
+    NVIDIA_VENDOR,
+    inspect_amd,
+    inspect_intel,
+    inspect_macos,
+    inspect_nvidia,
 )
-from agentperf_local.provenance.accelerator_probes import inspect_amd, inspect_macos, inspect_nvidia
 from agentperf_local.provenance.hardware_facts import (
     AcceleratorSnapshot,
     HardwareWarningCode,
@@ -26,12 +33,11 @@ from agentperf_local.provenance.hardware_facts import (
     validate_public_label,
     warning_code,
 )
+from agentperf_local.submission.contract import AcceleratorVendor
 
 # Version 2 added memory_is_unified, without which a coherent-memory accelerator such as
 # the GB10 reports no capacity at all and every managed recipe is refused on it.
 HARDWARE_SNAPSHOT_VERSION = 2
-PUBLIC_HARDWARE_PROFILE_VERSION = 1
-HOST_MEMORY_BUCKET_GIB = 8
 
 
 class HardwareSnapshot(BaseModel, frozen=True):
@@ -87,66 +93,24 @@ class HardwareSnapshot(BaseModel, frozen=True):
         }
 
 
-class PublicAcceleratorProfile(BaseModel, frozen=True):
-    """Describe the accelerator fields needed for public comparison."""
-
-    vendor: str
-    product: str
-    memory_gib: int | None
-    core_count: int | None
-    driver_branch: str | None
-    api: str | None
-
-    @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        """Hold every label to the public contract, wherever the profile was built."""
-        validate_public_label(self.vendor, "vendor")
-        validate_public_label(self.product, "product")
-        for field_name, value in (("driver_branch", self.driver_branch), ("api", self.api)):
-            if value is not None:
-                validate_public_label(value, field_name)
-        return self
-
-    def to_json(self) -> JsonObject:
-        """Return the public accelerator profile."""
-        return json_record(self)
-
-
-class PublicHardwareProfile(BaseModel, frozen=True):
-    """Store normalized hardware facts approved for public sharing."""
-
-    platform_family: str
-    platform_major: str | None
-    architecture: str
-    host_memory_gib: int | None
-    accelerator: PublicAcceleratorProfile
-    version: int = PUBLIC_HARDWARE_PROFILE_VERSION
-
-    @model_validator(mode="after")
-    def check_invariants(self) -> Self:
-        """Hold every label to the public contract, wherever the profile was built."""
-        validate_public_label(self.platform_family, "platform_family")
-        validate_public_label(self.architecture, "architecture")
-        if self.platform_major is not None:
-            validate_public_label(self.platform_major, "platform_major")
-        return self
-
-    def to_json(self) -> JsonObject:
-        """Return the normalized public profile."""
-        return {
-            "version": self.version,
-            "kind": "public_hardware_profile",
-            "platform_family": self.platform_family,
-            "platform_major": self.platform_major,
-            "architecture": self.architecture,
-            "host_memory_gib": self.host_memory_gib,
-            "accelerator": self.accelerator.to_json(),
-            "privacy_notice": "This combination can still fingerprint a device class.",
-        }
-
-
 type AcceleratorPlatform = Literal["nvidia-cuda", "amd-rocm", "apple-metal"]
-ACCELERATOR_PLATFORMS: tuple[AcceleratorPlatform, ...] = ("nvidia-cuda", "amd-rocm", "apple-metal")
+
+
+# The submission contract's name for each vendor label the probes write.
+_CONTRACT_VENDORS: dict[str, AcceleratorVendor] = {
+    NVIDIA_VENDOR: "nvidia",
+    MACOS_DEFAULT_VENDOR: "apple",
+    AMD_VENDOR: "amd",
+    INTEL_VENDOR: "intel",
+}
+
+
+def contract_vendor(label: str) -> AcceleratorVendor:
+    """Return the submission contract's name for one accelerator vendor, as a probe labels it."""
+    vendor = _CONTRACT_VENDORS.get(label)
+    if vendor is None:
+        raise ValueError(f"a {label} accelerator cannot be submitted")
+    return vendor
 
 
 def selected_accelerator(snapshot: HardwareSnapshot) -> AcceleratorSnapshot:
@@ -159,6 +123,20 @@ def selected_accelerator(snapshot: HardwareSnapshot) -> AcceleratorSnapshot:
     return snapshot.accelerators[0]
 
 
+def select_accelerator(snapshot: HardwareSnapshot, device_index: int | None) -> HardwareSnapshot:
+    """Keep only the accelerator at device_index; with no index, keep the snapshot as it is."""
+    if device_index is None:
+        return snapshot
+    count = len(snapshot.accelerators)
+    if count == 0:
+        raise ValueError("no accelerator was detected, so no device can be selected")
+    if not 0 <= device_index < count:
+        raise ValueError(
+            f"device index {device_index} is out of range; detected accelerators run from 0 to {count - 1}"
+        )
+    return replace_fields(snapshot, accelerators=(snapshot.accelerators[device_index],))
+
+
 def accelerator_platform(snapshot: HardwareSnapshot) -> AcceleratorPlatform:
     """Classify one detected accelerator for managed serving."""
     accelerator = selected_accelerator(snapshot)
@@ -168,6 +146,10 @@ def accelerator_platform(snapshot: HardwareSnapshot) -> AcceleratorPlatform:
         return "amd-rocm"
     if accelerator.vendor == "Apple" and accelerator.api == "Metal":
         return "apple-metal"
+    if accelerator.vendor == INTEL_VENDOR:
+        raise ValueError(
+            "managed serving does not support Intel GPUs yet; start your own server and measure it with run"
+        )
     raise ValueError("detected accelerator does not expose CUDA, ROCm, or Apple Metal")
 
 
@@ -190,6 +172,10 @@ def collect_hardware_snapshot(probe: SystemProbe | None = None) -> HardwareSnaps
             warnings.append(warning)
         if not accelerators:
             accelerators, warning = inspect_amd(selected_probe)
+            if warning is not None:
+                warnings.append(warning)
+        if not accelerators:
+            accelerators, warning = inspect_intel(selected_probe)
             if warning is not None:
                 warnings.append(warning)
 
@@ -217,6 +203,7 @@ def _accelerator_from_json(data: JsonObject, source: str) -> AcceleratorSnapshot
         core_count=optional_integer(data, "core_count", source),
         driver_version=optional_string(data, "driver_version", source),
         api=optional_string(data, "api", source),
+        memory_is_unified=required_boolean(data, "memory_is_unified", source),
         power_limit_w=optional_number(data, "power_limit_w", source),
         max_graphics_clock_mhz=optional_integer(data, "max_graphics_clock_mhz", source),
         max_memory_clock_mhz=optional_integer(data, "max_memory_clock_mhz", source),
@@ -255,55 +242,4 @@ def hardware_snapshot_from_json(data: JsonObject) -> HardwareSnapshot:
         accelerators=tuple(accelerators),
         warnings=warnings,
         cpu_base_frequency_mhz=optional_integer(data, "cpu_base_frequency_mhz", "hardware"),
-    )
-
-
-def _major_version(value: str) -> str | None:
-    first = value.split(".", maxsplit=1)[0]
-    return first if first.isdigit() else None
-
-
-def _memory_gib(memory_bytes: int | None, bucket_gib: int) -> int | None:
-    """Floor memory to the bucket so a public profile never claims more than the device has."""
-    if memory_bytes is None:
-        return None
-    whole_gib = memory_bytes // BYTES_PER_GIB
-    bucketed_gib = whole_gib // bucket_gib * bucket_gib
-    if bucketed_gib > 0:
-        return bucketed_gib
-    # A device smaller than one bucket would floor to zero, so publish its whole count instead.
-    return whole_gib if whole_gib > 0 else None
-
-
-def _product_name(accelerator: AcceleratorSnapshot) -> str:
-    name = accelerator.name
-    if accelerator.vendor == "NVIDIA":
-        for prefix in ("NVIDIA GeForce ", "NVIDIA "):
-            if name.startswith(prefix):
-                return name.removeprefix(prefix)
-    return name
-
-
-def public_hardware_profile(snapshot: HardwareSnapshot) -> PublicHardwareProfile:
-    """Normalize one local snapshot for explicit public sharing."""
-    if len(snapshot.accelerators) != 1:
-        raise ValueError("public submissions require exactly one detected accelerator")
-    accelerator = snapshot.accelerators[0]
-    driver_branch = None
-    if accelerator.driver_version is not None:
-        driver_branch = _major_version(accelerator.driver_version)
-    platform_major = _major_version(snapshot.operating_system_version)
-    return PublicHardwareProfile(
-        platform_family=snapshot.operating_system,
-        platform_major=platform_major,
-        architecture=snapshot.architecture,
-        host_memory_gib=_memory_gib(snapshot.memory_bytes, HOST_MEMORY_BUCKET_GIB),
-        accelerator=PublicAcceleratorProfile(
-            vendor=accelerator.vendor,
-            product=_product_name(accelerator),
-            memory_gib=_memory_gib(accelerator.memory_bytes, 1),
-            core_count=accelerator.core_count,
-            driver_branch=driver_branch,
-            api=accelerator.api,
-        ),
     )

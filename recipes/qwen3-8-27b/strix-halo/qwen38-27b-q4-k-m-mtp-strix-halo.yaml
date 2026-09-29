@@ -1,0 +1,46 @@
+profile_id: qwen38-27b-q4-k-m-mtp-strix-halo
+as_of: '2026-09-21'
+model_name: Qwen3.8 27B
+quantization: Q4_K_M
+model_release_slug: qwen3-8-27b
+hf_repository: unsloth/Qwen3.8-27B-GGUF
+hf_revision: f1bfb127c64f7072bdd2cad55f258b9c8b2910fe
+devices:
+- amd-rocm
+tool_call_parser: qwen3_coder
+reasoning_parser: qwen3
+thinking_policy: enabled-medium-candidate
+speculation_policy: enabled-mtp-self-draft
+deployment:
+  artifact_kind: gguf-single-file
+  artifacts:
+  - filename: Qwen3.8-27B-Q4_K_M.gguf
+    sha256: 7e78da5d7e3ae28d178121f58646953305f3e5bd3cb46f4a75584e8b6c6fe169
+    size_bytes: 17106775008
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 16
+    full_kv_heads: 4
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 470679552
+    runtime_overhead_bytes: 2423084064
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 512
+    speculative_tokens: 2
+    target_backend_sampling: true
+    draft_backend_sampling: true
+    backend: rocm
+    load_mode: none
+    threads: 16
+    flash_attention: true
+    disable_fit: true
+    cache_ram_mib: 0

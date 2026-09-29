@@ -7,33 +7,19 @@ import orjson
 import pytest
 
 from agentperf_local.cli import main
-from agentperf_local.common.identity import sha256_bytes
 from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
-    SourceProvenance,
-    SubmissionContext,
-    create_measurement_binding,
-    workload_digest,
-    write_measurement_binding,
 )
 from agentperf_local.provenance.context import ContextObservationReason, RunContextFacts
-from agentperf_local.provenance.hardware import HardwareSnapshot
-from agentperf_local.provenance.hardware_facts import AcceleratorSnapshot
 from agentperf_local.replay.config import RunConfig
 from agentperf_local.replay.runner import run_manifest
 from agentperf_local.reports.reporting import write_run_artifacts
-from agentperf_local.submission.bundle import validate_submission_bundle
 from agentperf_local.workload.schema import parse_json_object
 from tests.localhost_sse import LocalSseServer
 from tests.replay_workload import write_replay_workload
 from tests.token_counter import CharacterCounter
 
 TASK_COUNT = 8
-LOGICAL_CPU_COUNT = 8
-HOST_MEMORY_GIB = 64
-ACCELERATOR_MEMORY_GIB = 32
-BYTES_PER_GIB = 1024**3
-SOURCE_REVISION_HEX_DIGITS = 40
 API_KEY_ENV = "AGENTPERF_TEST_API_KEY"
 API_KEY = "private-test-key"
 WORKLOAD_NAME = "eight-task-e2e"
@@ -49,10 +35,7 @@ EVENT_DELAY_SECONDS = 0.005
 RUN_ID = "8f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
 
 
-async def test_eight_task_manifest_replays_once_and_validates_public_bundle(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+async def test_eight_task_manifest_replays_once_and_writes_every_report(tmp_path: Path) -> None:
     manifest_path = write_replay_workload(tmp_path / "workload", name=WORKLOAD_NAME, task_count=TASK_COUNT)
 
     async with LocalSseServer(SSE_EVENTS, inter_chunk_delay_seconds=EVENT_DELAY_SECONDS) as server:
@@ -95,57 +78,6 @@ async def test_eight_task_manifest_replays_once_and_validates_public_bundle(
         "tools": "tools.json",
         "failures": "failures.json",
     }
-
-    context = SubmissionContext(
-        suite_id="aa-agentic-gpu-smoke",
-        suite_epoch="2026-q4",
-        suite_digest=workload_digest(manifest_path),
-        model_semantics_id="synthetic-model-v1",
-        model_artifact_digest=sha256_bytes(b"synthetic-model-artifact"),
-        runtime_id="synthetic-runtime-v1",
-    )
-    hardware = HardwareSnapshot(
-        operating_system="Linux",
-        operating_system_version="test-os",
-        kernel_version="test-kernel",
-        architecture="x86_64",
-        cpu_model="test-cpu",
-        logical_cpu_count=LOGICAL_CPU_COUNT,
-        memory_bytes=HOST_MEMORY_GIB * BYTES_PER_GIB,
-        accelerators=(
-            AcceleratorSnapshot(
-                vendor="NVIDIA",
-                name="Synthetic GPU",
-                memory_bytes=ACCELERATOR_MEMORY_GIB * BYTES_PER_GIB,
-                core_count=None,
-                driver_version="590.42",
-                api="CUDA",
-            ),
-        ),
-        warnings=(),
-    )
-    binding = create_measurement_binding(
-        context,
-        manifest_path,
-        config.model,
-        hardware,
-        SourceProvenance(
-            client_version="0.1.0",
-            source_revision="1" * SOURCE_REVISION_HEX_DIGITS,
-            source_state="clean",
-        ),
-        observed_context_tokens=BENCHMARK_CONTEXT_TOKENS,
-        run_id=RUN_ID,
-    )
-    write_measurement_binding(tmp_path / "results" / "measurement.json", binding)
-
-    bundle_dir = tmp_path / "submission-preview"
-    assert main(["prepare-submission", str(tmp_path / "results"), "--output-dir", str(bundle_dir)]) == 0
-    prepare_output = orjson.loads(capsys.readouterr().out)
-    assert prepare_output["upload_performed"] is False
-    validated = validate_submission_bundle(bundle_dir)
-    assert validated.aggregate_payload_digest == prepare_output["aggregate_payload_digest"]
-    assert b"prompt 0" not in b"".join(path.read_bytes() for path in bundle_dir.iterdir())
 
 
 async def test_cli_progress_keeps_frames_on_stderr_and_final_json_on_stdout(

@@ -30,7 +30,7 @@ class JsonRecord(Protocol):
 
 
 def json_field_names(record: type[BaseModel]) -> frozenset[str]:
-    """Return the closed key set of one model, for `require_exact_keys`."""
+    """Return the closed key set of one model."""
     return frozenset(record.model_fields)
 
 
