@@ -774,6 +774,27 @@ async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path:
         assert "QUALIFIED" not in detail
 
 
+DETAIL_READABLE_WIDTH = 25
+
+
+async def test_long_variant_leaves_the_detail_pane_readable(tmp_path: Path) -> None:
+    variant = "flashinfer-cutlass-with-bf16-accumulation"
+    old = b"quantization: Q4_0 QAT\n"
+    catalog = load_model_catalog(_external_recipes(tmp_path, old, old + f"variant: {variant}\n".encode()))
+    app = AgentPerfLocalApp(catalog, controller=FakeReplayController())
+
+    async with app.run_test(size=(90, 30)) as pilot:
+        await pilot.click("#welcome-start")
+        await pilot.pause()
+        model_list = app.query_one("#model-list", OptionList)
+        row = str(model_list.get_option_at_index(model_list.get_option_index("gemma4-12b-it-q4-0")).prompt)
+        pane = app.query_one("#model-detail-pane", VerticalScroll)
+        # Uncapped, this variant widened the list until the detail pane had no columns left.
+        assert pane.scrollable_content_region.width >= DETAIL_READABLE_WIDTH
+        assert variant not in row
+        assert variant in str(app.query_one("#model-detail", Static).content)
+
+
 async def test_managed_candidate_selects_a_compatible_framework_and_saves_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -45,6 +45,11 @@ MODEL_COLUMN_HEADING = "Model/Quant"
 SPEEDUP_COLUMN_HEADING = "Spec decode"
 HARDWARE_COLUMN_HEADING = "Built for"
 NO_SPEEDUP = "—"
+# Recipe-written cells are capped, so one long quantization, variant, or hardware folder
+# cannot widen the table past the detail pane's room; the detail pane shows the full text.
+QUANTIZATION_CELL_MAX = 20
+HARDWARE_CELL_MAX = 14
+CELL_ELLIPSIS = "…"
 COLUMN_HEADING = Style(bold=True)
 MUTED = Style(color=AA_NEUTRAL_500)
 # Other hardware is grayed out, marks included, so it reads as out of reach at a glance.
@@ -166,9 +171,7 @@ def _column_headings(widths: tuple[int, int], *, grayed: bool) -> Option:
 def table_width(recipes: tuple[ListedRecipe, ...]) -> int:
     """Return the width the widest recipe row needs, so the list can keep its columns whole."""
     model_width, speedup_width = _column_widths(recipes)
-    hardware_width = max(
-        (len(hardware_target_text(recipe.candidate, recipe.hardware)) for recipe in recipes), default=0
-    )
+    hardware_width = max((len(_hardware_cell(recipe)) for recipe in recipes), default=0)
     return (
         model_width
         + len(COLUMN_GAP)
@@ -182,12 +185,24 @@ def _speedup_cell(candidate: ModelCandidate) -> str:
     return speedup_text(candidate) or NO_SPEEDUP
 
 
+def _fit(text: str, width: int) -> str:
+    return text if len(text) <= width else text[: width - len(CELL_ELLIPSIS)] + CELL_ELLIPSIS
+
+
+def _quantization_cell(candidate: ModelCandidate) -> str:
+    return _fit(quantization_text(candidate), QUANTIZATION_CELL_MAX)
+
+
+def _hardware_cell(recipe: ListedRecipe) -> str:
+    return _fit(hardware_target_text(recipe.candidate, recipe.hardware), HARDWARE_CELL_MAX)
+
+
 def _column_widths(recipes: tuple[ListedRecipe, ...]) -> tuple[int, int]:
     """Return the first column's width, counted from the left edge, and the spec decode column's width.
 
     Both parts share these widths, so their columns line up with each other.
     """
-    quantization_width = max((len(quantization_text(recipe.candidate)) for recipe in recipes), default=0)
+    quantization_width = max((len(_quantization_cell(recipe.candidate)) for recipe in recipes), default=0)
     speedup_width = max((len(_speedup_cell(recipe.candidate)) for recipe in recipes), default=0)
     return (
         max(QUANTIZATION_OFFSET + quantization_width, len(MODEL_COLUMN_HEADING)),
@@ -216,8 +231,8 @@ def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, grayed: bool) 
     row = Text(RECIPE_INDENT)
     row.append_text(Text(UNASSESSED_MARK) if availability is None else standing_mark(availability.standing))
     row.append(
-        f"{MARK_GAP}{quantization_text(candidate).ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
-        f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{hardware_target_text(candidate, recipe.hardware)}"
+        f"{MARK_GAP}{_quantization_cell(candidate).ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
+        f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{_hardware_cell(recipe)}"
     )
     if grayed:
         row.stylize(GRAYED)
