@@ -11,7 +11,7 @@ COMPLETION_PATH = "/chat/completions"
 MEASURED_TRANSPORT_POLICY_ID = "direct-sse-no-retry-v1"
 # Every client backend must present the same identity, so a server cannot serve
 # one backend differently from another. The Rust engine pins the same value.
-MEASURED_USER_AGENT = "agentperf-local/0.3.1"
+MEASURED_USER_AGENT = "agentperf-local/0.3.2"
 
 
 def url_names_loopback_host(url: str) -> bool:
