@@ -107,14 +107,17 @@ Custom datasets use the manifest and JSONL trace format in
 
 ## Models and recipes
 
-[`recipes/`](../recipes) holds one YAML file per recipe. A recipe has one of two shapes:
+[`recipes/`](../recipes) holds one YAML file per recipe. A recipe has one of three shapes:
 
 - A **GGUF recipe** pins one or more files by size and SHA-256. llama.cpp serves
   it on CUDA, ROCm, or Metal.
 - A **weights recipe** pins every file of a Hugging Face revision that the
   runtime opens. SGLang or vLLM serves it on CUDA.
+- A **Splash package recipe** pins every file of a packed Splash package: its
+  manifest and its target, draft, and tokenizer folders. Splash serves it on
+  Apple Silicon Metal, from the verified snapshot rather than its own download.
 
-A weights recipe names the exact runtime release it was checked against, and
+A weights or Splash recipe names the exact runtime release it was checked against, and
 the launcher refuses any other. A server can load the right weights, report
 the right context and backend, and still generate nonsense. Readiness checks do
 not read generated text, so they cannot catch that.

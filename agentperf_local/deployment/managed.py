@@ -51,7 +51,7 @@ from agentperf_local.deployment.context_policy import (
     memory_fits,
     resolve_context_tokens,
 )
-from agentperf_local.deployment.endpoint_probes import model_entry, served_context_tokens
+from agentperf_local.deployment.endpoint_probes import model_entry, reported_context_tokens
 from agentperf_local.deployment.frameworks import (
     CommandFinder,
     FrameworkExecutable,
@@ -104,6 +104,9 @@ FULL_OFFLOAD_PATTERN = re.compile(r"offloaded\s+([0-9]+)/([0-9]+)\s+layers\s+to\
 TOKEN_POOL_PATTERN = re.compile(r"max_total_num_tokens=([0-9]+)")
 # vLLM logs the KV cache it settled on as e.g. "GPU KV cache size: 1,177,344 tokens".
 VLLM_KV_CACHE_PATTERN = re.compile(r"kv cache size[:\s]+([0-9,]+)\s*tokens")
+# Splash's engine runs only on Metal and names the Apple GPU family it chose kernels
+# for, e.g. "Kernel policy for GPU family 10 with 20 cores".
+SPLASH_METAL_MARKER = "kernel policy for gpu family"
 
 # What most often ends a managed server before it ever answers, named per runtime so a
 # failure points at the right thing to check.
@@ -114,6 +117,10 @@ _EARLY_EXIT_HINTS: dict[DeploymentFramework, str] = {
         "which on a device that shares host memory can mean another process holds it"
     ),
     "vllm": ("a server killed with status -9 ran out of memory; lower --gpu-memory-utilization or free the device"),
+    "splash": (
+        "Splash exits when its engine cannot hold the requested context in memory; "
+        "close other applications that hold unified memory"
+    ),
 }
 
 
@@ -575,6 +582,37 @@ def _vllm_argv(
     )
 
 
+def _splash_argv(
+    candidate: ModelCandidate,
+    context_tokens: int,
+    model_path: Path,
+    model_alias: str,
+    endpoint: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the Splash server flags for one recipe, after the executable prefix.
+
+    The package directories come from the verified snapshot, never from Splash's own
+    model directory, so the served weights are the recipe's pinned revision. Splash
+    exits unless its engine grants exactly the requested context, and it parses tool
+    calls and reasoning itself, so no parser is named. The engine sizes its memory
+    budget from the context.
+    """
+    return (
+        str(model_path / "target"),
+        str(model_path / "draft"),
+        "--tokenizer",
+        str(model_path / "tokenizer"),
+        "--model",
+        candidate.hf_repository,
+        "--served-model-name",
+        model_alias,
+        *endpoint,
+        "--max-context",
+        str(context_tokens),
+        "--no-webui",
+    )
+
+
 def _launch_command(
     executable: FrameworkExecutable,
     candidate: ModelCandidate,
@@ -597,7 +635,7 @@ def _launch_command(
     elif executable.framework == "vllm":
         arguments = _vllm_argv(candidate, deployment, context_tokens, model_path, model_alias, endpoint)
     else:
-        raise ValueError(f"{executable.framework} does not have a complete pinned managed recipe")
+        arguments = _splash_argv(candidate, context_tokens, model_path, model_alias, endpoint)
     return (*executable.command_prefix, *arguments)
 
 
@@ -781,8 +819,9 @@ def start_managed_deployment(plan: DeploymentPlan, log_path: Path) -> ManagedDep
 def wait_for_deployment(deployment: ManagedDeployment, *, timeout_seconds: float) -> int:
     """Wait for the owned endpoint to serve the selected alias at the planned context length.
 
-    Returns the served context length. A managed server that hides meta.n_ctx fails
-    readiness: a run cannot prove its context without it.
+    Returns the served context length. A managed server that reports no context
+    (meta.n_ctx, max_model_len, or Splash's status endpoint) fails readiness: a run
+    cannot prove its context without it.
     """
     if timeout_seconds <= 0:
         raise ValueError("startup timeout must be positive")
@@ -810,7 +849,7 @@ def wait_for_deployment(deployment: ManagedDeployment, *, timeout_seconds: float
             raw_models = payload.get("data")
             entry = model_entry(raw_models, deployment.plan.model_alias) if isinstance(raw_models, list) else None
             if entry is not None:
-                served_tokens = served_context_tokens(entry)
+                served_tokens = reported_context_tokens(client, deployment.plan.base_url, entry)
                 if served_tokens is None:
                     raise RuntimeError(
                         _log_hint(
@@ -880,7 +919,9 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
             platform_markers = ("rocm", "hipblas", "rocblas", "hip platform", "rocmplatform")
     else:
         failure_markers = ("metal unavailable", "metal is not available", "failed to initialize metal")
-        platform_markers = ("ggml_metal_init", "metal backend")
+        platform_markers = (
+            (SPLASH_METAL_MARKER,) if deployment.plan.framework == "splash" else ("ggml_metal_init", "metal backend")
+        )
     if any(marker in log for marker in failure_markers):
         raise RuntimeError(
             _log_hint(
@@ -924,6 +965,10 @@ def verify_gpu_startup(deployment: ManagedDeployment) -> None:
                     log_path,
                 )
             )
+        return
+    if deployment.plan.framework == "splash":
+        # Splash exits before readiness unless its engine grants the exact requested
+        # context, and readiness has already read that context back from /status.
         return
     # vLLM likewise sizes its KV cache from free device memory and reports the token capacity
     # it settled on. That capacity must cover one full-context sequence, or long turns fail

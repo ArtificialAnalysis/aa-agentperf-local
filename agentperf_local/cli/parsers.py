@@ -8,6 +8,7 @@ from agentperf_local import __version__
 from agentperf_local.cli.options import (
     DEFAULT_MANAGED_PROFILE_ID,
     DEFAULT_RECIPES_ROOT,
+    MANAGED_OUTPUT_TOKEN_POLICIES,
     MESSAGE_SOURCES,
     OUTPUT_TOKEN_POLICIES,
     SAMPLING_PRESETS,
@@ -342,6 +343,15 @@ def _add_managed_run_parser(subparsers: argparse._SubParsersAction[argparse.Argu
         type=float,
         default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
         help="maximum time for each replay model request",
+    )
+    parser.add_argument(
+        "--output-token-policy",
+        choices=MANAGED_OUTPUT_TOKEN_POLICIES,
+        default="exact",
+        help=(
+            "exact generates each turn's recorded length with end-of-sequence ignored (default); "
+            "recorded caps at the recorded length, for a runtime that drops ignore_eos, such as Splash"
+        ),
     )
     parser.add_argument(
         "--power",

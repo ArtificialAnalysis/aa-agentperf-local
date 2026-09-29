@@ -17,6 +17,7 @@ from agentperf_local.cli.options import (
     read_client_backend,
     read_deployment_framework,
     read_live_workspace_root,
+    read_managed_output_token_policy,
     read_managed_target,
     read_output_token_margin,
     read_replay_manifest_path,
@@ -57,10 +58,12 @@ from agentperf_local.deployment.context_policy import (
 )
 from agentperf_local.deployment.endpoint_probes import (
     OLLAMA_RECORDED_POLICY_WARNING,
+    IgnoreEosProbeResult,
     IgnoreEosSupport,
     is_ollama_endpoint,
     probe_ignore_eos,
     probe_served_context_tokens,
+    require_measurable_exact_policy,
 )
 from agentperf_local.deployment.frameworks import framework_offers
 from agentperf_local.deployment.managed import (
@@ -206,6 +209,8 @@ class _CliManagedObserver:
                 print("warning: nvidia-smi was not found; this run records no power evidence", file=sys.stderr)
         elif kind is RunActivityKind.POWER_STARTED and activity.power_first_sample is False:
             print("warning: the power collector produced no sample before the replay started", file=sys.stderr)
+        elif kind is RunActivityKind.OUTPUT_POLICY_CHOSEN and activity.ignore_eos_probe is not None:
+            _warn_undetermined_ignore_eos(activity.ignore_eos_probe)
 
 
 def _managed_observer(
@@ -314,6 +319,7 @@ def managed_run_command(namespace: argparse.Namespace) -> int:
         client_backend=client_backend,
         request_timeout_seconds=read_number(namespace, "request_timeout_seconds"),
         download_timeout_seconds=read_number(namespace, "download_timeout_seconds"),
+        output_token_policy=read_managed_output_token_policy(namespace),
         power=read_boolean(namespace, "power"),
         observe_replay=read_boolean(namespace, "progress"),
     )
@@ -374,6 +380,12 @@ def _warn_non_comparable_context(run_context: RunContextFacts) -> None:
     )
 
 
+def _warn_undetermined_ignore_eos(capability: IgnoreEosProbeResult) -> None:
+    """Say when the probe could not tell whether the server honors ignore_eos, so the run keeps exact."""
+    if capability.support is IgnoreEosSupport.UNDETERMINED:
+        print(f"warning: {capability.summary}; keeping the exact policy", file=sys.stderr)
+
+
 def _resolve_output_token_policy(namespace: argparse.Namespace) -> OutputTokenPolicy:
     """Return the policy the run uses, asking the server whether it is Ollama when the user named none.
 
@@ -424,20 +436,14 @@ def run_command(namespace: argparse.Namespace) -> int:
         observed_reason=probe.reason,
     )
     _warn_non_comparable_context(run_context)
-    # A server that drops ignore_eos fails every exact-policy turn with a message that
-    # blames the model, so refuse before the binding exists. Past the Ollama check above,
-    # the command never switches the policy on the user's behalf.
+    # Refuse before the binding exists, so a refused run leaves nothing behind. Past the
+    # Ollama check above, the command never switches the policy on the user's behalf.
     if config.output_token_policy == "exact":
         capability = asyncio.run(
             probe_ignore_eos(config.base_url, config.model, config.client_backend, api_key=config.api_key)
         )
-        if capability.output_token_policy != config.output_token_policy:
-            raise RuntimeError(
-                f"{capability.summary}; pass --output-token-policy {capability.output_token_policy} "
-                "(its results are normalized, not exact, and are not comparable)"
-            )
-        if capability.support is IgnoreEosSupport.UNDETERMINED:
-            print(f"warning: {capability.summary}; keeping the exact policy", file=sys.stderr)
+        require_measurable_exact_policy(capability)
+        _warn_undetermined_ignore_eos(capability)
     write_measurement_binding(
         measurement_path,
         replace_fields(binding, observed_context_tokens=probe.observed_tokens),

@@ -86,7 +86,7 @@ class _FakeRuntime(BaseModel, frozen=True):
 
 
 def _install_fake_runtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, framework: DeploymentFramework
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, framework: DeploymentFramework, *server_arguments: str
 ) -> _FakeRuntime:
     """Serve a catalog model from tests.managed_server with a cached artifact and a fake nvidia-smi."""
     fake_smi = write_looping_nvidia_smi(tmp_path / "bin" / "nvidia-smi")
@@ -177,6 +177,7 @@ def _install_fake_runtime(
                 "cuda",
                 "--backend",
                 planned_framework,
+                *server_arguments,
             ),
             runtime=FrameworkIdentity(version="fixture", executable_sha256=runtime_digest, fingerprint=runtime_digest),
             device_environment=device_environment,
@@ -393,6 +394,7 @@ async def test_a_stopped_managed_replay_stops_the_server_and_drops_its_binding(
         RunActivityKind.SERVER_STARTING,
         RunActivityKind.SERVER_READY,
         RunActivityKind.GPU_VERIFIED,
+        RunActivityKind.OUTPUT_POLICY_CHOSEN,
         RunActivityKind.QUALIFYING,
         RunActivityKind.QUALIFIED,
         RunActivityKind.REPLAY_STARTING,
@@ -438,6 +440,71 @@ def test_a_cli_managed_run_without_progress_or_power_runs_unobserved(
     summary = orjson.loads((output_dir / "summary.json").read_bytes())
     assert summary["observer"]["enabled"] is False
     assert summary["observer"]["duration_ms"] == 0
+
+
+@pytest.mark.parametrize(
+    ("entry_point", "requested_policy", "expected_policy"),
+    (
+        pytest.param("cli", "exact", None, id="cli-exact-refused"),
+        pytest.param("cli", "recorded", "recorded", id="cli-recorded"),
+        pytest.param("tui", None, "recorded", id="tui-adopts-recorded"),
+    ),
+)
+def test_a_runtime_that_drops_ignore_eos_runs_only_under_the_recorded_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    entry_point: str,
+    requested_policy: str | None,
+    expected_policy: str | None,
+) -> None:
+    """A runtime without ignore_eos, such as Splash, fails every exact turn, so the policy is settled first."""
+    runtime = _install_fake_runtime(tmp_path, monkeypatch, "llama-cpp", "--drop-ignore-eos")
+    manifest_path = write_replay_workload(tmp_path / "workload", name="managed-policy")
+    output_dir = tmp_path / "results"
+    if entry_point == "cli":
+        assert requested_policy is not None
+        status = main(
+            [
+                "managed-run",
+                str(manifest_path),
+                "--output-dir",
+                str(output_dir),
+                "--profile-id",
+                runtime.candidate.profile_id,
+                "--framework",
+                "llama-cpp",
+                "--client",
+                "python",
+                "--port",
+                str(runtime.port),
+                "--no-power",
+                "--output-token-policy",
+                requested_policy,
+            ]
+        )
+        captured = capsys.readouterr()
+        assert status == (1 if expected_policy is None else 0), captured.err
+        if expected_policy is None:
+            assert "server ignores ignore_eos" in captured.err
+            assert "--output-token-policy recorded" in captured.err
+            assert not (output_dir / "measurement.json").exists()
+            assert not (output_dir / "deployment.json").exists()
+            return
+    else:
+        controller, request = _tui_launch(runtime, manifest_path, output_dir)
+        observer = _RecordingObserver()
+        execution = asyncio.run(controller.execute(request, observer))
+        assert execution.output_token_policy == expected_policy
+        chosen = next(
+            activity for activity in observer.activities if activity.kind is RunActivityKind.OUTPUT_POLICY_CHOSEN
+        )
+        assert chosen.ignore_eos_probe is not None
+        assert chosen.ignore_eos_probe.output_token_policy == expected_policy
+
+    summary = orjson.loads((output_dir / "summary.json").read_bytes())
+    assert summary["config"]["output_tokens"]["policy"] == expected_policy
+    assert _port_is_free(runtime.port)
 
 
 @pytest.mark.parametrize("precreated", (True, False), ids=("user-folder", "pipeline-folder"))

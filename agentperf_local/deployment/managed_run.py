@@ -24,6 +24,8 @@ from agentperf_local.deployment.catalog import DeploymentFramework, ModelCandida
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
+    probe_ignore_eos,
+    require_measurable_exact_policy,
 )
 from agentperf_local.deployment.managed import (
     DEPLOYMENT_LOG_FILENAME,
@@ -56,7 +58,7 @@ from agentperf_local.provenance.benchmark import (
 )
 from agentperf_local.provenance.context import ContextObservationReason, RunContextFacts
 from agentperf_local.provenance.hardware import AcceleratorPlatform
-from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, RunConfig
+from agentperf_local.replay.config import DEFAULT_REQUEST_TIMEOUT_SECONDS, OutputTokenPolicy, RunConfig
 from agentperf_local.replay.runner import CompositeRunObserver, RunObserver, RunResult, run_manifest
 from agentperf_local.reports.reporting import ArtifactPaths, write_run_artifacts
 from agentperf_local.telemetry.power import (
@@ -147,6 +149,9 @@ class ManagedRunInputs(BaseModel, frozen=True):
     client_backend: ClientBackend
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     download_timeout_seconds: float = MODEL_DOWNLOAD_TOTAL_TIMEOUT_SECONDS
+    # "exact" refuses a server that drops ignore_eos, and "recorded" never asks.
+    # None asks the server and runs under the strongest policy it supports.
+    output_token_policy: OutputTokenPolicy | None = None
     power: bool = True
     # False keeps replay boundaries away from the observer. The CLI clears it when no
     # progress view is shown, so a plain run reports an unobserved replay.
@@ -159,6 +164,7 @@ class ManagedRunOutcome(BaseModel, frozen=True):
     result: RunResult
     run_id: str
     run_context: RunContextFacts
+    output_token_policy: OutputTokenPolicy
     artifacts: ArtifactPaths
     deployment_record: Path
     deployment_log: Path
@@ -169,7 +175,10 @@ class ManagedRunOutcome(BaseModel, frozen=True):
 
 
 def _managed_run_config(
-    plan: DeploymentPlan, client_backend: ClientBackend, request_timeout_seconds: float
+    plan: DeploymentPlan,
+    client_backend: ClientBackend,
+    request_timeout_seconds: float,
+    output_token_policy: OutputTokenPolicy,
 ) -> RunConfig:
     """Return the replay settings for one owned server."""
     return RunConfig(
@@ -178,6 +187,7 @@ def _managed_run_config(
         api_key=None,
         client_backend=client_backend,
         request_timeout_seconds=request_timeout_seconds,
+        output_token_policy=output_token_policy,
         # vLLM otherwise defaults exact requests to automatic tool selection and
         # stops at a parsed call. Some llama.cpp grammars reject this option.
         tool_choice="none" if plan.framework == "vllm" else None,
@@ -278,6 +288,25 @@ async def _close_owned_deployment(deployment: ManagedDeployment) -> None:
         raise
 
 
+async def _measurable_output_token_policy(
+    plan: DeploymentPlan, inputs: ManagedRunInputs, observer: ManagedRunObserver
+) -> OutputTokenPolicy:
+    """Return the policy this run measures under, asking the ready server when the policy depends on it.
+
+    A server that drops ignore_eos, as Splash does, fails every exact-policy turn. An
+    explicit exact policy is refused on such a server; an unset one falls back to the
+    recorded policy, as an attached run does.
+    """
+    requested = inputs.output_token_policy
+    if requested is not None and requested != "exact":
+        return requested
+    capability = await probe_ignore_eos(plan.base_url, plan.model_alias, inputs.client_backend)
+    if requested == "exact":
+        require_measurable_exact_policy(capability)
+    observer.on_activity(RunActivity(kind=RunActivityKind.OUTPUT_POLICY_CHOSEN, ignore_eos_probe=capability))
+    return capability.output_token_policy
+
+
 def _start_power_collector(collector: NvidiaPowerCollector) -> bool:
     """Start the collector child and give it its head start before the first request."""
     collector.start()
@@ -355,7 +384,6 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
     log_path = output_dir / DEPLOYMENT_LOG_FILENAME
     measurement_path = output_dir / MEASUREMENT_BINDING_FILENAME
     qualification_path = output_dir / QUALIFICATION_FILENAME
-    config = _managed_run_config(plan, inputs.client_backend, inputs.request_timeout_seconds)
     deployment: ManagedDeployment | None = None
     try:
         observer.on_activity(
@@ -383,6 +411,9 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
         observer.on_activity(
             RunActivity(kind=RunActivityKind.GPU_VERIFIED, accelerator_platform=plan.accelerator_platform)
         )
+        # Settled before the records land, so a refused policy leaves no deployment record behind.
+        output_token_policy = await _measurable_output_token_policy(plan, inputs, observer)
+        config = _managed_run_config(plan, inputs.client_backend, inputs.request_timeout_seconds, output_token_policy)
         written_deployment = await asyncio.to_thread(
             write_deployment_record, deployment_path, plan, snapshot, gpu_startup_verified=True
         )
@@ -457,6 +488,7 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
             result=result,
             run_id=binding.run_id,
             run_context=run_context,
+            output_token_policy=output_token_policy,
             artifacts=artifacts,
             deployment_record=deployment_path,
             deployment_log=log_path,

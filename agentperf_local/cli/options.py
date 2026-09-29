@@ -150,6 +150,14 @@ def read_requested_output_token_policy(namespace: argparse.Namespace) -> OutputT
     return None if policy is None else one_of(policy, OUTPUT_TOKEN_POLICIES, "--output-token-policy")
 
 
+# A managed run has no fixed-cap flag, so it offers the two recorded-length policies.
+MANAGED_OUTPUT_TOKEN_POLICIES: tuple[OutputTokenPolicy, ...] = ("exact", "recorded")
+
+
+def read_managed_output_token_policy(namespace: argparse.Namespace) -> OutputTokenPolicy:
+    return one_of(read_string(namespace, "output_token_policy"), MANAGED_OUTPUT_TOKEN_POLICIES, "--output-token-policy")
+
+
 def read_replay_manifest_path(namespace: argparse.Namespace) -> Path:
     """Resolve the custom manifest, or the bundled replay's manifest for this host."""
     manifest = read_optional_path(namespace, "manifest")

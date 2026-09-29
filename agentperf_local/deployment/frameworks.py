@@ -50,6 +50,16 @@ FRAMEWORK_VERSION_TIMEOUT_SECONDS = 60.0
 MAX_FRAMEWORK_VERSION_CHARACTERS = 160
 
 
+# A packaged Splash install keeps its runtime beside the `splash` launcher, under
+# libexec: a private Python, the HTTP server, and the Metal engine it drives.
+# release.json only exists in a packaged install, not in a source checkout.
+SPLASH_LIBEXEC_DIRECTORY = "libexec"
+SPLASH_RELEASE_FILENAME = "release.json"
+SPLASH_PYTHON_PATH = Path("python/bin/python3")
+SPLASH_SERVER_PATH = Path("server/server.py")
+SPLASH_ENGINE_PATH = Path("engine/splash")
+
+
 type CommandFinder = Callable[[str], str | None]
 
 
@@ -91,6 +101,8 @@ class FrameworkIdentity(BaseModel, frozen=True):
 def framework_supported(framework: DeploymentFramework, platform: AcceleratorPlatform) -> bool:
     if framework == "llama-cpp":
         return True
+    if framework == "splash":
+        return platform == "apple-metal"
     return platform == "nvidia-cuda"
 
 
@@ -108,6 +120,8 @@ def framework_display_name(framework: DeploymentFramework) -> str:
         return "llama.cpp"
     if framework == "vllm":
         return "vLLM"
+    if framework == "splash":
+        return "Splash"
     return "SGLang"
 
 
@@ -116,12 +130,16 @@ def installation_hint(framework: DeploymentFramework) -> str:
         return "Install a backend-enabled llama.cpp build that provides llama-server or llama."
     if framework == "vllm":
         return "Install vLLM in the selected CUDA environment."
+    if framework == "splash":
+        return "Install Splash with `brew install incoai/tap/splash`."
     return "Install SGLang in the selected CUDA environment."
 
 
 def _support_note(framework: DeploymentFramework, platform: AcceleratorPlatform) -> str:
     if framework == "llama-cpp":
         return "Native GGUF path using the framework's CUDA, HIP, or Metal backend."
+    if framework == "splash":
+        return "Packed four-bit path with DFlash 2 speculation on Splash's Metal engine; Apple Silicon only."
     if platform == "nvidia-cuda":
         return "Native weights path using the framework's CUDA backend; this path is not offered on ROCm."
     raise ValueError(f"{framework_display_name(framework)} is not supported on this platform")
@@ -149,6 +167,33 @@ def available_accelerator_memory(snapshot: HardwareSnapshot, platform: Accelerat
 def find_executable(command: str) -> str | None:
     """Look up shutil.which at call time so tests can patch it after import."""
     return shutil.which(command)
+
+
+def _resolve_splash_executable(command_finder: CommandFinder) -> FrameworkExecutable | None:
+    """Resolve the server inside one packaged Splash install.
+
+    `splash serve` downloads whatever revision the model repository's main branch
+    names, into its own model directory. A recipe pins one revision, so the launcher
+    starts the install's own server script on the verified snapshot instead. The
+    engine binary it drives is what the fingerprint hashes.
+    """
+    launcher = command_finder("splash")
+    if launcher is None:
+        return None
+    install_root = Path(launcher).resolve().parent.parent / SPLASH_LIBEXEC_DIRECTORY
+    if not (install_root / SPLASH_RELEASE_FILENAME).is_file():
+        return None
+    python = install_root / SPLASH_PYTHON_PATH
+    server = install_root / SPLASH_SERVER_PATH
+    engine = install_root / SPLASH_ENGINE_PATH
+    if not (python.is_file() and server.is_file() and engine.is_file()):
+        return None
+    return FrameworkExecutable(
+        framework="splash",
+        command_prefix=(str(python), "-u", str(server), "--binary", str(engine)),
+        version_command=(launcher, "--version"),
+        executable_path=engine,
+    )
 
 
 def resolve_framework_executable(
@@ -194,6 +239,8 @@ def resolve_framework_executable(
             version_command=(sys.executable, "-c", "import vllm; print(vllm.__version__)"),
             executable_path=Path(sys.executable),
         )
+    if framework == "splash":
+        return _resolve_splash_executable(command_finder)
     executable = command_finder("sglang")
     if executable is not None:
         return FrameworkExecutable(

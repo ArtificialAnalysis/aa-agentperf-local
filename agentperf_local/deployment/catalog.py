@@ -42,7 +42,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:b52bb81ee2fd8cea902ff83ed096ed15c4a010e8f5f081d7170f5c3039279b6b"
+BUNDLED_RECIPES_DIGEST = "sha256:3b8325889dcf2fb8b92d3836a3e970b0b1f582696d06a474ec07a3e55f6783cf"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -58,8 +58,8 @@ type SpeculationPolicy = Literal[
     "enabled-vllm-external-draft",
 ]
 type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
-type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
-type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
+type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm", "splash"]
+type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository", "splash-package"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
 type LlamaCppLoadMode = Literal["none", "mmap"]
 # How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
@@ -73,7 +73,7 @@ LLAMA_CPP_LAZY_MODES: tuple[LlamaCppLazyMode, ...] = ("on-direct",)
 # recipe's quantization, so a recipe that needs a particular kernel names it.
 type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
-DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm")
+DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm", "splash")
 DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
@@ -89,10 +89,19 @@ SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "enabled-vllm-external-draft",
 )
 TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml")
-ARTIFACT_KINDS: tuple[ArtifactKind, ...] = ("gguf-single-file", "gguf-file-set", "safetensors-repository")
+ARTIFACT_KINDS: tuple[ArtifactKind, ...] = (
+    "gguf-single-file",
+    "gguf-file-set",
+    "safetensors-repository",
+    "splash-package",
+)
 # A weights repository is only servable when the runtime can read the model shape
 # and the tokenizer beside the tensors.
 REQUIRED_REPOSITORY_FILES: tuple[str, ...] = ("config.json", "tokenizer.json")
+# Splash serves a package from its target, draft, and tokenizer directories, and checks
+# every packed file against the manifest beside them.
+REQUIRED_SPLASH_PACKAGE_FILES: tuple[str, ...] = ("manifest.json", "tokenizer/tokenizer.json")
+SPLASH_PACKAGE_DIRECTORIES: tuple[str, ...] = ("target", "draft", "tokenizer")
 
 
 def _revision(value: str, field: str) -> str:
@@ -378,14 +387,25 @@ class ModelDeployment(BaseModel, frozen=True):
                 raise ValueError("a GGUF recipe must name its pinned target model file")
             if self.vllm is not None:
                 raise ValueError("a GGUF recipe must not carry vLLM launch settings")
+        elif self.artifact_kind == "splash-package":
+            missing = tuple(name for name in REQUIRED_SPLASH_PACKAGE_FILES if name not in filenames)
+            if missing:
+                raise ValueError(f"a Splash package recipe must pin {', '.join(missing)}")
+            for directory in SPLASH_PACKAGE_DIRECTORIES:
+                if not any(filename.startswith(f"{directory}/") for filename in filenames):
+                    raise ValueError(f"a Splash package recipe must pin files under {directory}/")
+            if self.frameworks != ("splash",):
+                raise ValueError("a Splash package is served by Splash alone")
+            if self.model_filename is not None or self.llama_cpp is not None or self.vllm is not None:
+                raise ValueError("a Splash package recipe must not carry another runtime's launch settings")
         else:
             missing = tuple(name for name in REQUIRED_REPOSITORY_FILES if name not in filenames)
             if missing:
                 raise ValueError(f"a weights recipe must pin {', '.join(missing)}")
             if not any(name.endswith(".safetensors") for name in filenames):
                 raise ValueError("a weights recipe must pin at least one safetensors file")
-            if "llama-cpp" in self.frameworks:
-                raise ValueError("llama.cpp does not serve a safetensors weights repository")
+            if "llama-cpp" in self.frameworks or "splash" in self.frameworks:
+                raise ValueError("llama.cpp and Splash do not serve a safetensors weights repository")
             if self.model_filename is not None or self.llama_cpp is not None:
                 raise ValueError("a weights recipe must not carry llama.cpp file or launch settings")
         if self.context_tokens != BENCHMARK_CONTEXT_TOKENS:

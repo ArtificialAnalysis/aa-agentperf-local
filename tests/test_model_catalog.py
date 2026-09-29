@@ -23,6 +23,7 @@ from agentperf_local.deployment.catalog import (
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma-4-12b", "any", "gemma4-12b-it-q4-0.yaml")
 METAL_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
+SPLASH_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-splash-dflash.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -79,6 +80,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-nvfp4-dgx-spark", "319f741cce68d7914884900c138a1fbb70a42f30"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-27b-splash-dflash", "9d27070b71f7142c6b6025f03ac011d70a73cb48"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
     ]
@@ -132,6 +134,12 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     ling_dspark = _named(catalog, "ling3-flash-q4-k-m-dspark-dgx-spark").deployment.llama_cpp
     assert ling_dspark is not None
     assert ling_dspark.context_checkpoints == 2
+    # Splash serves its own packed package on Apple Silicon and pins the release it was run on.
+    splash = _named(catalog, "qwen38-27b-splash-dflash")
+    assert splash.devices == ("apple-silicon",)
+    assert splash.deployment.artifact_kind == "splash-package"
+    assert splash.deployment.frameworks == ("splash",)
+    assert splash.deployment.runtime_version_for("splash") == "1.0.2"
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
@@ -222,6 +230,9 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
         ("llama-speculative-without-depth", "a speculative llama.cpp recipe must set speculative_tokens"),
         ("llama-target-only-with-depth", "a target-only llama.cpp recipe must not set speculative_tokens"),
+        ("splash-other-runtime", "a Splash package is served by Splash alone"),
+        ("splash-missing-manifest", "a Splash package recipe must pin manifest.json"),
+        ("splash-missing-draft", "a Splash package recipe must pin files under draft/"),
     ],
 )
 def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, message: str) -> None:
@@ -284,6 +295,23 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         else:
             launch["cache_ram_mib"] = -1
         _write(root, METAL_RECIPE, metal)
+    elif case.startswith("splash-"):
+        splash = _read(root, SPLASH_RECIPE)
+        deployment = splash.get("deployment")
+        assert isinstance(deployment, dict)
+        artifacts = deployment.get("artifacts")
+        assert isinstance(artifacts, list)
+        if case == "splash-other-runtime":
+            deployment["frameworks"] = ["llama-cpp"]
+            del deployment["runtime_versions"]
+        else:
+            dropped = "manifest.json" if case == "splash-missing-manifest" else "draft/"
+            deployment["artifacts"] = [
+                artifact
+                for artifact in artifacts
+                if not (isinstance(artifact, dict) and str(artifact.get("filename")).startswith(dropped))
+            ]
+        _write(root, SPLASH_RECIPE, splash)
     if case not in ("unquoted-as-of", "misnamed-file", "stray-file", "flat-recipe"):
         _write(root, GEMMA_RECIPE, gemma)
 
