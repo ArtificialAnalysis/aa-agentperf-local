@@ -1,6 +1,8 @@
 profile_id: gemma4-26b-a4b-q4-0
 as_of: '2026-09-21'
-display_name: Google Gemma 4 26B A4B IT QAT Q4_0 GGUF
+model_name: Gemma 4 26B A4B
+quantization: Q4_0 QAT
+hardware: any
 hf_repository: google/gemma-4-26B-A4B-it-qat-q4_0-gguf
 hf_revision: d1c082be9cf3c8a514acf63b8761f4b41935842e
 devices:

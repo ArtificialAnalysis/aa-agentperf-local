@@ -1,6 +1,8 @@
 profile_id: nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark
 as_of: '2026-09-21'
-display_name: NVIDIA Nemotron 3 Super 120B A12B NVFP4 MTP, DGX Spark vLLM
+model_name: Nemotron 3 Super 120B A12B
+quantization: NVFP4
+hardware: dgx-spark
 hf_repository: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
 hf_revision: ff433f5493e25d631c9f12b5d55c674229923d02
 devices:

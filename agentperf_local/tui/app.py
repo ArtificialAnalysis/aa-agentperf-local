@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from rich.markup import escape
 from rich.text import Text
 from textual import events, work
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, ScreenStackError
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -31,7 +31,6 @@ from textual.widgets import (
     Sparkline,
     Static,
 )
-from textual.widgets.option_list import Option
 
 from agentperf_local.client.backends import ClientBackend
 from agentperf_local.common.json_fields import one_of
@@ -126,11 +125,13 @@ from agentperf_local.tui.inputs import (
 )
 from agentperf_local.tui.labels import (
     BLOCK_CODE_MESSAGES,
+    accelerator_summary_text,
     artifact_kind_text,
     block_code_message,
     count,
     framework_text,
     gib_suffix,
+    hardware_target_text,
     home_relative_path_text,
     integer_label,
     memory_need_gib,
@@ -138,8 +139,12 @@ from agentperf_local.tui.labels import (
     output_policy_activity_text,
     platform_suffix,
     probe_activity_text,
+    recipe_build_text,
+    recipe_title_text,
     result_path_text,
     seconds_label,
+    standing_headline_text,
+    standing_reason_text,
     turn_live_text,
     turn_record_text,
     unit_text,
@@ -163,8 +168,15 @@ from agentperf_local.tui.messages import (
     UploadFailedMessage,
     UploadProgressMessage,
 )
+from agentperf_local.tui.model_list import (
+    ListedRecipe,
+    model_list_options,
+    ordered_recipes,
+    standing_mark,
+)
 from agentperf_local.tui.replay_contract import (
     DEVICE_SELECTION_REQUIRED_MESSAGE,
+    RECIPE_STANDING_ORDER,
     EndpointProblem,
     ManagedDeploymentChoice,
     ManagedDeviceOption,
@@ -288,7 +300,6 @@ RESULT_RECORDED_POLICY_MESSAGE = (
     "e2e is reported as a normalized estimate · not directly comparable to exact-policy results"
 )
 RESULT_EYEBROW = "RESULT"
-AA_CATALOG_RUNTIME_PROVENANCE = "Artificial Analysis catalog · results not leaderboard-qualified yet"
 EXTERNAL_CATALOG_PROVENANCE = "External catalog · not from Artificial Analysis"
 CUSTOM_ENDPOINT_DETAIL = (
     "[b]Other model or server[/b]\n\n"
@@ -444,7 +455,7 @@ class BenchmarkSelection(BaseModel, frozen=True):
                 if catalog.is_bundled_snapshot
                 else SelectionKind.EXTERNAL_CATALOG_ENTRY
             ),
-            display_name=candidate.display_name,
+            display_name=recipe_title_text(candidate),
             endpoint_model=candidate.hf_repository,
             profile_id=candidate.profile_id,
             catalog_digest=catalog.digest,
@@ -537,10 +548,11 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.step = TuiStep.WELCOME
         self.setup_return_step = TuiStep.MODEL
         self._information_bookmark: _NavigationBookmark | None = None
+        self.listed_recipes = self._listed_recipes()
         self.selection = (
             BenchmarkSelection.custom(self.defaults.endpoint_model)
             if self.defaults.endpoint_model is not None
-            else BenchmarkSelection.from_candidate(catalog.models[0], catalog)
+            else BenchmarkSelection.from_candidate(self._default_candidate(), catalog)
         )
         self.request: ReplayRequest | None = None
         self.pending_preflight: ReplayRequest | None = None
@@ -604,26 +616,20 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                 "and measure response speed and latency.",
                 classes="lede",
             )
-            yield WelcomeChoice("Choose a model", "Download and start a supported model here.", id="welcome-start")
+            yield WelcomeChoice(
+                "Choose a model & config", "Download and start a supported model here.", id="welcome-start"
+            )
             yield WelcomeChoice(
                 "Use existing server", "Connect to Ollama, LM Studio, llama.cpp, or another API.", id="welcome-existing"
             )
             yield Static("Arrow keys to move · Enter or click to choose", classes="key-hint")
 
     def _model_page(self) -> ComposeResult:
-        options = tuple(
-            # A Text prompt is not parsed as markup; the list's CSS truncates long names.
-            Option(Text(candidate.display_name), id=candidate.profile_id)
-            for candidate in self.catalog.models
-        ) + (
-            Option(
-                "Other model or server",
-                id=SelectionKind.CUSTOM_ENDPOINT.value,
-            ),
-        )
+        # Text prompts are not parsed as markup; the list's CSS truncates long rows.
+        options = model_list_options(self.listed_recipes, self._computer_text())
         with FormPage(id=TuiStep.MODEL.value, classes="page"):
             yield Static("STEP 1 OF 4 · MODEL", id="model-intro", classes="eyebrow")
-            yield Static("Choose a model", classes="hero")
+            yield Static("Choose a model & config", classes="hero")
             yield Static(
                 "↑ ↓ browse · ← → move between controls · Enter or click to select",
                 id="model-list-hint",
@@ -632,7 +638,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             with Horizontal(id="model-layout"):
                 yield ModelList(*options, id="model-list")
                 with ModelDetailPane(id="model-detail-pane"):
-                    yield Static(self._candidate_detail(self.catalog.models[0]), id="model-detail")
+                    yield Static(self._candidate_detail(self._default_candidate()), id="model-detail")
             with Horizontal(classes="actions"):
                 yield Button("Select", id="model-continue", flat=True, compact=True)
                 yield Button("Back", id="model-back", flat=True, compact=True)
@@ -903,12 +909,13 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#result-reduced", Static).display = False
         self.query_one("#result-policy", Static).display = False
         device_sync_pending = self._apply_default_device()
-        initial_index = len(self.catalog.models) if self.defaults.endpoint_model is not None else 0
-        model_list = self.query_one("#model-list", OptionList)
-        model_list.highlighted = initial_index
-        option = model_list.get_option_at_index(initial_index)
-        if option.id is not None:
-            self._render_option_detail(option.id)
+        initial_option_id = (
+            SelectionKind.CUSTOM_ENDPOINT.value
+            if self.defaults.endpoint_model is not None or self._first_recipe_here() is None
+            else self._default_candidate().profile_id
+        )
+        self.query_one("#model-list", OptionList).highlighted = self._model_option_index(initial_option_id)
+        self._render_option_detail(initial_option_id)
         if not device_sync_pending:
             # Syncing twice would run the whole framework-availability probe twice at startup.
             self._sync_managed_deployment_controls()
@@ -952,6 +959,49 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             return None
         return self._candidate(self.selection.profile_id)
 
+    def _listed_recipes(self) -> tuple[ListedRecipe, ...]:
+        return ordered_recipes(self.catalog.models, self._listing_availability)
+
+    def _first_recipe_here(self) -> ModelCandidate | None:
+        """Return the first listed recipe for this computer, or None when every recipe needs other hardware."""
+        return next((recipe.candidate for recipe in self.listed_recipes if not recipe.for_other_hardware), None)
+
+    def _default_candidate(self) -> ModelCandidate:
+        """Return the recipe the model screen opens on: the first for this computer, else the first listed."""
+        return self._first_recipe_here() or self.listed_recipes[0].candidate
+
+    def _model_option_index(self, option_id: str) -> int:
+        return self.query_one("#model-list", OptionList).get_option_index(option_id)
+
+    def _computer_text(self) -> str | None:
+        """Name this computer's accelerator for the model list, or None without hardware detection."""
+        if self.managed_controller is None:
+            return None
+        return accelerator_summary_text(self.managed_controller.hardware_summary())
+
+    def _listing_availability(self, candidate: ModelCandidate) -> ManagedModelAvailability | None:
+        """Return what the model screen shows for one recipe at the chosen context.
+
+        With several accelerators and none chosen yet, the best device's result stands
+        for the computer, because the device is picked only on the next screen.
+        """
+        if self.managed_controller is None:
+            return None
+        context_tokens = self._chosen_context_tokens(candidate.deployment)
+        device_index = self._selected_device_index()
+        if device_index is not None or len(self.device_options) <= 1:
+            return self._managed_availability(candidate, device_index, context_tokens)
+        results = tuple(
+            self.managed_controller.availability(
+                candidate,
+                device_index=option.index,
+                context_tokens=context_tokens,
+                replay_floor_tokens=self._replay_context_floor(),
+            )
+            for option in self.device_options
+        )
+        return min(results, key=lambda availability: RECIPE_STANDING_ORDER.index(availability.standing))
+
     def _managed_availability(
         self,
         candidate: ModelCandidate,
@@ -992,8 +1042,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         """Return one setup dropdown's chosen text, or None while it is unmounted or blank."""
         try:
             value = self.query_one(selector, kind).value
-        except NoMatches:
-            # The model detail renders during compose, before the setup form mounts.
+        except (NoMatches, ScreenStackError):
+            # The model list is ordered at construction and its detail renders during
+            # compose, both before the setup form mounts.
             return None
         return value if isinstance(value, str) else None
 
@@ -1016,7 +1067,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             "MODEL SERVER · started for you" if candidate is not None else "YOUR SERVER"
         )
         self.query_one("#config-selection", Static).update(
-            escape(candidate.display_name)
+            escape(recipe_title_text(candidate))
             if candidate is not None
             else "Use the URL and model name shown by your server."
         )
@@ -1171,8 +1222,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             )
 
     def _candidate_detail(self, candidate: ModelCandidate) -> str:
-        # Detail values stay short enough for one line beside their key at the full-size
-        # panel width; anything longer (a refusal reason) gets its own full-width line.
+        # Short keys keep each value on one line beside its key at the full-size panel
+        # width; the standing's reason gets its own full-width line above them.
         artifact_gib = candidate.deployment.artifact_size_bytes / BYTES_PER_GIB
         selected_context_tokens = self._chosen_context_tokens(candidate.deployment)
         minimum_memory_need = memory_need_gib(
@@ -1183,40 +1234,35 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             if selected_context_tokens < candidate.deployment.context_tokens
             else f"{candidate.deployment.context_tokens:,} tokens"
         )
-        frameworks = " / ".join(candidate.deployment.frameworks)
-        availability = self._managed_availability(candidate, self._selected_device_index(), selected_context_tokens)
-        availability_note = ""
-        if availability is None:
-            local_status = ("This computer", "checked when the app starts")
-        elif availability.can_deploy:
-            local_frameworks = " / ".join(offer.display_name for offer in availability.deployable_offers)
-            local_status = ("This computer", f"can start this model · {local_frameworks}")
-        else:
-            reason = availability.reason or "no compatible framework is installed"
-            local_status = ("This computer", "cannot start this model")
-            availability_note = f"\n{escape(reason)}"
+        frameworks = " / ".join(framework_display_name(framework) for framework in candidate.deployment.frameworks)
         rows = (
-            local_status,
+            ("Built for", hardware_target_text(candidate)),
             ("Runs with", f"{frameworks} · needs {minimum_memory_need} GiB"),
-            ("Benchmark context", context_value),
+            ("Context", context_value),
             (
                 "Download",
                 f"{artifact_kind_text(candidate.deployment.artifact_kind)} · {artifact_gib:.1f} GiB · SHA-256 checked",
             ),
-            ("Hugging Face", candidate.hf_repository),
+            ("HF repo", candidate.hf_repository),
+        )
+        external_note = (
+            "" if self.catalog.is_bundled_snapshot else f"\n\n[{AA_NEUTRAL_500}]{EXTERNAL_CATALOG_PROVENANCE}[/]"
         )
         return (
-            f"[b]{escape(candidate.display_name)}[/b]\n"
+            f"[b]{escape(candidate.model_name)}[/b] · {escape(recipe_build_text(candidate))}\n"
+            f"{self._standing_detail(candidate)}\n\n"
             f"{key_value_block(rows)}"
-            f"{availability_note}"
-            f"\n\n[{AA_NEUTRAL_500}]{self._catalog_provenance()}[/]"
+            f"{external_note}"
         )
 
-    def _catalog_provenance(self) -> str:
-        """Say where the loaded recipes come from and that their results are not leaderboard-qualified yet."""
-        if not self.catalog.is_bundled_snapshot:
-            return EXTERNAL_CATALOG_PROVENANCE
-        return AA_CATALOG_RUNTIME_PROVENANCE
+    def _standing_detail(self, candidate: ModelCandidate) -> str:
+        """Lead the detail pane with a marked standing and, when the recipe cannot start, the reason."""
+        availability = self._listing_availability(candidate)
+        if availability is None:
+            return f"[{AA_NEUTRAL_500}]This computer is checked when the app starts.[/]"
+        headline = f"{standing_mark(availability.standing).markup} {escape(standing_headline_text(availability))}"
+        reason = standing_reason_text(candidate, availability)
+        return headline if reason is None else f"{headline}\n{escape(reason)}"
 
     def _show(self, step: TuiStep) -> None:
         information_steps = {TuiStep.PRIVACY, TuiStep.METHODOLOGY}
@@ -1234,8 +1280,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             self._restore_run_metrics()
         self.step = step
         if step is TuiStep.MODEL:
-            # A context picked on the setup screen changes the detail card, so
-            # returning to the model page renders the highlighted option again.
+            # A context or device picked on the setup screen changes what fits, so
+            # returning to the model page re-sorts the list and renders the detail again.
+            self._refresh_model_list()
             self._refresh_model_detail()
         self.query_one("#content", ContentSwitcher).current = step.value
         self._sync_kitty()
@@ -1250,6 +1297,18 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             kitty.start()
         else:
             kitty.settle()
+
+    def _refresh_model_list(self) -> None:
+        """Rebuild the list when a setup change moved a recipe, keeping the highlighted option."""
+        listed_recipes = self._listed_recipes()
+        if listed_recipes == self.listed_recipes:
+            return
+        self.listed_recipes = listed_recipes
+        model_list = self.query_one("#model-list", OptionList)
+        highlighted = None if model_list.highlighted is None else model_list.get_option_at_index(model_list.highlighted)
+        model_list.set_options(model_list_options(listed_recipes, self._computer_text()))
+        if highlighted is not None and highlighted.id is not None:
+            model_list.highlighted = model_list.get_option_index(highlighted.id)
 
     def _refresh_model_detail(self) -> None:
         """Render the highlighted option's detail from the current form state."""
@@ -1720,7 +1779,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             return
         self.selection = selection
         if downgrades_to_custom:
-            self.query_one("#model-list", OptionList).highlighted = len(self.catalog.models)
+            self.query_one("#model-list", OptionList).highlighted = self._model_option_index(
+                SelectionKind.CUSTOM_ENDPOINT.value
+            )
         self.request = None
         self.pending_preflight = request
         self.preflight_probe = None

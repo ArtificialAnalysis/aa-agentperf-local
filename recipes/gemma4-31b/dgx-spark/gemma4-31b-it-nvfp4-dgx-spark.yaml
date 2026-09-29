@@ -1,6 +1,8 @@
 profile_id: gemma4-31b-it-nvfp4-dgx-spark
 as_of: '2026-09-21'
-display_name: Google Gemma 4 31B IT NVFP4, DGX Spark vLLM
+model_name: Gemma 4 31B
+quantization: NVFP4
+hardware: dgx-spark
 hf_repository: nvidia/Gemma-4-31B-IT-NVFP4
 hf_revision: 4135a98a9b728a548947683219633b25682223ac
 devices:

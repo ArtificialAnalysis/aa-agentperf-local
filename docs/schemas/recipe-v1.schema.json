@@ -376,7 +376,9 @@
       "required": [
         "profile_id",
         "as_of",
-        "display_name",
+        "model_name",
+        "quantization",
+        "hardware",
         "hf_repository",
         "hf_revision",
         "devices",
@@ -394,10 +396,25 @@
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
         },
-        "display_name": {
+        "model_name": {
           "type": "string",
           "minLength": 1,
           "maxLength": 160
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "hardware": {
+          "enum": [
+            "dgx-spark",
+            "m5-pro",
+            "rtx-5090",
+            "strix-halo",
+            "nvidia-cuda",
+            "any"
+          ]
         },
         "hf_repository": {
           "$ref": "#/$defs/repository"

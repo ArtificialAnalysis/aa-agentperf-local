@@ -1,6 +1,8 @@
 profile_id: qwen36-27b-nvfp4-mtp-dgx-spark
 as_of: '2026-09-21'
-display_name: Qwen3.6 27B NVFP4 MTP, DGX Spark vLLM
+model_name: Qwen3.6 27B
+quantization: NVFP4
+hardware: dgx-spark
 hf_repository: nvidia/Qwen3.6-27B-NVFP4
 hf_revision: 0893e1606ff3d5f97a441f405d5fc541a6bdf404
 devices:

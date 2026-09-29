@@ -1,6 +1,8 @@
 profile_id: qwen36-27b-q4-k-m-mtp-rtx5090
 as_of: '2026-09-21'
-display_name: Qwen3.6-27B Q4_K_M MTP (RTX 5090)
+model_name: Qwen3.6 27B
+quantization: Q4_K_M
+hardware: rtx-5090
 hf_repository: unsloth/Qwen3.6-27B-MTP-GGUF
 hf_revision: 5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace
 devices:

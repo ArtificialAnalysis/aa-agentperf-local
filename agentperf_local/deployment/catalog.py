@@ -18,7 +18,7 @@ from agentperf_local.common.models import read_object
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
 
-MAX_DISPLAY_NAME_CHARACTERS = 160
+MAX_LABEL_CHARACTERS = 160
 MAX_RECIPE_BYTES = 262_144
 MAX_RECIPES = 512
 MAX_DEPLOYMENT_ARTIFACTS = 512
@@ -40,7 +40,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:3814f36b629873beb148e8a5fb3c385c4d2fcee4c174bc3adafb428ae07b86b2"
+BUNDLED_RECIPES_DIGEST = "sha256:cf93704107b2c7b6629351606bcb42884304f2a1ce9e5b1ce9803a742a278e1f"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -56,6 +56,9 @@ type SpeculationPolicy = Literal[
     "enabled-vllm-external-draft",
 ]
 type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
+# The hardware a recipe was built for, which is also its folder name. "any" and
+# "nvidia-cuda" are portable; the rest name one device.
+type HardwareTarget = Literal["dgx-spark", "m5-pro", "rtx-5090", "strix-halo", "nvidia-cuda", "any"]
 type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
 type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
@@ -73,6 +76,8 @@ type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
 DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm")
 DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
+# Devices first, then the portable targets from narrowest to broadest.
+HARDWARE_TARGETS: tuple[HardwareTarget, ...] = ("dgx-spark", "m5-pro", "rtx-5090", "strix-halo", "nvidia-cuda", "any")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
 THINKING_POLICIES: tuple[ThinkingPolicy, ...] = ("disabled", "enabled", "enabled-medium-candidate")
@@ -451,7 +456,11 @@ class ModelCandidate(BaseModel, frozen=True):
 
     profile_id: str
     as_of: str
-    display_name: str
+    # The base model, named the same way in every recipe of one model folder.
+    model_name: str
+    # The weight format as its files name it, such as Q4_K_M, UD-Q4_K_M, or NVFP4.
+    quantization: str
+    hardware: HardwareTarget
     hf_repository: str
     hf_revision: str
     # The accelerator platforms this recipe may launch on, in canonical order.
@@ -467,10 +476,8 @@ class ModelCandidate(BaseModel, frozen=True):
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
         _iso_date(self.as_of, "as_of")
-        if not self.display_name or len(self.display_name) > MAX_DISPLAY_NAME_CHARACTERS:
-            raise ValueError("display_name must be short printable text")
-        if not self.display_name.isprintable():
-            raise ValueError("display_name must be short printable text")
+        _label(self.model_name, "model_name")
+        _label(self.quantization, "quantization")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")
         _revision(self.hf_revision, "hf_revision")
@@ -524,6 +531,11 @@ class ModelCatalog(BaseModel, frozen=True):
     def is_bundled_snapshot(self) -> bool:
         """Return whether the recipes match the ones shipped with this release."""
         return self.digest == BUNDLED_RECIPES_DIGEST
+
+
+def _label(value: str, field: str) -> None:
+    if not value or len(value) > MAX_LABEL_CHARACTERS or not value.isprintable():
+        raise ValueError(f"{field} must be short printable text")
 
 
 def _iso_date(value: str, field: str) -> None:
@@ -583,6 +595,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     `LC_ALL=C sha256sum */*/*.yaml | sha256sum` in the folder reproduces it.
     """
     models: list[ModelCandidate] = []
+    model_names: dict[str, str] = {}
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -590,6 +603,11 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         model = read_object(ModelCandidate, _parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
+        if model.hardware != path.parent.name:
+            raise ValueError(f"recipe {relative} must sit in the folder of its hardware {model.hardware}")
+        model_folder = path.parent.parent.name
+        if model_names.setdefault(model_folder, model.model_name) != model.model_name:
+            raise ValueError(f"every recipe in {model_folder} must share the model_name {model_names[model_folder]}")
         models.append(model)
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
     return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))

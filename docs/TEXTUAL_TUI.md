@@ -55,7 +55,7 @@ uv run agentperf-local tui \
 The primary path is:
 
 ```text
-Choose a model → Setup → Confirm → Running → Result
+Choose a model & config → Setup → Confirm → Running → Result
 ```
 
 **Use existing server** on the welcome screen goes directly to Setup. Back returns
@@ -93,7 +93,7 @@ selected model and editable server settings; managed server addresses are set
 automatically. Expand **Advanced options** to change the measured client.
 Fields keep their labels and values on one line, even in compact terminals.
 Right from the model list reaches a separate scrollable detail pane, so long
-model names, compatibility notes, and catalog evidence remain readable.
+compatibility notes and download details remain readable.
 Left and Right keep their normal cursor behavior inside text fields. Tab remains
 an optional shortcut; every control is reachable with arrows. Welcome choices
 include their descriptions in the clickable area, and controls highlight on hover.
@@ -107,8 +107,28 @@ repeating the focused button. Help contains the less frequent privacy shortcut.
 
 ## Included choices
 
-The model screen lists every recipe in [`recipes/`](../recipes), in folder
-order, plus an `Other model or server` entry.
+The model screen lists every recipe in [`recipes/`](../recipes), plus an
+`Other model or server` entry. The list has two parts. **This computer** holds
+the recipes for this computer's GPU family, then `Other model or server`.
+After a gap, **Other hardware** holds the recipes for other GPU families,
+greyed out. Each part is a table with the column headings **Model/Quant** (the
+model, then each recipe's weight format), **Spec decode** (the speculative
+decoding method, or a dash for none), and **Built for** (the hardware the recipe
+was built for). Recipes sit under their model's name. A colored mark gives each
+recipe's standing:
+
+| Mark | Standing |
+| --- | --- |
+| Green `●` | Runs on this computer. |
+| Amber `▲` | Needs setup first: install a framework, or memory could not be checked. |
+| Red `✗` | Too large for this computer's memory at the chosen context. |
+| Grey `·` | Made for other hardware. |
+
+Within a part, models follow in name order, and a model's recipes go best
+standing first. With several accelerators and no device chosen yet, a recipe
+shows its best standing across them. The detail pane leads with the standing
+and, when a recipe cannot start, the reason. Recipes loaded with `--recipes`
+also carry a note that they are not from Artificial Analysis.
 
 Every catalog candidate is evaluated through the same selection surface. A
 candidate with a complete deployment recipe is intersected with the detected

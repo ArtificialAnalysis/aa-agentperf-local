@@ -1,6 +1,8 @@
 profile_id: qwen35-122b-a10b-nvfp4-mtp-dgx-spark
 as_of: '2026-09-21'
-display_name: Qwen3.5 122B A10B NVFP4 MTP, DGX Spark vLLM
+model_name: Qwen3.5 122B A10B
+quantization: NVFP4
+hardware: dgx-spark
 hf_repository: nvidia/Qwen3.5-122B-A10B-NVFP4
 hf_revision: 98915d837c4e7c87ac8296d02e89de19b3207e6d
 devices:

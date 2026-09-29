@@ -1,6 +1,8 @@
 profile_id: muse-glimmer-30b-q4-k-m-dflash-rtx5090
 as_of: '2026-09-21'
-display_name: Muse Glimmer 30B Q4_K_M DFlash (RTX 5090)
+model_name: Muse Glimmer 30B
+quantization: Q4_K_M
+hardware: rtx-5090
 hf_repository: meta-models/Muse-Glimmer-30B-GGUF
 hf_revision: 70bf1b61ac09f91b24d39038091b41c582bc5d7a
 devices:

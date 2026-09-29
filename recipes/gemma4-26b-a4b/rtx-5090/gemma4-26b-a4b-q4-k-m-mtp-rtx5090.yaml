@@ -1,6 +1,8 @@
 profile_id: gemma4-26b-a4b-q4-k-m-mtp-rtx5090
 as_of: '2026-09-21'
-display_name: Gemma-4-26B-A4B Q4_K_M MTP (RTX 5090)
+model_name: Gemma 4 26B A4B
+quantization: UD-Q4_K_M
+hardware: rtx-5090
 hf_repository: unsloth/gemma-4-26B-A4B-it-GGUF
 hf_revision: c099eb48e663fd284577b04978a94ffccb261841
 devices:

@@ -1,6 +1,8 @@
 profile_id: ling3-flash-q4-k-m-dspark-dgx-spark
 as_of: '2026-09-28'
-display_name: Ling 3.0 flash Q4_K_M, DGX Spark DSpark
+model_name: Ling 3.0 flash
+quantization: Q4_K_M
+hardware: dgx-spark
 hf_repository: inclusionAI/Ling-3.0-flash-GGUF
 hf_revision: 29edce5130491e638f3e5ebec91fa0a5ed4f780e
 devices:

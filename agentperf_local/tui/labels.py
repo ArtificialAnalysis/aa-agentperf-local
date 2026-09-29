@@ -14,7 +14,15 @@ from pathlib import Path
 from rich.markup import escape
 
 from agentperf_local.common.units import BYTES_PER_GIB, MILLISECONDS_PER_SECOND
-from agentperf_local.deployment.catalog import ArtifactKind, DeploymentFramework
+from agentperf_local.deployment.catalog import (
+    DEVICE_IDS,
+    ArtifactKind,
+    DeploymentFramework,
+    DeviceId,
+    HardwareTarget,
+    ModelCandidate,
+    SpeculationPolicy,
+)
 from agentperf_local.deployment.endpoint_probes import (
     ContextProbeResult,
     IgnoreEosProbeResult,
@@ -25,7 +33,12 @@ from agentperf_local.provenance.context import ContextObservationReason
 from agentperf_local.provenance.hardware import AcceleratorPlatform
 from agentperf_local.replay.runner import TurnCompletedBoundary
 from agentperf_local.reports.progress import RunTurnSample, rate_text
-from agentperf_local.tui.replay_contract import PreflightBlockCode
+from agentperf_local.tui.replay_contract import (
+    ManagedModelAvailability,
+    PreflightBlockCode,
+    RecipeStanding,
+    SafeHardwareSummary,
+)
 from agentperf_local.tui.widgets import DONE_MARK, FAILED_MARK, WARNING_MARK
 
 RUN_SECOND_CHART_MIN_HEIGHT = 27
@@ -34,6 +47,41 @@ PLATFORM_DISPLAY_NAMES: dict[AcceleratorPlatform, str] = {
     "nvidia-cuda": "CUDA",
     "amd-rocm": "ROCm",
     "apple-metal": "Metal",
+}
+HARDWARE_TARGET_NAMES: dict[HardwareTarget, str] = {
+    "dgx-spark": "DGX Spark",
+    "m5-pro": "M5 Pro",
+    "rtx-5090": "RTX 5090",
+    "strix-halo": "Strix Halo",
+    "nvidia-cuda": "NVIDIA GPU",
+    "any": "Any GPU",
+}
+DEVICE_FAMILY_NAMES: dict[DeviceId, str] = {
+    "nvidia-cuda": "NVIDIA",
+    "amd-rocm": "AMD",
+    "apple-silicon": "Apple",
+}
+DEVICE_PLATFORM_NAMES: dict[DeviceId, str] = {
+    "nvidia-cuda": "NVIDIA (CUDA)",
+    "amd-rocm": "AMD (ROCm)",
+    "apple-silicon": "Apple silicon",
+}
+# The speed-up a speculation policy names; the target-only baseline has none.
+SPEEDUP_NAMES: dict[SpeculationPolicy, str | None] = {
+    "disabled-target-only-baseline": None,
+    "enabled-mtp-self-draft": "MTP",
+    "enabled-mtp-external-draft": "MTP",
+    "enabled-dflash-external-draft": "DFlash",
+    "enabled-dflash-draft": "DFlash",
+    "enabled-dspark-external-draft": "DSpark",
+    "enabled-dspark-draft": "DSpark",
+    "enabled-vllm-external-draft": "Draft model",
+}
+STANDING_HEADLINES: dict[RecipeStanding, str] = {
+    RecipeStanding.READY: "Runs on this computer",
+    RecipeStanding.NEEDS_SETUP: "Needs setup on this computer",
+    RecipeStanding.TOO_LARGE: "Too large for this computer",
+    RecipeStanding.OTHER_HARDWARE: "Made for other hardware",
 }
 # Textual wraps text only at whitespace and folds any overlong word mid-token. U+001F is
 # zero cells wide yet counts as whitespace to the wrapper, so a path carrying it after
@@ -121,6 +169,62 @@ def gib_suffix(size_bytes: int | None) -> str:
 def memory_need_gib(size_bytes: float) -> str:
     """Name a memory requirement in GiB, rounded up so the figure never undersells it."""
     return f"{math.ceil(size_bytes / BYTES_PER_GIB * 10) / 10:.1f}"
+
+
+def hardware_target_text(candidate: ModelCandidate) -> str:
+    """Name the hardware a recipe was built for.
+
+    A portable recipe that leaves out a GPU maker lists the makers it does support,
+    so "Any GPU" never appears on a recipe that cannot run on Apple silicon.
+    """
+    if candidate.hardware == "any" and candidate.devices != DEVICE_IDS:
+        return " or ".join(DEVICE_FAMILY_NAMES[device] for device in candidate.devices)
+    return HARDWARE_TARGET_NAMES[candidate.hardware]
+
+
+def speedup_text(candidate: ModelCandidate) -> str | None:
+    """Name a recipe's speculative decoding method, or return None for a target-only recipe."""
+    return SPEEDUP_NAMES[candidate.speculation_policy]
+
+
+def recipe_build_text(candidate: ModelCandidate) -> str:
+    """Name a recipe's weight format and speed-up, such as Q4_K_M · MTP."""
+    speedup = speedup_text(candidate)
+    return candidate.quantization if speedup is None else f"{candidate.quantization} · {speedup}"
+
+
+def recipe_title_text(candidate: ModelCandidate) -> str:
+    """Name one recipe in full: model, build, and the hardware it was built for."""
+    return f"{candidate.model_name} · {recipe_build_text(candidate)} · {hardware_target_text(candidate)}"
+
+
+def accelerator_summary_text(summary: SafeHardwareSummary) -> str:
+    """Name this computer's accelerator and memory, or count its accelerators when there are several."""
+    if summary.accelerator_name is None:
+        return count(summary.accelerator_count, "accelerator")
+    if summary.accelerator_memory_bytes is None:
+        return f"{summary.accelerator_name} · memory not reported"
+    return f"{summary.accelerator_name} · {summary.accelerator_memory_bytes / BYTES_PER_GIB:.0f} GiB"
+
+
+def standing_headline_text(availability: ManagedModelAvailability) -> str:
+    """Head the detail pane with the standing, naming the frameworks that can start a ready recipe."""
+    headline = STANDING_HEADLINES[availability.standing]
+    if availability.standing is not RecipeStanding.READY:
+        return headline
+    return f"{headline} · " + " / ".join(offer.display_name for offer in availability.deployable_offers)
+
+
+def standing_reason_text(candidate: ModelCandidate, availability: ManagedModelAvailability) -> str | None:
+    """Explain why a recipe cannot start here in one sentence, or return None when it can."""
+    standing = availability.standing
+    if standing is RecipeStanding.READY:
+        return None
+    accelerator = availability.hardware.accelerator_name
+    if standing is RecipeStanding.OTHER_HARDWARE and accelerator is not None:
+        platforms = " or ".join(DEVICE_PLATFORM_NAMES[device] for device in candidate.devices)
+        return f"It runs on {platforms}. This computer has {accelerator}."
+    return availability.reason or "This app cannot start models on this computer."
 
 
 def artifact_kind_text(artifact_kind: ArtifactKind) -> str:

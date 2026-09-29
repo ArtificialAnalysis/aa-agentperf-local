@@ -16,10 +16,24 @@ recipes/<model>/<hardware>/<profile_id>.yaml
   `strix-halo`, or `m5-pro`.
 - The file name is the recipe's `profile_id`. You pass it to `--profile-id`.
 
-A recipe holds only what the run uses: the files to download, the devices it
-may run on, the memory shape for the memory check, and the server launch
-settings. The server serves the model as `<profile_id>-<nonce>`. Leave out an
-optional field, such as `vllm` or `moe_runner_backend`, when it does not apply.
+A recipe holds only what the run uses: its name, the files to download, the
+devices it may run on, the memory shape for the memory check, and the server
+launch settings. The server serves the model as `<profile_id>-<nonce>`. Leave
+out an optional field, such as `vllm` or `moe_runner_backend`, when it does not
+apply.
+
+The TUI names a recipe from three fields:
+
+- `model_name` is the base model, such as `Qwen3.8 27B`. Every recipe in one
+  model folder uses the same name.
+- `quantization` is the weight format the files use, such as `Q4_K_M`,
+  `UD-Q4_K_M`, or `NVFP4`.
+- `hardware` is the hardware folder's name. A new hardware folder also needs
+  its name added to `HardwareTarget` in
+  [`catalog.py`](../agentperf_local/deployment/catalog.py) and a label in
+  [`labels.py`](../agentperf_local/tui/labels.py).
+
+The speed-up it shows, such as MTP or DFlash, comes from `speculation_policy`.
 
 ## Run a recipe
 

@@ -251,6 +251,7 @@ Sparkline > .sparkline--max-color {
     color: $aa-lime;
 }
 
+/* Range charts are too wide to sit three abreast, so they always stack. */
 #result-charts {
     height: auto;
     margin-top: 1;
@@ -616,7 +617,7 @@ Checkbox:focus > .toggle--label {
 }
 
 #model-list {
-    width: 43%;
+    width: 45%;
     height: 1fr;
     background: transparent;
     border: none;
@@ -625,7 +626,7 @@ Checkbox:focus > .toggle--label {
 }
 
 #model-detail-pane {
-    width: 57%;
+    width: 55%;
     height: 1fr;
     margin-left: 1;
     padding-left: 2;
@@ -635,6 +636,15 @@ Checkbox:focus > .toggle--label {
 
 #model-detail {
     height: auto;
+}
+
+/* Model list headings are disabled rows so the cursor skips them; they color their own text. */
+#model-list > .option-list--option-disabled {
+    color: $aa-text;
+}
+
+#model-list > .option-list--separator {
+    color: $aa-border;
 }
 
 OptionList > .option-list--option-highlighted {
@@ -677,20 +687,18 @@ PercentageStatus {
 
 #model-layout.compact {
     layout: vertical;
-    height: auto;
 }
 
 #model-layout.compact #model-list {
     width: 100%;
-    height: 7;
+    height: 70%;
 }
 
 #model-layout.compact #model-detail-pane {
     width: 100%;
-    height: 8;
+    height: 30%;
     margin-left: 0;
     padding-left: 0;
-    padding-top: 1;
     border-left: none;
     border-top: solid $aa-border;
 }
@@ -742,15 +750,6 @@ PercentageStatus {
 
 .page.short .hero, .page.short .lede, .page.short .welcome-choice {
     margin-bottom: 0;
-}
-
-/* The #model-layout prefix is what outranks the .compact heights above; do not drop it. */
-.page.short #model-layout #model-list {
-    height: 4;
-}
-
-.page.short #model-layout #model-detail-pane {
-    height: 6;
 }
 
 .page.short #run-progress-row, .page.short #run-context {
