@@ -56,9 +56,6 @@ type SpeculationPolicy = Literal[
     "enabled-vllm-external-draft",
 ]
 type DeviceId = Literal["nvidia-cuda", "amd-rocm", "apple-silicon"]
-# The hardware a recipe was built for, which is also its folder name. "any" and
-# "nvidia-cuda" are portable; the rest name one device.
-type HardwareTarget = Literal["dgx-spark", "m5-pro", "rtx-5090", "strix-halo", "nvidia-cuda", "any"]
 type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm"]
 type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
@@ -76,8 +73,6 @@ type MoeRunnerBackend = Literal["flashinfer_cutlass"]
 
 DEPLOYMENT_FRAMEWORK_ORDER: tuple[DeploymentFramework, ...] = ("llama-cpp", "sglang", "vllm")
 DEVICE_IDS: tuple[DeviceId, ...] = ("nvidia-cuda", "amd-rocm", "apple-silicon")
-# Devices first, then the portable targets from narrowest to broadest.
-HARDWARE_TARGETS: tuple[HardwareTarget, ...] = ("dgx-spark", "m5-pro", "rtx-5090", "strix-halo", "nvidia-cuda", "any")
 MOE_RUNNER_BACKENDS: tuple[MoeRunnerBackend, ...] = ("flashinfer_cutlass",)
 REASONING_PARSERS: tuple[ReasoningParser, ...] = ("gemma4", "gpt-oss", "nemotron_v3", "qwen3")
 THINKING_POLICIES: tuple[ThinkingPolicy, ...] = ("disabled", "enabled", "enabled-medium-candidate")
@@ -460,7 +455,8 @@ class ModelCandidate(BaseModel, frozen=True):
     model_name: str
     # The weight format as its files name it, such as Q4_K_M, UD-Q4_K_M, or NVFP4.
     quantization: str
-    hardware: HardwareTarget
+    # The hardware the recipe was built for, named like its folder, such as rtx-5090 or any.
+    hardware: str
     hf_repository: str
     hf_revision: str
     # The accelerator platforms this recipe may launch on, in canonical order.
@@ -475,6 +471,7 @@ class ModelCandidate(BaseModel, frozen=True):
     def check_invariants(self) -> Self:
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
+        validate_identifier(self.hardware, "hardware")
         _iso_date(self.as_of, "as_of")
         _label(self.model_name, "model_name")
         _label(self.quantization, "quantization")
@@ -603,8 +600,6 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         model = read_object(ModelCandidate, _parse_recipe(encoded, relative), relative)
         if model.profile_id != path.stem:
             raise ValueError(f"recipe {relative} must be named after its profile_id {model.profile_id}")
-        if model.hardware != path.parent.name:
-            raise ValueError(f"recipe {relative} must sit in the folder of its hardware {model.hardware}")
         model_folder = path.parent.parent.name
         if model_names.setdefault(model_folder, model.model_name) != model.model_name:
             raise ValueError(f"every recipe in {model_folder} must share the model_name {model_names[model_folder]}")

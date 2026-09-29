@@ -58,8 +58,6 @@ LIVE_TICK_SECONDS = 0.1
 COUNT_UP_SECONDS = 0.6
 COUNT_UP_STEPS = 12
 ACTIVITY_LOG_MAX_LINES = 500
-# The context gauge draws one filled bar between two thin end caps. A compact
-# layout loses the bar's tail and the window size to keep the line on one row.
 CONTEXT_WINDOW_UNKNOWN = "context length not reported"
 
 

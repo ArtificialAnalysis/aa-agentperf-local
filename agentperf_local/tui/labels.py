@@ -19,7 +19,6 @@ from agentperf_local.deployment.catalog import (
     ArtifactKind,
     DeploymentFramework,
     DeviceId,
-    HardwareTarget,
     ModelCandidate,
     SpeculationPolicy,
 )
@@ -41,14 +40,14 @@ from agentperf_local.tui.replay_contract import (
 )
 from agentperf_local.tui.widgets import DONE_MARK, FAILED_MARK, WARNING_MARK
 
-RUN_SECOND_CHART_MIN_HEIGHT = 27
 RECORDED_POLICY_OUTCOME = "recorded policy · e2e reported as a normalized estimate, not comparable to exact runs"
 PLATFORM_DISPLAY_NAMES: dict[AcceleratorPlatform, str] = {
     "nvidia-cuda": "CUDA",
     "amd-rocm": "ROCm",
     "apple-metal": "Metal",
 }
-HARDWARE_TARGET_NAMES: dict[HardwareTarget, str] = {
+# Labels for the hardware folders the catalog ships; any other folder shows its own name.
+HARDWARE_TARGET_NAMES: dict[str, str] = {
     "dgx-spark": "DGX Spark",
     "m5-pro": "M5 Pro",
     "rtx-5090": "RTX 5090",
@@ -179,7 +178,7 @@ def hardware_target_text(candidate: ModelCandidate) -> str:
     """
     if candidate.hardware == "any" and candidate.devices != DEVICE_IDS:
         return " or ".join(DEVICE_FAMILY_NAMES[device] for device in candidate.devices)
-    return HARDWARE_TARGET_NAMES[candidate.hardware]
+    return HARDWARE_TARGET_NAMES.get(candidate.hardware, candidate.hardware)
 
 
 def speedup_text(candidate: ModelCandidate) -> str | None:

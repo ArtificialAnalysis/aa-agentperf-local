@@ -16,7 +16,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.widgets.option_list import Option
 
-from agentperf_local.deployment.catalog import HARDWARE_TARGETS, ModelCandidate
+from agentperf_local.deployment.catalog import ModelCandidate
 from agentperf_local.tui.branding import AA_LIME, AA_NEUTRAL_500, AA_ORANGE, AA_PLACEHOLDER, AA_RED
 from agentperf_local.tui.evidence import SelectionKind
 from agentperf_local.tui.labels import hardware_target_text, speedup_text
@@ -49,6 +49,8 @@ MUTED = Style(color=AA_NEUTRAL_500)
 GREYED = Style(color=AA_PLACEHOLDER)
 MODEL_HEADING = Style(bold=True)
 DIGIT_RUN = re.compile(r"(\d+)")
+# Device recipes sort first by folder name, then these portable ones, narrowest first.
+PORTABLE_HARDWARE = ("nvidia-cuda", "any")
 
 
 class ListedRecipe(BaseModel, frozen=True):
@@ -74,13 +76,16 @@ def _natural_key(name: str) -> tuple[tuple[int, int | str], ...]:
     return tuple((0, int(part)) if part.isdigit() else (1, part.casefold()) for part in DIGIT_RUN.split(name))
 
 
-def _sort_key(recipe: ListedRecipe) -> tuple[bool, tuple[tuple[int, int | str], ...], int, int, str]:
+def _sort_key(recipe: ListedRecipe) -> tuple[bool, tuple[tuple[int, int | str], ...], int, int, str, str]:
     standing_rank = 0 if recipe.availability is None else RECIPE_STANDING_ORDER.index(recipe.availability.standing)
+    hardware = recipe.candidate.hardware
+    portable_rank = PORTABLE_HARDWARE.index(hardware) + 1 if hardware in PORTABLE_HARDWARE else 0
     return (
         recipe.for_other_hardware,
         _natural_key(recipe.candidate.model_name),
         standing_rank,
-        HARDWARE_TARGETS.index(recipe.candidate.hardware),
+        portable_rank,
+        hardware,
         recipe.candidate.profile_id,
     )
 

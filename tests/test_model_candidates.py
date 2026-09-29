@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 
 from agentperf_local.deployment.catalog import BUNDLED_RECIPES_ROOT
 
-SCHEMA_PATH = Path(__file__).parents[1] / "docs" / "schemas" / "recipe-v1.schema.json"
+SCHEMA_PATH = Path(__file__).parents[1] / "docs" / "schemas" / "recipe-v2.schema.json"
 
 
 def test_bundled_recipes_are_schema_valid() -> None:

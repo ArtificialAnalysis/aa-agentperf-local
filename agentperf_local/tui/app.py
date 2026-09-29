@@ -94,6 +94,7 @@ from agentperf_local.tui.branding import (
     AA_NEUTRAL_500,
     AA_PURPLE,
     COMPACT_LAYOUT_WIDTH,
+    RUN_COMPACT_LAYOUT_WIDTH,
     PixelLogo,
     key_value_block,
     spinner_frame,
@@ -265,8 +266,8 @@ RUN_THROUGHPUT_WAITING = "tokens per second · waiting for the first turn"
 SERVER_LOG_MAX_LINES = 2_000
 # Below these terminal heights the metrics column drops its lowest-value rows so the
 # decode-speed chart, the one a benchmark is about, always stays whole.
-RUN_TREND_MIN_HEIGHT = 34
-RUN_SECOND_CHART_MIN_HEIGHT = 27
+RUN_TREND_MIN_HEIGHT = 28
+RUN_SECOND_CHART_MIN_HEIGHT = 21
 PREFLIGHT_CHECKING_MESSAGE = "Checking files, client, and hardware…"
 PREFLIGHT_READY_HERO = "Ready to run?"
 PREFLIGHT_BLOCKED_HERO = "Check the setup"
@@ -970,7 +971,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         for page in self.query(".page"):
             page.set_class(compact, "compact")
             page.set_class(height < SHORT_LAYOUT_HEIGHT, "short")
-        if compact and self._showing_server_log():
+        run_compact = width < RUN_COMPACT_LAYOUT_WIDTH
+        run_page.set_class(run_compact, "compact")
+        if run_compact and self._showing_server_log():
             # A compact page shows either the log or the details; keep the log the user opened.
             run_page.remove_class("show-details")
         # The gauge draws a narrower bar once the run page carries the compact class.

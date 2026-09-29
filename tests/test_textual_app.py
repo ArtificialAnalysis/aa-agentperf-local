@@ -1922,6 +1922,12 @@ async def test_model_list_puts_what_this_computer_can_run_first(
         assert "Made for other hardware" in detail
         assert "It runs on Apple silicon." in detail
 
+        # Back at the first recipe, the headings above it scroll into view with it.
+        assert model_list.scroll_y > 0
+        await pilot.press("home")
+        await pilot.pause()
+        assert model_list.scroll_y == 0
+
 
 def _installed_sglang_offer(
     hardware: HardwareSnapshot,

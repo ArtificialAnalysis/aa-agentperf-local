@@ -43,12 +43,12 @@ SCHEMA_ROOT = pathlib.Path(__file__).parents[1] / "docs" / "schemas"
 
 # (schema file, pointer to the object, the class whose fields it describes).
 SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
-    ("recipe-v1.schema.json", "$defs/artifact", DeploymentArtifact),
-    ("recipe-v1.schema.json", "$defs/memory", DeploymentMemory),
-    ("recipe-v1.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
-    ("recipe-v1.schema.json", "$defs/vllm", VllmLaunch),
-    ("recipe-v1.schema.json", "$defs/deployment", ModelDeployment),
-    ("recipe-v1.schema.json", "$defs/model", ModelCandidate),
+    ("recipe-v2.schema.json", "$defs/artifact", DeploymentArtifact),
+    ("recipe-v2.schema.json", "$defs/memory", DeploymentMemory),
+    ("recipe-v2.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
+    ("recipe-v2.schema.json", "$defs/vllm", VllmLaunch),
+    ("recipe-v2.schema.json", "$defs/deployment", ModelDeployment),
+    ("recipe-v2.schema.json", "$defs/model", ModelCandidate),
     ("private-audit-v1.schema.json", "$defs/accelerator", AcceleratorSnapshot),
     ("private-audit-v1.schema.json", "$defs/outcome", ProbeOutcome),
     ("private-audit-v1.schema.json", "$defs/phase", PowerPhaseSummary),

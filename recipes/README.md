@@ -28,10 +28,10 @@ The TUI names a recipe from three fields:
   model folder uses the same name.
 - `quantization` is the weight format the files use, such as `Q4_K_M`,
   `UD-Q4_K_M`, or `NVFP4`.
-- `hardware` is the hardware folder's name. A new hardware folder also needs
-  its name added to `HardwareTarget` in
-  [`catalog.py`](../agentperf_local/deployment/catalog.py) and a label in
-  [`labels.py`](../agentperf_local/tui/labels.py).
+- `hardware` names the hardware the recipe was built for, like its folder,
+  such as `rtx-5090` or `any`. The TUI shows a label for the folders the
+  catalog ships, set in [`labels.py`](../agentperf_local/tui/labels.py), and
+  the folder name for any other.
 
 The speed-up it shows, such as MTP or DFlash, comes from `speculation_policy`.
 
@@ -87,7 +87,7 @@ them as not from the Artificial Analysis catalog.
 6. Run it once with `managed-run` on the hardware. Put the result summary
    and your hardware in the pull request.
 
-[`recipe-v1.schema.json`](../docs/schemas/recipe-v1.schema.json) describes
+[`recipe-v2.schema.json`](../docs/schemas/recipe-v2.schema.json) describes
 every field. The loader in
 [`catalog.py`](../agentperf_local/deployment/catalog.py) is stricter than the
 schema. Its error messages name the field that is wrong.

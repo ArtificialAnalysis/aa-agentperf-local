@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/recipe-v1.schema.json",
-  "title": "agentperf-local managed-run recipe v1",
+  "$id": "https://artificialanalysis.ai/schemas/agentperf-local/recipe-v2.schema.json",
+  "title": "agentperf-local managed-run recipe v2",
   "$ref": "#/$defs/model",
   "$defs": {
     "identifier": {
@@ -407,14 +407,7 @@
           "maxLength": 160
         },
         "hardware": {
-          "enum": [
-            "dgx-spark",
-            "m5-pro",
-            "rtx-5090",
-            "strix-halo",
-            "nvidia-cuda",
-            "any"
-          ]
+          "$ref": "#/$defs/identifier"
         },
         "hf_repository": {
           "$ref": "#/$defs/repository"

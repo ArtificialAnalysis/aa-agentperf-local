@@ -212,7 +212,6 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("reduced-context", "context_tokens must be 65536"),
         ("multiline-model-name", "model_name must be short printable text"),
         ("model-name-mismatch", "every recipe in gemma4-12b must share the model_name Gemma 4 12B"),
-        ("hardware-folder-mismatch", "must sit in the folder of its hardware rtx-5090"),
         ("llama-backend-device", "backend must match the recipe's devices"),
         (
             "llama-threads-zero",
@@ -268,8 +267,6 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         gemma["model_name"] = "Gemma Four"
         _write(root, Path("gemma4-12b", "nvidia-cuda", "gemma4-12b-sibling.yaml"), gemma)
         gemma = _read(root, GEMMA_RECIPE)
-    elif case == "hardware-folder-mismatch":
-        gemma["hardware"] = "rtx-5090"
     elif case.startswith("llama-"):
         metal = _read(root, METAL_RECIPE)
         deployment = metal.get("deployment")

@@ -252,16 +252,18 @@ A single spinning live line names the step in progress. A metrics column on
 the right shows the run's tokens per second so far and a decode-speed range chart.
 Press `d` to reveal the first-token range chart and per-turn trend. A managed run also shows the
 model download progress in GiB and can swap the activity log for the server's
-own log with `l`. Terminals narrower than 90 columns show the activity log by
-default; `d` switches to the metrics. They also shorten the context line. Terminals shorter than 34 rows omit the trend, and shorter than
-27 rows omit the first-token chart.
+own log with `l`. Below 100 columns the run screen shows the activity log by
+default, because its metrics column is wider than other side panels; `d`
+switches to the metrics. Terminals narrower than 90 columns also shorten the
+context line. Terminals shorter than 28 rows omit the trend, and shorter than
+21 rows omit the first-token chart.
 
 The result screen leads with the outcome, tokens per second, median response
 times, and the folder containing the reports. **Result details** reveals p90
 timings, per-turn decode percentiles, and three final range charts.
 
 A range chart is a one-line box plot of one per-turn metric, labelled under
-the line with the slowest-to-fastest range (min and max) and the median. The
+the line with its lowest and highest values (min and max) and the median. The
 whiskers reach the min and max, the box spans the middle half of turns (p25 to
 p75), and the lit cell is the median. The plot is a sketch rather than to scale:
 it centres on the median on a log scale, so its width shows how far turns stray
