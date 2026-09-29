@@ -1,10 +1,7 @@
 """Find the full git commit of the framework build that served a run.
 
-Public surface: FrameworkRef, framework_ref, commit_ref, and resolve_framework_commit.
-
-A framework reports its build in its version text. The text names either a short
-commit, as llama.cpp and development builds do, or a release, whose tag names a commit.
-The GitHub API turns either into the full 40-character commit.
+Public surface: FrameworkRef, RefKind, GITHUB_API_URL_ENV, framework_ref, commit_ref, and
+resolve_framework_commit.
 """
 
 from __future__ import annotations
@@ -33,7 +30,11 @@ SHORT_COMMIT_PATTERNS = (
     re.compile(r"\(([0-9a-f]{7,40})\)"),
     re.compile(r"\+g([0-9a-f]{7,40})\b"),
 )
-RELEASE_VERSION = re.compile(r"\b(\d+\.\d+\.\d+)\b")
+# A release is x.y.z, x.y.z.w, or x.y.z.postN, and its tag spells the whole version. A version
+# with any other suffix, such as 0.5.3rc1, names no tag and is refused rather than shortened.
+RELEASE_VERSION = re.compile(r"(?<![\w.])(\d+\.\d+\.\d+(?:\.post\d+|\.\d+)?)(?![\w.])")
+# A local build label, such as +cu128, is not part of the release tag.
+LOCAL_VERSION_LABEL = re.compile(r"\+[0-9A-Za-z.]+")
 
 type RefKind = Literal["commit", "tag"]
 
@@ -64,13 +65,17 @@ class FrameworkRef(BaseModel, frozen=True):
 
 
 def framework_ref(framework: Framework, version: str) -> FrameworkRef:
-    """Read the commit or release tag that one framework's version text names."""
+    """Read the commit or release tag that one framework's version text names.
+
+    llama.cpp and development builds name a short commit. A release names a tag, and
+    GitHub turns either into the full commit.
+    """
     source = _FRAMEWORK_SOURCES[framework]
     for pattern in SHORT_COMMIT_PATTERNS:
         match = pattern.search(version)
         if match is not None:
             return FrameworkRef(repository=source.repository, kind="commit", value=match.group(1))
-    release = RELEASE_VERSION.search(version)
+    release = RELEASE_VERSION.search(LOCAL_VERSION_LABEL.sub("", version))
     if release is None or source.tag_prefix is None:
         raise ValueError(f"the {framework} version {version!r} names no commit or release to look up")
     return FrameworkRef(repository=source.repository, kind="tag", value=f"{source.tag_prefix}{release.group(1)}")

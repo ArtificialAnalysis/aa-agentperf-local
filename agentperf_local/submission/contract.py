@@ -2,10 +2,8 @@
 
 Public surface: SubmissionRequest and its parts (Client, Benchmark, Hardware, Accelerator,
 ManagedDeployment, AttachedDeployment, CappedOutputPolicy, FreeOutputPolicy, Run, Turn,
-Qualification, QualificationOutcome, Power), the enum aliases they use, and PROBE_IDS.
-
-Each model states the service's cross-field rules as a validator, so a run that the
-service would refuse fails here first, with the field that is wrong.
+Qualification, QualificationOutcome, Power), the enum and pinned-value aliases they use,
+the patterns they share, and PROBE_IDS.
 """
 
 from __future__ import annotations
@@ -276,7 +274,11 @@ class Power(BaseModel, frozen=True, extra="forbid", strict=True, allow_inf_nan=F
 
 
 class SubmissionRequest(BaseModel, frozen=True, extra="forbid", strict=True):
-    """Hold one complete run as the service accepts it. `run_id` is the idempotency key."""
+    """Hold one complete run as the service accepts it. `run_id` is the idempotency key.
+
+    Each model here states the service's cross-field rules as a validator, so a run the
+    service would refuse fails on this computer first, with the field that is wrong.
+    """
 
     run_id: Annotated[str, Field(pattern=RUN_ID_PATTERN)]
     privacy_notice_version: NonEmptyString

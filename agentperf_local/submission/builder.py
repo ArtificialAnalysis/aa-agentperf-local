@@ -2,10 +2,6 @@
 
 Public surface: build_submission_request, encode_submission, write_prepared_submission,
 read_prepared_submission, contract_vendor, PreparedSubmission, and CommitResolver.
-
-The body holds only what the service's contract names. The service derives every
-total, distribution, speed, and cache value from the turns, so the builder sends raw
-values. A run the service would refuse fails here, with the reason, before any upload.
 """
 
 from __future__ import annotations
@@ -505,6 +501,9 @@ def build_submission_request(
 ) -> SubmissionRequest:
     """Build the body of one finished run from its results folder.
 
+    The body holds only what the service's contract names. The service derives every
+    total, distribution, speed, and cache value from the turns, so the body carries raw
+    values. A run the service would refuse fails here, with the reason, before any upload.
     The only network request asks GitHub for the full commit of the framework build.
     """
     binding = load_measurement_binding(results_dir / MEASUREMENT_BINDING_FILENAME)
@@ -565,6 +564,7 @@ def read_prepared_submission(path: Path) -> PreparedSubmission:
     if request.privacy_notice_version != PRIVACY_NOTICE_VERSION:
         raise ValueError(
             f"{path} accepts privacy notice {request.privacy_notice_version}, but this client shows notice "
-            f"{PRIVACY_NOTICE_VERSION}; prepare the submission again"
+            f"{PRIVACY_NOTICE_VERSION}; prepare the submission again. If the service already holds this run, "
+            "it keeps that copy and refuses the new one with idempotency_conflict"
         )
     return PreparedSubmission(request=request, encoded=encoded)

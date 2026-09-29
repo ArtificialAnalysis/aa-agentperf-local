@@ -28,6 +28,9 @@ FULL_COMMIT = "c1d0e7a004015f23bc0233470b747b596f29b264"
         ("vllm", "0.1.dev20073+g8e685d198", "commit", "8e685d198"),
         ("sglang", "sglang version: 0.5.18", "tag", "v0.5.18"),
         ("splash", "Splash 1.0.2", "tag", "1.0.2"),
+        ("sglang", "0.5.3.post1", "tag", "v0.5.3.post1"),
+        ("vllm", "0.10.1.1", "tag", "v0.10.1.1"),
+        ("vllm", "0.11.0+cu128", "tag", "v0.11.0"),
     ],
 )
 def test_a_version_names_the_git_reference_of_its_build(
@@ -38,7 +41,10 @@ def test_a_version_names_the_git_reference_of_its_build(
     assert (ref.kind, ref.value) == (kind, value)
 
 
-@pytest.mark.parametrize(("framework", "version"), [("llama-cpp", "version: 6890"), ("vllm", "unreported")])
+@pytest.mark.parametrize(
+    ("framework", "version"),
+    [("llama-cpp", "version: 6890"), ("vllm", "unreported"), ("vllm", "0.5.3rc1"), ("sglang", "0.5.3.dev1")],
+)
 def test_a_version_that_names_no_build_is_refused(framework: Framework, version: str) -> None:
     with pytest.raises(ValueError, match="names no commit or release"):
         framework_ref(framework, version)

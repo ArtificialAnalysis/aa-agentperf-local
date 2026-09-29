@@ -3,7 +3,7 @@
 Public surface: submit_body, submit_body_async, fetch_submission_status,
 fetch_revision_allowlist, check_revision_allowlist, revision_advice,
 read_submit_token, SubmissionReceipt, SubmissionStatus, RevisionAllowlist,
-RevisionCheck, SubmissionError, and the URL, size, and token constants.
+RevisionCheck, SubmissionError, and the URL, size, error-code, and token constants.
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ USER_AGENT = f"agentperf-local/{__version__}"
 SUBMISSION_ID_PATTERN = re.compile(r"^sub_[a-z2-7]{26}$")
 # "queued" means the service stored the body but has no analytics row yet; sending it again adds the row.
 SUBMISSION_STATUSES = frozenset(("accepted", "queued"))
+# The service's error code for a run_id it already holds with other content.
+IDEMPOTENCY_CONFLICT = "idempotency_conflict"
 CLEARTEXT_TOKEN_MESSAGE = "refusing to send a submit token over cleartext http to a non-loopback host"
 type UploadProgress = Callable[[int, int], None]
 

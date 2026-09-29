@@ -19,6 +19,7 @@ from agentperf_local.submission.builder import (
     write_prepared_submission,
 )
 from agentperf_local.submission.client import (
+    IDEMPOTENCY_CONFLICT,
     SubmissionError,
     fetch_submission_status,
     submit_body,
@@ -85,6 +86,11 @@ def submit_command(namespace: argparse.Namespace) -> int:
     try:
         receipt = submit_body(prepared.encoded, base_url=base_url, token=token, progress=_upload_progress_printer())
     except SubmissionError as error:
+        if error.code == IDEMPOTENCY_CONFLICT:
+            raise ValueError(
+                f"submission refused: the service already holds run {prepared.request.run_id} with other content; "
+                "a run is stored once, so this one is already on file"
+            ) from error
         detail = f" ({', '.join(error.reasons)})" if error.reasons else ""
         raise ValueError(f"submission refused: {error}{detail}") from error
     print_json(

@@ -1,11 +1,7 @@
 """Describe a server the user started on this machine, so an attached run can be submitted.
 
 Public surface: AttachedServer, ATTACHED_SERVER_FILENAME, read_attached_server_description,
-write_attached_server, read_attached_server, and require_backend_matches.
-
-`run --attached-server FILE` reads a YAML description, redacts its launch command, and
-records it in the results folder before the replay starts. The measurement binding
-carries the record's digest, as it does for a managed deployment record.
+write_attached_server, read_attached_server, MAX_ATTACHED_SERVER_BYTES, and require_backend_matches.
 """
 
 from __future__ import annotations
@@ -46,7 +42,12 @@ _VENDOR_BACKENDS: dict[AcceleratorVendor, tuple[AcceleratorBackend, ...]] = {
 
 
 class AttachedServer(BaseModel, frozen=True, extra="forbid"):
-    """Describe the model and framework build of a server the user started on this machine."""
+    """Describe the model and framework build of a server the user started on this machine.
+
+    `run --attached-server FILE` reads a YAML description, redacts its launch command, and
+    records it in the results folder before the replay starts. The measurement binding
+    carries the record's digest, as it does for a managed deployment record.
+    """
 
     model_release_slug: Annotated[str, Field(pattern=MODEL_RELEASE_SLUG_PATTERN)]
     hf_repository: Annotated[str, Field(pattern=REPOSITORY_PATTERN.pattern)]
