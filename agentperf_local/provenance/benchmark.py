@@ -13,6 +13,7 @@ from pydantic import BaseModel, model_validator
 from agentperf_local import __version__
 from agentperf_local.common.durable_files import NewFile, write_new_file
 from agentperf_local.common.identity import (
+    is_git_commit,
     mint_run_id,
     sha256_bytes,
     sha256_file,
@@ -45,7 +46,6 @@ PRODUCER_CLIENT_NAME = "agentperf-local"
 # The release workflow writes the tagged commit here before it builds the wheel. A source
 # checkout has no such file and reads its commit from git instead.
 RELEASE_REVISION_PATH = PACKAGE_DATA_ROOT / "release-revision.txt"
-GIT_REVISION_HEX_DIGITS = 40
 
 # release: an installed release build. clean or dirty: a git checkout with or without
 # uncommitted changes. not_git or unavailable: no commit can be named.
@@ -126,7 +126,7 @@ class SourceProvenance(BaseModel, frozen=True):
         validate_identifier(self.client_version, "client_version")
         if self.source_state not in SOURCE_STATES:
             raise ValueError("source_state is not supported")
-        if self.source_revision is not None and not _is_git_revision(self.source_revision):
+        if self.source_revision is not None and not is_git_commit(self.source_revision):
             raise ValueError("source_revision must be 40 lowercase hex digits or null")
         if self.source_state in {"release", "clean", "dirty"} and self.source_revision is None:
             raise ValueError("a release, clean, or dirty source state requires a source revision")
@@ -223,17 +223,13 @@ def workload_digest(manifest_path: Path) -> str:
     return sha256_bytes(canonical)
 
 
-def _is_git_revision(value: str) -> bool:
-    return len(value) == GIT_REVISION_HEX_DIGITS and all(character in "0123456789abcdef" for character in value)
-
-
 def _release_revision(path: Path) -> str | None:
     """Return the commit a release build embeds, or None for a source checkout."""
     try:
         revision = path.read_text(encoding="ascii").strip()
     except (FileNotFoundError, UnicodeDecodeError):
         return None
-    if not _is_git_revision(revision):
+    if not is_git_commit(revision):
         raise ValueError(f"{path.name} must hold one 40-character lowercase commit")
     return revision
 

@@ -1,6 +1,7 @@
 """Build one valid managed submission body for tests that exercise the upload path."""
 
 from agentperf_local.common.units import BYTES_PER_GIB
+from agentperf_local.deployment.qualification import QUALIFICATION_PROBE_IDS
 from agentperf_local.submission.contract import (
     Accelerator,
     Benchmark,
@@ -18,7 +19,6 @@ from agentperf_local.submission.contract import (
 from agentperf_local.submission.notice import PRIVACY_NOTICE_VERSION
 
 SAMPLE_RUN_ID = "8f5b2f2e-4c3a-4d6e-9b1a-2c3d4e5f6a7b"
-PROBE_IDS = ("single_tool", "no_tool", "parallel_tools", "tool_history", "capped_finish")
 
 
 def sample_submission(*, wall_duration_ms: float = 1_000.0) -> SubmissionRequest:
@@ -91,7 +91,8 @@ def sample_submission(*, wall_duration_ms: float = 1_000.0) -> SubmissionRequest
         qualification=Qualification(
             synthetic_pack_id="aa-runtime-synthetic-v1",
             outcomes=tuple(
-                QualificationOutcome(probe_id=probe_id, passed=True, failure_codes=()) for probe_id in PROBE_IDS
+                QualificationOutcome(probe_id=probe_id, passed=True, failure_codes=())
+                for probe_id in QUALIFICATION_PROBE_IDS
             ),
         ),
         power=Power(

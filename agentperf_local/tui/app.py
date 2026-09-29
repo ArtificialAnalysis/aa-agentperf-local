@@ -90,6 +90,7 @@ from agentperf_local.submission.client import (
     read_submit_token,
     submit_body_async,
 )
+from agentperf_local.submission.notice import PRIVACY_NOTICE
 from agentperf_local.tui.branding import (
     AA_NEUTRAL_500,
     AA_PURPLE,
@@ -295,12 +296,8 @@ CUSTOM_ENDPOINT_DETAIL = (
     "Enter its URL and model name on the next screen. Press ? for the commands that start each server."
 )
 SUBMIT_CHECKBOX_LABEL = "Submit results to Artificial Analysis (optional)"
-SUBMIT_NOTICE = (
-    "May be published: aggregate results and per-turn timings.\n"
-    "Kept private, with no end date: the whole submission, including hardware and the launch command.\n"
-    "Never sent: prompts, responses, credentials, local paths, URLs or hostnames.\n"
-    "Failed qualification probes are recorded, not rejected."
-)
+# The panel shows the notice whose version the submission records, word for word.
+SUBMIT_NOTICE = PRIVACY_NOTICE
 # An attached run needs a description of the server, which only the command line collects.
 SUBMIT_ATTACHED_NOTE = (
     "To submit a run on your own server, use the command line:\n"

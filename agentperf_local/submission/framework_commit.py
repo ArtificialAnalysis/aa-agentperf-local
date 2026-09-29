@@ -13,16 +13,16 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel
 
-from agentperf_local import __version__
+from agentperf_local.common.identity import is_git_commit
 from agentperf_local.common.json_fields import decode_json_object, lenient_string
-from agentperf_local.submission.contract import GIT_COMMIT_PATTERN, Framework
+from agentperf_local.submission.client import USER_AGENT
+from agentperf_local.submission.contract import Framework
 
 GITHUB_API_BASE_URL = "https://api.github.com"
 # Points the lookup at another GitHub API, such as a mirror or a local test server.
 GITHUB_API_URL_ENV = "AGENTPERF_GITHUB_API_URL"
 GITHUB_TIMEOUT_SECONDS = 20.0
 GITHUB_ACCEPT = "application/vnd.github+json"
-FULL_COMMIT = re.compile(GIT_COMMIT_PATTERN)
 # llama.cpp prints "version: 0.3.0 (build 10621, commit c1d0e7a00)" or "version: 6890 (c1d0e7a00)".
 # A development build appends "+g<commit>", as in 0.1.dev20073+g8e685d198.
 SHORT_COMMIT_PATTERNS = (
@@ -93,11 +93,11 @@ def resolve_framework_commit(
     transport: httpx.BaseTransport | None = None,
 ) -> str:
     """Ask GitHub for the full commit a short commit or a tag names."""
-    if ref.kind == "commit" and FULL_COMMIT.fullmatch(ref.value) is not None:
+    if ref.kind == "commit" and is_git_commit(ref.value):
         return ref.value
     base_url = os.environ.get(GITHUB_API_URL_ENV) or GITHUB_API_BASE_URL
     url = f"{base_url.rstrip('/')}/repos/{ref.repository}/commits/{ref.value}"
-    headers = {"Accept": GITHUB_ACCEPT, "User-Agent": f"agentperf-local/{__version__}"}
+    headers = {"Accept": GITHUB_ACCEPT, "User-Agent": USER_AGENT}
     try:
         with httpx.Client(timeout=timeout_seconds, transport=transport, follow_redirects=True) as client:
             response = client.get(url, headers=headers)
@@ -106,7 +106,7 @@ def resolve_framework_commit(
     if response.status_code != httpx.codes.OK:
         raise ValueError(f"GitHub answered {response.status_code} for {ref.repository} {ref.kind} {ref.value}")
     sha = lenient_string(decode_json_object(response.content, "GitHub answered without a JSON object"), "sha")
-    if sha is None or FULL_COMMIT.fullmatch(sha) is None:
+    if sha is None or not is_git_commit(sha):
         raise ValueError(f"GitHub answered without a full commit for {ref.repository} {ref.value}")
     if ref.kind == "commit" and not sha.startswith(ref.value):
         raise ValueError(f"GitHub resolved {ref.repository} commit {ref.value} to {sha}, which does not match")

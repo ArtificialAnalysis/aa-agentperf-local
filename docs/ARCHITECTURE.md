@@ -193,7 +193,7 @@ untrusted input. Docker reduces the risk but is not a security boundary.
 | --- | --- |
 | Hardware doctor | Reports local facts without hostnames, serials, UUIDs, PCI addresses, or raw command output. Reads NVIDIA GPUs from `nvidia-smi`, AMD GPUs from `amd-smi` or `rocm-smi`, Intel GPUs on Linux from `clinfo` with Intel's compute runtime, and Mac GPUs from `system_profiler`. Exits nonzero unless exactly one accelerator is found. |
 | Benchmark binding | Hashes the workload before a run and binds it to the suite, model, runtime, and hardware fields. |
-| Runtime qualification | Runs five synthetic endpoint probes after the server is ready and before the replay, for managed and attached runs alike. It records structure only, not generated text or URLs. Passing is necessary, not sufficient. |
+| Runtime qualification | Runs five synthetic endpoint probes after the server is ready and before the replay, for managed runs and for `run --attached-server`. It records structure only, not generated text or URLs. Passing is necessary, not sufficient. |
 | NVIDIA telemetry | A child-process collector that runs around the replay on NVIDIA hosts. A submission carries the measured phase's power summary. |
 | Submission body | Builds one typed body from the recorded files and checks it against the service's pinned spec. See [SUBMITTING.md](SUBMITTING.md). |
 

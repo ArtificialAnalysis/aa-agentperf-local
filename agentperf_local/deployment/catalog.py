@@ -17,6 +17,7 @@ from agentperf_local.common.json_types import JsonObject, normalize_json_object
 from agentperf_local.common.models import read_object
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
 from agentperf_local.provenance.benchmark import BENCHMARK_CONTEXT_TOKENS
+from agentperf_local.submission.contract import MODEL_RELEASE_SLUG_PATTERN
 
 MAX_DISPLAY_NAME_CHARACTERS = 160
 MAX_RECIPE_BYTES = 262_144
@@ -27,7 +28,7 @@ HF_REVISION_HEX_DIGITS = 40
 SHA256_HEX_DIGITS = 64
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 # The Artificial Analysis model_releases.slug of the recipe's base model, such as qwen3-8-27b.
-MODEL_RELEASE_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$")
+MODEL_RELEASE_SLUG = re.compile(MODEL_RELEASE_SLUG_PATTERN)
 RELEASE_VERSION_PARTS = 3
 # A development build is pinned by its exact version string, such as 0.1.dev20073+g8e685d198:
 # a base version, a commit count, and the abbreviated commit it was built from.
@@ -494,7 +495,7 @@ class ModelCandidate(BaseModel, frozen=True):
             raise ValueError("display_name must be short printable text")
         if not self.display_name.isprintable():
             raise ValueError("display_name must be short printable text")
-        if MODEL_RELEASE_SLUG_PATTERN.fullmatch(self.model_release_slug) is None:
+        if MODEL_RELEASE_SLUG.fullmatch(self.model_release_slug) is None:
             raise ValueError("model_release_slug must be letters and digits joined by single dots or hyphens")
         if REPOSITORY_PATTERN.fullmatch(self.hf_repository) is None:
             raise ValueError("hf_repository must contain one owner and repository name")

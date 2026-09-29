@@ -2270,9 +2270,9 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
             submit_box = app.query_one("#submit-checkbox", Checkbox)
             notice = str(app.query_one("#submit-notice", Static).content)
             assert not submit_box.disabled
-            assert "May be published" in notice
-            assert "Kept private, with no end date" in notice
-            assert "Never sent" in notice
+            assert "may publish aggregate results" in notice
+            assert "private storage indefinitely" in notice
+            assert "are never sent" in notice
             assert "Failed qualification probes are recorded" in notice
             # The fake allowlist never contains this checkout, so the advisory check has spoken.
             assert "This client version can submit, but cannot reach verified" in notice

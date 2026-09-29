@@ -76,8 +76,10 @@ from agentperf_local.submission.contract import AcceleratorBackend
 # and the recipe text, which a submission sends.
 type DeploymentRecordVersion = Literal[5]
 DEPLOYMENT_RECORD_VERSION: DeploymentRecordVersion = 5
-DEPLOYMENT_RECORD_KIND = "managed_model_deployment"
-DEPLOYMENT_RECORD_STATUS = "ready-at-benchmark-start"
+type DeploymentRecordKind = Literal["managed_model_deployment"]
+type DeploymentRecordStatus = Literal["ready-at-benchmark-start"]
+DEPLOYMENT_RECORD_KIND: DeploymentRecordKind = "managed_model_deployment"
+DEPLOYMENT_RECORD_STATUS: DeploymentRecordStatus = "ready-at-benchmark-start"
 MAX_DEPLOYMENT_RECORD_BYTES = 1024 * 1024
 DEPLOYMENT_RECORD_FILENAME = "deployment.json"
 DEPLOYMENT_LOG_FILENAME = "deployment.log"
@@ -1055,8 +1057,8 @@ class DeploymentRecord(BaseModel, frozen=True):
     """
 
     version: DeploymentRecordVersion
-    kind: Literal["managed_model_deployment"]
-    status: Literal["ready-at-benchmark-start"]
+    kind: DeploymentRecordKind
+    status: DeploymentRecordStatus
     gpu_startup_verified: Literal[True]
     recipe: str
     deployment: RecordedPlan

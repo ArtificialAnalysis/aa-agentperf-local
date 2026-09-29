@@ -80,7 +80,8 @@ async def record_attached_run(
         ATTACHED_SERVER.format(
             hf_revision="a" * 40,
             framework_version=FRAMEWORK_VERSION,
-            model_dir=tmp_path / "models",
+            # A person on Windows writes forward slashes, which the redactor requires there.
+            model_dir=(tmp_path / "models").as_posix(),
             api_key=API_KEY_VALUE,
         )
     )

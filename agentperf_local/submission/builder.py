@@ -1,12 +1,11 @@
 """Build the submission body for one finished run from the files in its results folder.
 
 Public surface: build_submission_request, encode_submission, write_prepared_submission,
-read_prepared_submission, contract_vendor, PreparedSubmission, and CommitResolver.
+read_prepared_submission, and PreparedSubmission.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -43,13 +42,12 @@ from agentperf_local.provenance.benchmark import (
     load_measurement_binding,
     workload_digest,
 )
-from agentperf_local.provenance.hardware import HardwareSnapshot, selected_accelerator
+from agentperf_local.provenance.hardware import HardwareSnapshot, contract_vendor, selected_accelerator
 from agentperf_local.replay.config import OutputTokenPolicy, ToolReplayMode
 from agentperf_local.reports.reporting import SUMMARY_FILENAME, TURNS_FILENAME
 from agentperf_local.submission.client import MAX_REQUEST_BYTES
 from agentperf_local.submission.contract import (
     Accelerator,
-    AcceleratorVendor,
     Architecture,
     AttachedDeployment,
     Benchmark,
@@ -72,7 +70,6 @@ from agentperf_local.submission.contract import (
     Turn,
 )
 from agentperf_local.submission.framework_commit import (
-    FrameworkRef,
     commit_ref,
     framework_ref,
     resolve_framework_commit,
@@ -82,13 +79,10 @@ from agentperf_local.submission.spec import validate_against_spec
 from agentperf_local.telemetry.power import POWER_SUMMARY_FILENAME, load_power_summary
 from agentperf_local.workload.schema import load_manifest, load_trace
 
-type CommitResolver = Callable[[FrameworkRef], str]
-
 # Observers run between turns, and their time is left out of the measured window. A run
 # stays submittable while that time is a small share of what was measured.
 OBSERVER_OVERHEAD_TOLERANCE_FRACTION = 0.01
 MAX_SUMMARY_BYTES = 16 * 1024 * 1024
-FULL_COMMIT_LENGTH = 40
 
 _PLATFORM_FAMILIES: dict[str, PlatformFamily] = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}
 # platform.machine() spells the same architecture differently on each operating system.
@@ -100,7 +94,6 @@ _ARCHITECTURES: dict[str, Architecture] = {
     "arm64": "arm64",
     "ARM64": "arm64",
 }
-_VENDORS: dict[str, AcceleratorVendor] = {"NVIDIA": "nvidia", "Apple": "apple", "AMD": "amd", "Intel": "intel"}
 
 
 class _RecordedContext(BaseModel, frozen=True):
@@ -252,20 +245,16 @@ def _turn_positions(binding: MeasurementBinding, turns: tuple[_RecordedTurn, ...
     manifest = load_manifest(binding.manifest_path)
     root = binding.manifest_path.parent
     expected = tuple(
-        (task_ordinal, row.turn_id)
+        (row.turn_id, task_ordinal, turn_in_task)
         for task_ordinal, task in enumerate(manifest.tasks)
-        for row in load_trace(root / task.trace)
+        for turn_in_task, row in enumerate(load_trace(root / task.trace))
     )
-    if tuple(turn.turn_id for turn in turns) != tuple(turn_id for _, turn_id in expected):
+    if tuple(turn.turn_id for turn in turns) != tuple(turn_id for turn_id, _, _ in expected):
         raise ValueError("turns.jsonl is missing turns, has them out of order, or belongs to another workload")
-    positions: list[_TurnPosition] = []
-    for turn_ordinal, (task_ordinal, _) in enumerate(expected):
-        previous = positions[-1] if positions else None
-        turn_in_task = (
-            previous.turn_in_task + 1 if previous is not None and previous.task_ordinal == task_ordinal else 0
-        )
-        positions.append(_TurnPosition(turn_ordinal=turn_ordinal, task_ordinal=task_ordinal, turn_in_task=turn_in_task))
-    return tuple(positions)
+    return tuple(
+        _TurnPosition(turn_ordinal=turn_ordinal, task_ordinal=task_ordinal, turn_in_task=turn_in_task)
+        for turn_ordinal, (_, task_ordinal, turn_in_task) in enumerate(expected)
+    )
 
 
 def _required[Value](value: Value | None, turn: _RecordedTurn, field: str) -> Value:
@@ -315,14 +304,6 @@ def _client(producer: SourceProvenance) -> Client:
     )
 
 
-def contract_vendor(label: str) -> AcceleratorVendor:
-    """Return the contract's name for one accelerator vendor, as a hardware probe labels it."""
-    vendor = _VENDORS.get(label)
-    if vendor is None:
-        raise ValueError(f"a {label} accelerator cannot be submitted")
-    return vendor
-
-
 def _hardware(snapshot: HardwareSnapshot) -> Hardware:
     """Describe the host and its one accelerator with the raw values their probes read."""
     platform_family = _PLATFORM_FAMILIES.get(snapshot.operating_system)
@@ -363,9 +344,7 @@ def _bound_file(results_dir: Path, filename: str, max_bytes: int, binding: Measu
     return encoded
 
 
-def _managed_deployment(
-    results_dir: Path, binding: MeasurementBinding, resolve_commit: CommitResolver
-) -> ManagedDeployment:
+def _managed_deployment(results_dir: Path, binding: MeasurementBinding) -> ManagedDeployment:
     source = DEPLOYMENT_RECORD_FILENAME
     record = read_deployment_record(
         _bound_file(results_dir, source, MAX_DEPLOYMENT_RECORD_BYTES, binding), str(results_dir / source)
@@ -379,7 +358,7 @@ def _managed_deployment(
         hf_revision=plan.hf_revision,
         framework=plan.framework,
         framework_version=plan.runtime.version,
-        framework_commit=resolve_commit(framework_ref(plan.framework, plan.runtime.version)),
+        framework_commit=resolve_framework_commit(framework_ref(plan.framework, plan.runtime.version)),
         server_launch_command=plan.server_launch_command,
         accelerator_backend=plan.accelerator_backend,
         profile_id=plan.profile_id,
@@ -389,20 +368,16 @@ def _managed_deployment(
     )
 
 
-def _attached_framework_commit(server: AttachedServer, resolve_commit: CommitResolver) -> str | None:
+def _attached_framework_commit(server: AttachedServer) -> str | None:
     """Return the full framework commit, or None when a pinned container identifies the build."""
     if server.framework_commit is not None:
-        if len(server.framework_commit) == FULL_COMMIT_LENGTH:
-            return server.framework_commit
-        return resolve_commit(commit_ref(server.framework, server.framework_commit))
+        return resolve_framework_commit(commit_ref(server.framework, server.framework_commit))
     if server.framework_container_reference is not None:
         return None
-    return resolve_commit(framework_ref(server.framework, server.framework_version))
+    return resolve_framework_commit(framework_ref(server.framework, server.framework_version))
 
 
-def _attached_deployment(
-    results_dir: Path, binding: MeasurementBinding, base_url: str, resolve_commit: CommitResolver
-) -> AttachedDeployment:
+def _attached_deployment(results_dir: Path, binding: MeasurementBinding, base_url: str) -> AttachedDeployment:
     if not url_names_loopback_host(base_url):
         raise ValueError("an attached run can be submitted only when the server ran on this computer")
     source = ATTACHED_SERVER_FILENAME
@@ -416,7 +391,7 @@ def _attached_deployment(
         hf_revision=server.hf_revision,
         framework=server.framework,
         framework_version=server.framework_version,
-        framework_commit=_attached_framework_commit(server, resolve_commit),
+        framework_commit=_attached_framework_commit(server),
         framework_container_reference=server.framework_container_reference,
         server_launch_command=server.server_launch_command,
         accelerator_backend=server.accelerator_backend,
@@ -424,15 +399,15 @@ def _attached_deployment(
 
 
 def _deployment(
-    results_dir: Path, binding: MeasurementBinding, base_url: str, resolve_commit: CommitResolver
+    results_dir: Path, binding: MeasurementBinding, base_url: str
 ) -> ManagedDeployment | AttachedDeployment:
     if binding.deployment_digest is None:
         raise ValueError(
             "this run recorded no server description; for your own server, run again with --attached-server FILE"
         )
     if (results_dir / DEPLOYMENT_RECORD_FILENAME).exists():
-        return _managed_deployment(results_dir, binding, resolve_commit)
-    return _attached_deployment(results_dir, binding, base_url, resolve_commit)
+        return _managed_deployment(results_dir, binding)
+    return _attached_deployment(results_dir, binding, base_url)
 
 
 def _qualification(results_dir: Path, binding: MeasurementBinding) -> Qualification:
@@ -496,9 +471,7 @@ def _policy(config: _RecordedConfig) -> CappedOutputPolicy:
     )
 
 
-def build_submission_request(
-    results_dir: Path, *, resolve_commit: CommitResolver = resolve_framework_commit
-) -> SubmissionRequest:
+def build_submission_request(results_dir: Path) -> SubmissionRequest:
     """Build the body of one finished run from its results folder.
 
     The body holds only what the service's contract names. The service derives every
@@ -524,7 +497,7 @@ def build_submission_request(
             observed_context_tokens=binding.observed_context_tokens,
         ),
         hardware=_hardware(binding.hardware),
-        deployment=_deployment(results_dir, binding, summary.config.base_url, resolve_commit),
+        deployment=_deployment(results_dir, binding, summary.config.base_url),
         policy=_policy(summary.config),
         run=Run(wall_duration_ms=summary.wall_duration_ms, observer_duration_ms=summary.observer.duration_ms),
         turns=tuple(_contract_turn(turn, position) for turn, position in zip(recorded_turns, positions, strict=True)),

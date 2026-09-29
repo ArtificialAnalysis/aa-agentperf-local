@@ -13,6 +13,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, NonNegativeFloat, model_validator
 
+from agentperf_local.common.identity import GIT_COMMIT_PATTERN
 from agentperf_local.common.units import BYTES_PER_GIB
 
 INT64_MAX = 2**63 - 1
@@ -24,7 +25,6 @@ MINIMUM_DECODE_OUTPUT_TOKENS = 2
 NVIDIA_DRIVER_VERSION = re.compile(r"^[0-9]+(\.[0-9]+)*$")
 RUN_ID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 MODEL_RELEASE_SLUG_PATTERN = r"^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$"
-GIT_COMMIT_PATTERN = r"^[0-9a-f]{40}$"
 CONTAINER_REFERENCE_PATTERN = r"^[^\s@]+@sha256:[0-9a-f]{64}$"
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
@@ -56,7 +56,6 @@ type OutputTokenMargin = Literal[0]
 type SyntheticPackId = Literal["aa-runtime-synthetic-v1"]
 type PowerCollectorId = Literal["aa-nvidia-smi-v1"]
 
-ACCELERATOR_BACKENDS: tuple[AcceleratorBackend, ...] = ("cuda", "metal", "rocm", "vulkan", "sycl", "xpu")
 PROBE_IDS: frozenset[ProbeId] = frozenset(("single_tool", "no_tool", "parallel_tools", "tool_history", "capped_finish"))
 
 

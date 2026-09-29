@@ -344,7 +344,8 @@ class EndpointMeasurement(BaseModel, frozen=True):
     run_id: str
     run_context: RunContextFacts
     # The qualification report names the recipe it probed, or "attached" for a user's server.
-    qualification_profile_id: str
+    # None skips the probes, for a run that cannot be submitted anyway.
+    qualification_profile_id: str | None
     # None when the accelerator is not one that power telemetry can sample.
     accelerator_platform: AcceleratorPlatform | None
     device_index: int
@@ -357,8 +358,28 @@ class MeasuredEndpoint(BaseModel, frozen=True):
 
     result: RunResult
     artifacts: ArtifactPaths
-    qualification: RuntimeQualification
+    qualification: RuntimeQualification | None
     power_summary: Path | None
+
+
+async def _qualify(
+    measurement: EndpointMeasurement, profile_id: str, observer: ManagedRunObserver
+) -> RuntimeQualification:
+    """Run the synthetic protocol probes against the ready server and write their report."""
+    config = measurement.config
+    observer.on_activity(RunActivity(kind=RunActivityKind.QUALIFYING))
+    qualification = await qualify_endpoint(
+        config.base_url, config.model, profile_id, config.client_backend, measurement.run_id, api_key=config.api_key
+    )
+    await asyncio.to_thread(write_runtime_qualification, measurement.output_dir / QUALIFICATION_FILENAME, qualification)
+    observer.on_activity(
+        RunActivity(
+            kind=RunActivityKind.QUALIFIED,
+            probes_passed=sum(1 for outcome in qualification.required_outcomes if outcome.passed),
+            probes_total=len(qualification.required_outcomes),
+        )
+    )
+    return qualification
 
 
 async def measure_endpoint(measurement: EndpointMeasurement, observer: ManagedRunObserver) -> MeasuredEndpoint:
@@ -369,22 +390,10 @@ async def measure_endpoint(measurement: EndpointMeasurement, observer: ManagedRu
     """
     output_dir = measurement.output_dir
     config = measurement.config
-    observer.on_activity(RunActivity(kind=RunActivityKind.QUALIFYING))
-    qualification = await qualify_endpoint(
-        config.base_url,
-        config.model,
-        measurement.qualification_profile_id,
-        config.client_backend,
-        measurement.run_id,
-        api_key=config.api_key,
-    )
-    await asyncio.to_thread(write_runtime_qualification, output_dir / QUALIFICATION_FILENAME, qualification)
-    observer.on_activity(
-        RunActivity(
-            kind=RunActivityKind.QUALIFIED,
-            probes_passed=sum(1 for outcome in qualification.required_outcomes if outcome.passed),
-            probes_total=len(qualification.required_outcomes),
-        )
+    qualification = (
+        None
+        if measurement.qualification_profile_id is None
+        else await _qualify(measurement, measurement.qualification_profile_id, observer)
     )
     power_collector = (
         nvidia_power_collector(
@@ -563,7 +572,7 @@ async def run_managed_replay(inputs: ManagedRunInputs, observer: ManagedRunObser
             deployment_log=log_path,
             measurement=measurement_path,
             qualification=output_dir / QUALIFICATION_FILENAME,
-            qualification_passed=measurement.qualification.passed,
+            qualification_passed=measurement.qualification is not None and measurement.qualification.passed,
             power_summary=measurement.power_summary,
         )
     except BaseException:

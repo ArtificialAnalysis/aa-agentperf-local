@@ -17,7 +17,6 @@ from agentperf_local.deployment.endpoint_probes import (
     probe_ignore_eos,
     probe_served_context_tokens,
 )
-from agentperf_local.deployment.qualification import QUALIFICATION_PROBE_IDS
 from agentperf_local.provenance.context import ContextObservationReason
 from tests.localhost_sse import SSE_OK_RESPONSE, LocalSseServer
 from tests.replay_workload import write_replay_workload
@@ -192,12 +191,11 @@ async def test_run_warns_early_and_switches_to_recorded_against_ollama(
     captured = capsys.readouterr()
     assert status == 0, captured.err
     assert f"warning: {OLLAMA_RECORDED_POLICY_WARNING}" in captured.err
-    # The identity check came first, and no POST asks for ignore_eos: the qualification
-    # probes, then the replay's own turn.
+    # The identity check came first, and the only POST is the replay's own turn, without ignore_eos.
     assert server.requests[0].path == "/api/version"
     posts = [request for request in server.requests if request.method == "POST"]
-    assert len(posts) == len(QUALIFICATION_PROBE_IDS) + 1
-    assert not any(post.asks_ignore_eos for post in posts)
+    assert len(posts) == 1
+    assert not posts[0].asks_ignore_eos
 
 
 @pytest.mark.parametrize(

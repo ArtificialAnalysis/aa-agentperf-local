@@ -25,6 +25,7 @@ from agentperf_local.provenance.hardware_facts import (
 )
 
 NVIDIA_VENDOR = "NVIDIA"
+AMD_VENDOR = "AMD"
 
 
 NVIDIA_SMI_BASE_FIELDS = ("name", "memory.total", "driver_version")
@@ -107,7 +108,7 @@ MACOS_VENDOR_KEY = "sppci_vendor"
 MACOS_VENDOR_PREFIX = "sppci_vendor_"
 
 
-MACOS_VENDOR_NAMES = {"amd": "AMD", "ati": "AMD", "intel": "Intel"}
+MACOS_VENDOR_NAMES = {"amd": AMD_VENDOR, "ati": AMD_VENDOR, "intel": INTEL_VENDOR}
 
 
 MACOS_DEFAULT_VENDOR = "Apple"
@@ -494,7 +495,7 @@ def _parse_amd_output(encoded: bytes) -> tuple[AcceleratorSnapshot, ...]:
         if name is None:
             continue
         accelerator = _accelerator_or_none(
-            vendor="AMD",
+            vendor=AMD_VENDOR,
             name=name,
             memory_bytes=_nested_memory_bytes(device),
             core_count=None,

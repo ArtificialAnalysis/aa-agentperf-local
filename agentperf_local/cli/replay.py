@@ -29,6 +29,7 @@ from agentperf_local.cli.options import (
     require_fresh_output_dir,
     resolve_submit_token,
 )
+from agentperf_local.client.endpoint import url_names_loopback_host
 from agentperf_local.client.rust_client import validate_rustcore_available
 from agentperf_local.common.argparse_fields import (
     read_boolean,
@@ -88,7 +89,6 @@ from agentperf_local.deployment.managed_run import (
 from agentperf_local.deployment.qualification import (
     QUALIFICATION_FILENAME,
 )
-from agentperf_local.provenance.accelerator_probes import NVIDIA_VENDOR
 from agentperf_local.provenance.benchmark import (
     BENCHMARK_CONTEXT_TOKENS,
     MEASUREMENT_BINDING_FILENAME,
@@ -102,6 +102,8 @@ from agentperf_local.provenance.context import RunContextFacts
 from agentperf_local.provenance.hardware import (
     AcceleratorPlatform,
     HardwareSnapshot,
+    accelerator_platform,
+    contract_vendor,
     selected_accelerator,
 )
 from agentperf_local.replay.config import (
@@ -113,7 +115,6 @@ from agentperf_local.reports.progress import TerminalRunObserver
 from agentperf_local.reports.reporting import (
     ArtifactPaths,
 )
-from agentperf_local.submission.builder import contract_vendor
 from agentperf_local.submission.client import (
     check_revision_allowlist,
 )
@@ -420,21 +421,29 @@ def _resolve_output_token_policy(namespace: argparse.Namespace) -> OutputTokenPo
     return "exact"
 
 
-def _attached_server(namespace: argparse.Namespace, snapshot: HardwareSnapshot) -> AttachedServer | None:
+def _attached_server(namespace: argparse.Namespace, snapshot: HardwareSnapshot, base_url: str) -> AttachedServer | None:
     """Read the server description a submittable run needs, and check it against this host."""
     path = read_optional_path(namespace, "attached_server")
     if path is None:
         return None
+    if not url_names_loopback_host(base_url):
+        raise ValueError(
+            "--attached-server describes a server on this computer; point --base-url at a loopback address"
+        )
     server = read_attached_server_description(path)
     require_backend_matches(server, contract_vendor(selected_accelerator(snapshot).vendor))
     return server
 
 
 def _power_platform(snapshot: HardwareSnapshot) -> AcceleratorPlatform | None:
-    """Return the platform power telemetry samples, which is one NVIDIA accelerator or none."""
-    if len(snapshot.accelerators) != 1 or snapshot.accelerators[0].vendor != NVIDIA_VENDOR:
+    """Return the one accelerator's platform, or None when no single platform can be named.
+
+    Power telemetry samples only NVIDIA; the collector refuses every other platform itself.
+    """
+    try:
+        return accelerator_platform(snapshot)
+    except ValueError:
         return None
-    return "nvidia-cuda"
 
 
 def run_command(namespace: argparse.Namespace) -> int:
@@ -451,7 +460,7 @@ def run_command(namespace: argparse.Namespace) -> int:
     device_index = read_optional_integer(namespace, "device")
     snapshot = read_selected_hardware(namespace)
     # Checked before any endpoint contact, so a wrong description costs no run.
-    attached_server = _attached_server(namespace, snapshot)
+    attached_server = _attached_server(namespace, snapshot, config.base_url)
     context = create_attached_submission_context(manifest_path, config.model)
     binding = create_measurement_binding(
         context,
@@ -527,7 +536,8 @@ def run_command(namespace: argparse.Namespace) -> int:
                     config=config,
                     run_id=run_id,
                     run_context=run_context,
-                    qualification_profile_id=ATTACHED_QUALIFICATION_PROFILE_ID,
+                    # Only a run that can be submitted pays for the probes.
+                    qualification_profile_id=None if attached_server is None else ATTACHED_QUALIFICATION_PROFILE_ID,
                     accelerator_platform=_power_platform(snapshot),
                     device_index=0 if device_index is None else device_index,
                     power=read_boolean(namespace, "power"),
@@ -542,8 +552,8 @@ def run_command(namespace: argparse.Namespace) -> int:
             "run_id": run_id,
             "context": run_context.to_json(),
             "attached_server": None if written_server is None else str(written_server.path),
-            "qualification": str(output_dir / QUALIFICATION_FILENAME),
-            "qualification_passed": measured.qualification.passed,
+            "qualification": None if measured.qualification is None else str(output_dir / QUALIFICATION_FILENAME),
+            "qualification_passed": None if measured.qualification is None else measured.qualification.passed,
             "power": None if measured.power_summary is None else str(measured.power_summary),
             "artifacts": _artifact_json(measured.artifacts),
         }

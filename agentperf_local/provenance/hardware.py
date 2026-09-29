@@ -16,7 +16,10 @@ from agentperf_local.common.json_fields import (
 from agentperf_local.common.json_types import JsonObject, JsonValue
 from agentperf_local.common.models import replace_fields
 from agentperf_local.provenance.accelerator_probes import (
+    AMD_VENDOR,
     INTEL_VENDOR,
+    MACOS_DEFAULT_VENDOR,
+    NVIDIA_VENDOR,
     inspect_amd,
     inspect_intel,
     inspect_macos,
@@ -30,6 +33,7 @@ from agentperf_local.provenance.hardware_facts import (
     validate_public_label,
     warning_code,
 )
+from agentperf_local.submission.contract import AcceleratorVendor
 
 # Version 2 added memory_is_unified, without which a coherent-memory accelerator such as
 # the GB10 reports no capacity at all and every managed recipe is refused on it.
@@ -90,7 +94,23 @@ class HardwareSnapshot(BaseModel, frozen=True):
 
 
 type AcceleratorPlatform = Literal["nvidia-cuda", "amd-rocm", "apple-metal"]
-ACCELERATOR_PLATFORMS: tuple[AcceleratorPlatform, ...] = ("nvidia-cuda", "amd-rocm", "apple-metal")
+
+
+# The submission contract's name for each vendor label the probes write.
+_CONTRACT_VENDORS: dict[str, AcceleratorVendor] = {
+    NVIDIA_VENDOR: "nvidia",
+    MACOS_DEFAULT_VENDOR: "apple",
+    AMD_VENDOR: "amd",
+    INTEL_VENDOR: "intel",
+}
+
+
+def contract_vendor(label: str) -> AcceleratorVendor:
+    """Return the submission contract's name for one accelerator vendor, as a probe labels it."""
+    vendor = _CONTRACT_VENDORS.get(label)
+    if vendor is None:
+        raise ValueError(f"a {label} accelerator cannot be submitted")
+    return vendor
 
 
 def selected_accelerator(snapshot: HardwareSnapshot) -> AcceleratorSnapshot:

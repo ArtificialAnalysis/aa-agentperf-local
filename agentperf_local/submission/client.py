@@ -52,13 +52,11 @@ class SubmissionError(RuntimeError):
         code: str,
         status_code: int | None = None,
         reasons: tuple[str, ...] = (),
-        retry_after_seconds: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
         self.reasons = reasons
-        self.retry_after_seconds = retry_after_seconds
 
 
 class SubmissionReceipt(BaseModel, frozen=True):
@@ -165,8 +163,6 @@ def _error_from_response(response: httpx.Response) -> SubmissionError:
     reasons: tuple[str, ...] = ()
     if isinstance(raw_reasons, list):
         reasons = tuple(reason for reason in raw_reasons if isinstance(reason, str))
-    raw_retry = detail.get("retry_after_seconds")
-    retry_after_seconds = raw_retry if isinstance(raw_retry, int) and not isinstance(raw_retry, bool) else None
     code = lenient_string(envelope, "code") or f"http_{response.status_code}"
     message = lenient_string(envelope, "message") or f"the service answered {response.status_code}"
     return SubmissionError(
@@ -174,7 +170,6 @@ def _error_from_response(response: httpx.Response) -> SubmissionError:
         code=code,
         status_code=response.status_code,
         reasons=reasons,
-        retry_after_seconds=retry_after_seconds,
     )
 
 

@@ -12,6 +12,10 @@ SHA256_PREFIX = "sha256:"
 SHA256_HEX_DIGITS = 64
 MAX_IDENTIFIER_CHARACTERS = 128
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._+-]*[A-Za-z0-9])?$")
+# A full git commit, and one shortened as git and version strings print it.
+GIT_COMMIT_PATTERN = r"^[0-9a-f]{40}$"
+SHORT_GIT_COMMIT_PATTERN = r"^[0-9a-f]{7,40}$"
+_GIT_COMMIT = re.compile(GIT_COMMIT_PATTERN)
 
 
 def validate_identifier(value: str, field: str) -> None:
@@ -27,6 +31,11 @@ def validate_digest(value: str, field: str) -> None:
         raise ValueError(f"{field} must use sha256:<64 lowercase hex digits>")
     if hexadecimal != hexadecimal.lower() or any(character not in "0123456789abcdef" for character in hexadecimal):
         raise ValueError(f"{field} must use sha256:<64 lowercase hex digits>")
+
+
+def is_git_commit(value: str) -> bool:
+    """Return whether the value is one full, lowercase git commit."""
+    return _GIT_COMMIT.fullmatch(value) is not None
 
 
 def validate_run_id(value: str, field: str) -> None:

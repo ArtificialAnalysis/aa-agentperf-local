@@ -12,6 +12,8 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 from pydantic import BaseModel
 
+from agentperf_local.client.endpoint import LOOPBACK_HOSTNAMES
+
 # A placeholder the command already holds, such as $MODEL_DIR/model.gguf, stays expandable.
 PLACEHOLDER_PATTERN = re.compile(r"^\$([A-Z][A-Z0-9_]*)(.*)$", re.DOTALL)
 ENVIRONMENT_ASSIGNMENT_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.DOTALL)
@@ -21,7 +23,8 @@ NAME_WORD_SEPARATOR = re.compile(r"[-_]")
 # Short flags whose name does not say it holds a secret: llama.cpp spells --hf-token as -hft.
 SECRET_SHORT_FLAGS = {"-hft": "$HF_TOKEN"}
 HOST_FLAGS = frozenset(("--host", "--hostname"))
-LOOPBACK_OR_ANY_HOSTS = frozenset(("127.0.0.1", "localhost", "0.0.0.0", "::1", "::"))
+# A server bound to every address, "::", still runs on this machine.
+LOOPBACK_OR_ANY_HOSTS = LOOPBACK_HOSTNAMES | {"::"}
 HOST_PLACEHOLDER = "$HOST"
 # An unknown local directory becomes $LOCAL_DIR_1, $LOCAL_DIR_2, and so on, in order of use.
 LOCAL_DIRECTORY_PLACEHOLDER = "LOCAL_DIR"
@@ -90,15 +93,6 @@ def _require_nothing_private(value: str) -> None:
         )
 
 
-def _host_placeholders(arguments: tuple[str, ...]) -> tuple[str, ...]:
-    """Replace the value after --host with $HOST unless it names this machine."""
-    replaced = list(arguments)
-    for index, argument in enumerate(arguments[:-1]):
-        if argument in HOST_FLAGS and arguments[index + 1] not in LOOPBACK_OR_ANY_HOSTS:
-            replaced[index + 1] = HOST_PLACEHOLDER
-    return tuple(replaced)
-
-
 @dataclass(slots=True)
 class _Redactor:
     """Replace local paths in one command, numbering each unknown directory once."""
@@ -152,14 +146,23 @@ class _Redactor:
         _require_nothing_private(redacted)
         return _shell_word(redacted)
 
+    def _host_word(self, host: str) -> str:
+        """Keep a host that names this machine; any other becomes $HOST."""
+        return self.value_word(host) if host in LOOPBACK_OR_ANY_HOSTS else _shell_word(HOST_PLACEHOLDER)
+
     def argument_words(self, arguments: tuple[str, ...]) -> list[str]:
         """Return the arguments as shell words, with local paths, secrets, and hostnames replaced."""
         words: list[str] = []
         pending_secret: str | None = None
+        pending_host = False
         for argument in arguments:
             if pending_secret is not None:
                 words.append(_shell_word(pending_secret))
                 pending_secret = None
+                continue
+            if pending_host:
+                words.append(self._host_word(argument))
+                pending_host = False
                 continue
             flag, separator, value = argument.partition("=")
             if _is_secret_flag(flag) and separator:
@@ -167,8 +170,11 @@ class _Redactor:
             elif _is_secret_flag(flag):
                 words.append(shlex.quote(flag))
                 pending_secret = _secret_placeholder(flag)
-            elif flag in HOST_FLAGS and separator and value not in LOOPBACK_OR_ANY_HOSTS:
-                words.append(shlex.quote(f"{flag}=") + _shell_word(HOST_PLACEHOLDER))
+            elif flag in HOST_FLAGS and separator:
+                words.append(shlex.quote(f"{flag}=") + self._host_word(value))
+            elif flag in HOST_FLAGS:
+                words.append(shlex.quote(flag))
+                pending_host = True
             elif argument.startswith("-") and separator:
                 words.append(shlex.quote(f"{flag}=") + self.value_word(value))
             else:
@@ -192,7 +198,7 @@ def render_launch_command(
         raise ValueError("server_launch_command must name the server executable")
     redactor = _Redactor(tuple(sorted(known_paths, key=lambda known: len(known.path), reverse=True)))
     assignments = [f"{name}={redactor.value_word(value)}" for name, value in environment if not _is_secret_name(name)]
-    words = [_shell_word(redactor.executable(argv[0])), *redactor.argument_words(_host_placeholders(argv[1:]))]
+    words = [_shell_word(redactor.executable(argv[0])), *redactor.argument_words(argv[1:])]
     return " ".join((*assignments, *words))
 
 

@@ -53,15 +53,6 @@ def fake_commit(ref: str) -> str:
     return hashlib.sha1(ref.encode(), usedforsecurity=False).hexdigest()
 
 
-def _error(handler: BaseHTTPRequestHandler, status: HTTPStatus, code: str, message: str, detail: JsonObject) -> None:
-    body = orjson.dumps({"error": {"code": code, "message": message, "detail": detail}})
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
 def _json(handler: BaseHTTPRequestHandler, status: HTTPStatus, payload: JsonObject) -> None:
     body = orjson.dumps(payload)
     handler.send_response(status)
@@ -69,6 +60,10 @@ def _json(handler: BaseHTTPRequestHandler, status: HTTPStatus, payload: JsonObje
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def _error(handler: BaseHTTPRequestHandler, status: HTTPStatus, code: str, message: str, detail: JsonObject) -> None:
+    _json(handler, status, {"error": {"code": code, "message": message, "detail": detail}})
 
 
 def _handler(service: FakeSubmissionService) -> type[BaseHTTPRequestHandler]:

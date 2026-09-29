@@ -7,12 +7,13 @@ write_attached_server, read_attached_server, MAX_ATTACHED_SERVER_BYTES, and requ
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from agentperf_local.common.durable_files import WrittenFile, read_bounded_file, write_digest_file
+from agentperf_local.common.identity import GIT_COMMIT_PATTERN, SHORT_GIT_COMMIT_PATTERN
 from agentperf_local.common.json_records import json_record
 from agentperf_local.common.json_types import normalize_json_object, pretty_json_bytes
 from agentperf_local.common.models import read_object, read_record
@@ -20,7 +21,6 @@ from agentperf_local.deployment.catalog import REPOSITORY_PATTERN
 from agentperf_local.deployment.launch_command import redact_launch_command
 from agentperf_local.submission.contract import (
     CONTAINER_REFERENCE_PATTERN,
-    GIT_COMMIT_PATTERN,
     MODEL_RELEASE_SLUG_PATTERN,
     AcceleratorBackend,
     AcceleratorVendor,
@@ -29,8 +29,6 @@ from agentperf_local.submission.contract import (
 
 ATTACHED_SERVER_FILENAME = "attached-server.json"
 MAX_ATTACHED_SERVER_BYTES = 64 * 1024
-# A short commit is enough; the submission resolves it to all 40 characters.
-SHORT_COMMIT_PATTERN = r"^[0-9a-f]{7,40}$"
 
 # The backends each vendor's hardware can serve on.
 _VENDOR_BACKENDS: dict[AcceleratorVendor, tuple[AcceleratorBackend, ...]] = {
@@ -54,17 +52,17 @@ class AttachedServer(BaseModel, frozen=True, extra="forbid"):
     hf_revision: Annotated[str, Field(pattern=GIT_COMMIT_PATTERN)]
     framework: Framework
     framework_version: Annotated[str, Field(min_length=1)]
-    framework_commit: Annotated[str, Field(pattern=SHORT_COMMIT_PATTERN)] | None = None
+    # A short commit is enough; the submission resolves it to all 40 characters.
+    framework_commit: Annotated[str, Field(pattern=SHORT_GIT_COMMIT_PATTERN)] | None = None
     framework_container_reference: Annotated[str, Field(pattern=CONTAINER_REFERENCE_PATTERN)] | None = None
     accelerator_backend: AcceleratorBackend
     server_launch_command: Annotated[str, Field(min_length=1)]
 
-    @model_validator(mode="after")
-    def require_redacted_command(self) -> Self:
-        """Require a launch command that already holds no local path and no secret."""
-        if redact_launch_command(self.server_launch_command) != self.server_launch_command:
-            raise ValueError("server_launch_command must be redacted; read the description through the reader")
-        return self
+    @field_validator("server_launch_command")
+    @classmethod
+    def _redacted(cls, command: str) -> str:
+        """Keep the launch command only with its local paths and secrets replaced."""
+        return redact_launch_command(command)
 
 
 def require_backend_matches(server: AttachedServer, vendor: AcceleratorVendor) -> None:
@@ -84,9 +82,6 @@ def read_attached_server_description(path: Path) -> AttachedServer:
         data = normalize_json_object(yaml.safe_load(encoded))
     except (yaml.YAMLError, ValueError) as error:
         raise ValueError(f"{path} must be a YAML mapping of the attached server's fields") from error
-    command = data.get("server_launch_command")
-    if isinstance(command, str):
-        data["server_launch_command"] = redact_launch_command(command)
     return read_object(AttachedServer, data, str(path))
 
 
