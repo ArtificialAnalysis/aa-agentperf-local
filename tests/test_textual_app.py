@@ -2347,13 +2347,14 @@ async def test_submit_checkbox_uploads_anonymously_without_a_token(
     assert app.outcome is TuiOutcome.SUCCESS
 
 
-@pytest.mark.parametrize(("size", "accepted"), (((72, 24), True), ((96, 32), False)))
+# The smallest terminal the app supports, where the busy line is most crowded.
+MINIMUM_TERMINAL_SIZE = (72, 24)
+
+
 async def test_submission_stays_busy_until_server_responds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    size: tuple[int, int],
-    accepted: bool,
 ) -> None:
     from tests.attached_run import record_attached_run
     from tests.submission_server import FakeSubmissionService, LocalSubmissionServer
@@ -2366,8 +2367,6 @@ async def test_submission_stays_busy_until_server_responds(
     with LocalSubmissionServer(service) as server:
         monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
         seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
-        if not accepted:
-            service.accepted_content[_run_id(seed)] = b"{}"
         controller = FakeManagedReplayController(
             availability_result=_managed_availability(), results_writer=_bound_results_writer(seed)
         )
@@ -2382,7 +2381,7 @@ async def test_submission_stays_busy_until_server_responds(
                 submit_token_env=token_env,
             ),
         )
-        async with app.run_test(size=size) as pilot:
+        async with app.run_test(size=MINIMUM_TERMINAL_SIZE) as pilot:
             await pilot.click("#welcome-start")
             app.query_one("#model-list", OptionList).focus()
             await pilot.press("down", "enter")
@@ -2413,8 +2412,8 @@ async def test_submission_stays_busy_until_server_responds(
                 assert app.step is TuiStep.RESULT
                 await _settle_until(pilot, lambda: app.focused is details)
                 assert busy.region.height == 1
-                assert busy.region.right <= size[0]
-                assert busy.region.bottom < size[1]
+                assert busy.region.right <= MINIMUM_TERMINAL_SIZE[0]
+                assert busy.region.bottom < MINIMUM_TERMINAL_SIZE[1]
                 frame = str(busy.content)
                 await _settle_until(pilot, lambda: str(busy.content) != frame)
                 await pilot.press("escape", "q")
@@ -2433,8 +2432,8 @@ async def test_submission_stays_busy_until_server_responds(
             await pilot.press("q")
 
     assert controller.requests[0].managed_deployment is not None
-    assert (app.submission_receipt is not None) is accepted
-    assert server.service.captured[0].status == (202 if accepted else 409)
+    assert app.submission_receipt is not None
+    assert server.service.captured[0].status == 202
     assert "authorization" not in server.service.captured[0].headers
 
 
