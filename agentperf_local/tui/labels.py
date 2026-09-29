@@ -170,15 +170,15 @@ def memory_need_gib(size_bytes: float) -> str:
     return f"{math.ceil(size_bytes / BYTES_PER_GIB * 10) / 10:.1f}"
 
 
-def hardware_target_text(candidate: ModelCandidate) -> str:
+def hardware_target_text(candidate: ModelCandidate, hardware: str) -> str:
     """Name the hardware a recipe was built for.
 
     A portable recipe that leaves out a GPU maker lists the makers it does support,
     so "Any GPU" never appears on a recipe that cannot run on Apple silicon.
     """
-    if candidate.hardware == "any" and candidate.devices != DEVICE_IDS:
+    if hardware == "any" and candidate.devices != DEVICE_IDS:
         return " or ".join(DEVICE_FAMILY_NAMES[device] for device in candidate.devices)
-    return HARDWARE_TARGET_NAMES.get(candidate.hardware, candidate.hardware)
+    return HARDWARE_TARGET_NAMES.get(hardware, hardware)
 
 
 def speedup_text(candidate: ModelCandidate) -> str | None:
@@ -192,9 +192,9 @@ def recipe_build_text(candidate: ModelCandidate) -> str:
     return candidate.quantization if speedup is None else f"{candidate.quantization} · {speedup}"
 
 
-def recipe_title_text(candidate: ModelCandidate) -> str:
+def recipe_title_text(candidate: ModelCandidate, hardware: str) -> str:
     """Name one recipe in full: model, build, and the hardware it was built for."""
-    return f"{candidate.model_name} · {recipe_build_text(candidate)} · {hardware_target_text(candidate)}"
+    return f"{candidate.model_name} · {recipe_build_text(candidate)} · {hardware_target_text(candidate, hardware)}"
 
 
 def accelerator_summary_text(summary: SafeHardwareSummary) -> str:

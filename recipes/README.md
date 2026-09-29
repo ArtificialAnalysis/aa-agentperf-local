@@ -22,14 +22,14 @@ launch settings. The server serves the model as `<profile_id>-<nonce>`. Leave
 out an optional field, such as `vllm` or `moe_runner_backend`, when it does not
 apply.
 
-The TUI names a recipe from three fields:
+The TUI names a recipe from two fields and its folder:
 
 - `model_name` is the base model, such as `Qwen3.8 27B`. Every recipe in one
   model folder uses the same name.
 - `quantization` is the weight format the files use, such as `Q4_K_M`,
   `UD-Q4_K_M`, or `NVFP4`.
-- `hardware` names the hardware the recipe was built for, like its folder,
-  such as `rtx-5090` or `any`. The TUI shows a label for the folders the
+- The hardware it was built for is its hardware folder, such as `rtx-5090` or
+  `any`; a recipe does not repeat it. The TUI shows a label for the folders the
   catalog ships, set in [`labels.py`](../agentperf_local/tui/labels.py), and
   the folder name for any other.
 

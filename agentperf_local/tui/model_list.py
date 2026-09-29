@@ -3,20 +3,21 @@
 - ListedRecipe: one recipe and what this computer can do with it.
 - ordered_recipes: this computer's recipes, then other hardware, each grouped by model.
 - model_list_options: the list rows, with part, column, and model headings.
+- table_width: the width the widest recipe row needs.
 - standing_mark: the colored mark each standing shows.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 
 from pydantic import BaseModel
 from rich.style import Style
 from rich.text import Text
 from textual.widgets.option_list import Option
 
-from agentperf_local.deployment.catalog import ModelCandidate
+from agentperf_local.deployment.catalog import ModelCandidate, ModelCatalog
 from agentperf_local.tui.branding import AA_LIME, AA_NEUTRAL_500, AA_ORANGE, AA_PLACEHOLDER, AA_RED
 from agentperf_local.tui.evidence import SelectionKind
 from agentperf_local.tui.labels import hardware_target_text, speedup_text
@@ -54,9 +55,10 @@ PORTABLE_HARDWARE = ("nvidia-cuda", "any")
 
 
 class ListedRecipe(BaseModel, frozen=True):
-    """Pair one recipe with this computer's availability, which is None without hardware detection."""
+    """Pair one recipe and its hardware folder with this computer's availability, None without detection."""
 
     candidate: ModelCandidate
+    hardware: str
     availability: ManagedModelAvailability | None
 
     @property
@@ -78,7 +80,7 @@ def _natural_key(name: str) -> tuple[tuple[int, int | str], ...]:
 
 def _sort_key(recipe: ListedRecipe) -> tuple[bool, tuple[tuple[int, int | str], ...], int, int, str, str]:
     standing_rank = 0 if recipe.availability is None else RECIPE_STANDING_ORDER.index(recipe.availability.standing)
-    hardware = recipe.candidate.hardware
+    hardware = recipe.hardware
     portable_rank = PORTABLE_HARDWARE.index(hardware) + 1 if hardware in PORTABLE_HARDWARE else 0
     return (
         recipe.for_other_hardware,
@@ -91,7 +93,7 @@ def _sort_key(recipe: ListedRecipe) -> tuple[bool, tuple[tuple[int, int | str], 
 
 
 def ordered_recipes(
-    candidates: Iterable[ModelCandidate],
+    catalog: ModelCatalog,
     availability_of: Callable[[ModelCandidate], ManagedModelAvailability | None],
 ) -> tuple[ListedRecipe, ...]:
     """List recipes in screen order.
@@ -100,7 +102,14 @@ def ordered_recipes(
     follow in natural name order, and one model's recipes go best standing first,
     then device recipes before portable ones.
     """
-    listed = (ListedRecipe(candidate=candidate, availability=availability_of(candidate)) for candidate in candidates)
+    listed = (
+        ListedRecipe(
+            candidate=candidate,
+            hardware=catalog.hardware_of(candidate),
+            availability=availability_of(candidate),
+        )
+        for candidate in catalog.models
+    )
     return tuple(sorted(listed, key=_sort_key))
 
 
@@ -153,6 +162,21 @@ def _column_headings(widths: tuple[int, int], *, greyed: bool) -> Option:
     return Option(headings, disabled=True)
 
 
+def table_width(recipes: tuple[ListedRecipe, ...]) -> int:
+    """Return the width the widest recipe row needs, so the list can keep its columns whole."""
+    model_width, speedup_width = _column_widths(recipes)
+    hardware_width = max(
+        (len(hardware_target_text(recipe.candidate, recipe.hardware)) for recipe in recipes), default=0
+    )
+    return (
+        model_width
+        + len(COLUMN_GAP)
+        + speedup_width
+        + len(COLUMN_GAP)
+        + max(hardware_width, len(HARDWARE_COLUMN_HEADING))
+    )
+
+
 def _speedup_cell(candidate: ModelCandidate) -> str:
     return speedup_text(candidate) or NO_SPEEDUP
 
@@ -192,7 +216,7 @@ def _recipe_row(recipe: ListedRecipe, widths: tuple[int, int], *, greyed: bool) 
     row.append_text(Text(UNASSESSED_MARK) if availability is None else standing_mark(availability.standing))
     row.append(
         f"{MARK_GAP}{candidate.quantization.ljust(model_width - QUANTIZATION_OFFSET)}{COLUMN_GAP}"
-        f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{hardware_target_text(candidate)}"
+        f"{_speedup_cell(candidate).ljust(speedup_width)}{COLUMN_GAP}{hardware_target_text(candidate, recipe.hardware)}"
     )
     if greyed:
         row.stylize(GREYED)

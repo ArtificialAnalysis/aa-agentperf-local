@@ -212,6 +212,7 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
         ("reduced-context", "context_tokens must be 65536"),
         ("multiline-model-name", "model_name must be short printable text"),
         ("model-name-mismatch", "every recipe in gemma4-12b must share the model_name Gemma 4 12B"),
+        ("hardware-field", f"{GEMMA_RECIPE.as_posix()}: hardware: Extra inputs are not permitted"),
         ("llama-backend-device", "backend must match the recipe's devices"),
         (
             "llama-threads-zero",
@@ -258,12 +259,13 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         deployment["context_tokens"] = 32768
     elif case == "multiline-model-name":
         gemma["model_name"] = "spoofed heading\nAA VERIFIED"
+    elif case == "hardware-field":
+        gemma["hardware"] = "rtx-5090"
     elif case == "model-name-mismatch":
         shutil.copytree(root / GEMMA_RECIPE.parent, root / "gemma4-12b" / "nvidia-cuda")
         sibling = root / "gemma4-12b" / "nvidia-cuda" / GEMMA_RECIPE.name
         sibling.rename(sibling.with_name("gemma4-12b-sibling.yaml"))
         gemma["profile_id"] = "gemma4-12b-sibling"
-        gemma["hardware"] = "nvidia-cuda"
         gemma["model_name"] = "Gemma Four"
         _write(root, Path("gemma4-12b", "nvidia-cuda", "gemma4-12b-sibling.yaml"), gemma)
         gemma = _read(root, GEMMA_RECIPE)

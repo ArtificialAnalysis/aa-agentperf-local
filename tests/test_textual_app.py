@@ -1929,6 +1929,47 @@ async def test_model_list_puts_what_this_computer_can_run_first(
         assert model_list.scroll_y == 0
 
 
+async def test_computer_without_a_supported_accelerator_still_opens(tmp_path: Path) -> None:
+    # An Intel Mac: the discrete GPU reports Metal but is not Apple silicon, and the integrated one reports no API.
+    hardware = replace_fields(
+        _hardware_with(),
+        operating_system="Darwin",
+        accelerators=(
+            AcceleratorSnapshot(
+                vendor="AMD",
+                name="AMD Radeon Pro 5500M",
+                memory_bytes=8 * 1024**3,
+                core_count=None,
+                driver_version=None,
+                api="Metal",
+            ),
+            AcceleratorSnapshot(
+                vendor="Intel",
+                name="Intel UHD Graphics 630",
+                memory_bytes=1536 * 1024**2,
+                core_count=None,
+                driver_version=None,
+                api=None,
+            ),
+        ),
+    )
+    catalog = load_model_catalog(CATALOG_PATH)
+    app = AgentPerfLocalApp(
+        catalog,
+        controller=FakeReplayController(),
+        managed_controller=LocalManagedReplayController(catalog_as_of=catalog.as_of, hardware=hardware),
+        defaults=TuiDefaults(output_dir=tmp_path / "results"),
+    )
+
+    async with app.run_test(size=(96, 30)) as pilot:
+        await pilot.click("#welcome-start")
+        model_list = app.query_one("#model-list", OptionList)
+        prompts = tuple(str(model_list.get_option_at_index(index).prompt) for index in range(model_list.option_count))
+        assert prompts[0] == "THIS COMPUTER: 2 accelerators"
+        assert prompts.index("No recipe runs on this computer.") < prompts.index("OTHER HARDWARE")
+        assert _custom_endpoint_highlighted(app)
+
+
 def _installed_sglang_offer(
     hardware: HardwareSnapshot,
     candidate: ModelCandidate,

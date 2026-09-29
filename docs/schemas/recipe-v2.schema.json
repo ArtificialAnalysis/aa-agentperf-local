@@ -378,7 +378,6 @@
         "as_of",
         "model_name",
         "quantization",
-        "hardware",
         "hf_repository",
         "hf_revision",
         "devices",
@@ -405,9 +404,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 160
-        },
-        "hardware": {
-          "$ref": "#/$defs/identifier"
         },
         "hf_repository": {
           "$ref": "#/$defs/repository"

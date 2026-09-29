@@ -2,7 +2,6 @@ profile_id: nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark
 as_of: '2026-09-21'
 model_name: Nemotron 3.5 Lightning 30B A3B
 quantization: NVFP4
-hardware: dgx-spark
 hf_repository: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
 hf_revision: bee7596271d1495f6992ae224aefde4410e816b8
 devices:

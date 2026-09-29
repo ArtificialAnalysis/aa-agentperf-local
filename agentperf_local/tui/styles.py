@@ -9,6 +9,10 @@ RUN_METRICS_COLUMN_RULE_WIDTH = 1
 # The column scrolls once the details view overflows a short terminal; a reserved
 # one-cell gutter keeps the charts at full width whether or not the bar is showing.
 RUN_METRICS_COLUMN_SCROLLBAR_WIDTH = 1
+# The model list's side padding and scrollbar, which its table must fit inside.
+MODEL_LIST_PADDING = 1
+MODEL_LIST_SCROLLBAR_WIDTH = 1
+MODEL_LIST_CHROME_WIDTH = 2 * MODEL_LIST_PADDING + MODEL_LIST_SCROLLBAR_WIDTH
 RUN_METRICS_COLUMN_WIDTH = (
     CHART_WIDTH + 2 * RUN_METRICS_COLUMN_PADDING + RUN_METRICS_COLUMN_RULE_WIDTH + RUN_METRICS_COLUMN_SCROLLBAR_WIDTH
 )
@@ -31,6 +35,8 @@ $field-status-indent: {FIELD_STATUS_INDENT};
 $field-status-max-width: {FIELD_STATUS_MAX_WIDTH};
 $run-metrics-column-width: {RUN_METRICS_COLUMN_WIDTH};
 $run-metrics-column-padding: {RUN_METRICS_COLUMN_PADDING};
+$model-list-padding: {MODEL_LIST_PADDING};
+$model-list-scrollbar-width: {MODEL_LIST_SCROLLBAR_WIDTH};
 """
     + """
 Screen {
@@ -601,14 +607,17 @@ Checkbox:focus > .toggle--label {
 #model-list {
     width: 45%;
     height: 1fr;
+    padding: 0 $model-list-padding;
+    scrollbar-size-vertical: $model-list-scrollbar-width;
     background: transparent;
     border: none;
     text-wrap: nowrap;
     text-overflow: ellipsis;
 }
 
+/* The detail takes what the list leaves, since the list never narrows below its table. */
 #model-detail-pane {
-    width: 55%;
+    width: 1fr;
     height: 1fr;
     margin-left: 1;
     padding-left: 2;

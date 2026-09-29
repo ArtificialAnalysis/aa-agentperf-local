@@ -2,7 +2,6 @@ profile_id: qwen36-35b-a3b-q4-k-m-mtp-strix-halo
 as_of: '2026-09-21'
 model_name: Qwen3.6 35B A3B
 quantization: UD-Q4_K_M
-hardware: strix-halo
 hf_repository: unsloth/Qwen3.6-35B-A3B-MTP-GGUF
 hf_revision: 5bc3e238d916f48a861bac2f8a1990a0e9b7e98d
 devices:

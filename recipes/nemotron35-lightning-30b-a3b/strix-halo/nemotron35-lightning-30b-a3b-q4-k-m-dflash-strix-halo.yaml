@@ -2,7 +2,6 @@ profile_id: nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo
 as_of: '2026-09-21'
 model_name: Nemotron 3.5 Lightning 30B A3B
 quantization: UD-Q4_K_M
-hardware: strix-halo
 hf_repository: unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF
 hf_revision: f2d3fe3694501008786e81e5f20360cbf715496a
 devices:

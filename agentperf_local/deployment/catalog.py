@@ -40,7 +40,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:cf93704107b2c7b6629351606bcb42884304f2a1ce9e5b1ce9803a742a278e1f"
+BUNDLED_RECIPES_DIGEST = "sha256:09ccb01a0e461dec2260bbbf9bf6461f7dc4c625918a686a8ba5ef358326d2b1"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -451,12 +451,11 @@ class ModelCandidate(BaseModel, frozen=True):
 
     profile_id: str
     as_of: str
-    # The base model, named the same way in every recipe of one model folder.
+    # The base model, named the same way in every recipe of one model folder. The hardware
+    # the recipe was built for is its folder, which the catalog records.
     model_name: str
     # The weight format as its files name it, such as Q4_K_M, UD-Q4_K_M, or NVFP4.
     quantization: str
-    # The hardware the recipe was built for, named like its folder, such as rtx-5090 or any.
-    hardware: str
     hf_repository: str
     hf_revision: str
     # The accelerator platforms this recipe may launch on, in canonical order.
@@ -471,7 +470,6 @@ class ModelCandidate(BaseModel, frozen=True):
     def check_invariants(self) -> Self:
         """Require a portable identity and launch settings that agree with each other."""
         validate_identifier(self.profile_id, "profile_id")
-        validate_identifier(self.hardware, "hardware")
         _iso_date(self.as_of, "as_of")
         _label(self.model_name, "model_name")
         _label(self.quantization, "quantization")
@@ -510,14 +508,23 @@ class ModelCatalog(BaseModel, frozen=True):
 
     models: Annotated[tuple[ModelCandidate, ...], Field(min_length=1)]
     digest: str
+    # Each recipe's hardware folder by profile_id, such as rtx-5090 or any. The folder
+    # names what a recipe was built for, so recipes do not repeat it.
+    hardware_folders: dict[str, str]
 
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
-        """Require at least one recipe and unique names."""
+        """Require at least one recipe, unique names, and a hardware folder for each."""
         profile_ids = tuple(model.profile_id for model in self.models)
         if len(set(profile_ids)) != len(profile_ids):
             raise ValueError("recipe profile_id values must be unique")
+        if set(self.hardware_folders) != set(profile_ids):
+            raise ValueError("every recipe needs its hardware folder")
         return self
+
+    def hardware_of(self, candidate: ModelCandidate) -> str:
+        """Return the hardware folder one recipe sits in."""
+        return self.hardware_folders[candidate.profile_id]
 
     @property
     def as_of(self) -> str:
@@ -593,6 +600,7 @@ def load_model_catalog(root: Path) -> ModelCatalog:
     """
     models: list[ModelCandidate] = []
     model_names: dict[str, str] = {}
+    hardware_folders: dict[str, str] = {}
     listing = bytearray()
     for path in _recipe_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -604,5 +612,6 @@ def load_model_catalog(root: Path) -> ModelCatalog:
         if model_names.setdefault(model_folder, model.model_name) != model.model_name:
             raise ValueError(f"every recipe in {model_folder} must share the model_name {model_names[model_folder]}")
         models.append(model)
+        hardware_folders[model.profile_id] = path.parent.name
         listing += f"{hashlib.sha256(encoded).hexdigest()}  {relative}\n".encode()
-    return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)))
+    return ModelCatalog(models=tuple(models), digest=sha256_bytes(bytes(listing)), hardware_folders=hardware_folders)

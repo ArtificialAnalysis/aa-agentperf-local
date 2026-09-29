@@ -174,6 +174,7 @@ from agentperf_local.tui.model_list import (
     model_list_options,
     ordered_recipes,
     standing_mark,
+    table_width,
 )
 from agentperf_local.tui.replay_contract import (
     DEVICE_SELECTION_REQUIRED_MESSAGE,
@@ -196,7 +197,7 @@ from agentperf_local.tui.replay_contract import (
     next_run_directory,
 )
 from agentperf_local.tui.steps import ESCAPE_ACTION_STEPS, TuiOutcome, TuiStep
-from agentperf_local.tui.styles import APP_CSS
+from agentperf_local.tui.styles import APP_CSS, MODEL_LIST_CHROME_WIDTH
 from agentperf_local.tui.widgets import (
     DONE_MARK,
     FAILED_MARK,
@@ -458,7 +459,7 @@ class BenchmarkSelection(BaseModel, frozen=True):
                 if catalog.is_bundled_snapshot
                 else SelectionKind.EXTERNAL_CATALOG_ENTRY
             ),
-            display_name=recipe_title_text(candidate),
+            display_name=recipe_title_text(candidate, catalog.hardware_of(candidate)),
             endpoint_model=candidate.hf_repository,
             profile_id=candidate.profile_id,
             catalog_digest=catalog.digest,
@@ -965,6 +966,10 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#content", ContentSwitcher).display = not too_small
         compact = width < COMPACT_LAYOUT_WIDTH
         self.query_one("#model-layout", Horizontal).set_class(compact, "compact")
+        # Beside the detail, the list never narrows below its table; stacked, it spans the page anyway.
+        self.query_one("#model-list", OptionList).styles.min_width = (
+            None if compact else table_width(self.listed_recipes) + MODEL_LIST_CHROME_WIDTH
+        )
         run_page = self.query_one(f"#{TuiStep.RUN.value}", Vertical)
         run_page.set_class(height < RUN_TREND_MIN_HEIGHT, "short-run")
         run_page.set_class(height < RUN_SECOND_CHART_MIN_HEIGHT, "shorter-run")
@@ -992,7 +997,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         return self._candidate(self.selection.profile_id)
 
     def _listed_recipes(self) -> tuple[ListedRecipe, ...]:
-        return ordered_recipes(self.catalog.models, self._listing_availability)
+        return ordered_recipes(self.catalog, self._listing_availability)
 
     def _first_recipe_here(self) -> ModelCandidate | None:
         """Return the first listed recipe for this computer, or None when every recipe needs other hardware."""
@@ -1017,22 +1022,41 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         With several accelerators and none chosen yet, the best device's result stands
         for the computer, because the device is picked only on the next screen.
         """
-        if self.managed_controller is None:
+        controller = self.managed_controller
+        if controller is None:
             return None
         context_tokens = self._chosen_context_tokens(candidate.deployment)
         device_index = self._selected_device_index()
         if device_index is not None or len(self.device_options) <= 1:
-            return self._managed_availability(candidate, device_index, context_tokens)
+            device_indexes: tuple[int | None, ...] = (device_index,)
+        else:
+            device_indexes = tuple(option.index for option in self.device_options)
         results = tuple(
-            self.managed_controller.availability(
+            self._device_availability(controller, candidate, index, context_tokens) for index in device_indexes
+        )
+        return min(results, key=lambda availability: RECIPE_STANDING_ORDER.index(availability.standing))
+
+    def _device_availability(
+        self,
+        controller: ManagedReplayController,
+        candidate: ModelCandidate,
+        device_index: int | None,
+        context_tokens: int,
+    ) -> ManagedModelAvailability:
+        """Return one device's availability, counting a device no framework can serve as other hardware.
+
+        Binding an accelerator the app cannot classify, such as integrated graphics,
+        raises; the model screen must still open so an existing server stays reachable.
+        """
+        try:
+            return controller.availability(
                 candidate,
-                device_index=option.index,
+                device_index=device_index,
                 context_tokens=context_tokens,
                 replay_floor_tokens=self._replay_context_floor(),
             )
-            for option in self.device_options
-        )
-        return min(results, key=lambda availability: RECIPE_STANDING_ORDER.index(availability.standing))
+        except ValueError as error:
+            return ManagedModelAvailability(hardware=controller.hardware_summary(), offers=(), reason=error_text(error))
 
     def _managed_availability(
         self,
@@ -1099,7 +1123,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             "MODEL SERVER · started for you" if candidate is not None else "YOUR SERVER"
         )
         self.query_one("#config-selection", Static).update(
-            escape(recipe_title_text(candidate))
+            escape(recipe_title_text(candidate, self.catalog.hardware_of(candidate)))
             if candidate is not None
             else "Use the URL and model name shown by your server."
         )
@@ -1268,7 +1292,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         )
         frameworks = " / ".join(framework_display_name(framework) for framework in candidate.deployment.frameworks)
         rows = (
-            ("Built for", hardware_target_text(candidate)),
+            ("Built for", hardware_target_text(candidate, self.catalog.hardware_of(candidate))),
             ("Runs with", f"{frameworks} · needs {minimum_memory_need} GiB"),
             ("Context", context_value),
             (

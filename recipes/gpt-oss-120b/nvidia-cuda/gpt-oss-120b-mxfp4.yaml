@@ -2,7 +2,6 @@ profile_id: gpt-oss-120b-mxfp4
 as_of: '2026-09-21'
 model_name: gpt-oss-120b
 quantization: MXFP4
-hardware: nvidia-cuda
 hf_repository: openai/gpt-oss-120b
 hf_revision: b5c939de8f754692c1647ca79fbf85e8c1e70f8a
 devices:
