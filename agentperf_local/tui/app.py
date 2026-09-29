@@ -195,16 +195,18 @@ from agentperf_local.tui.replay_contract import (
     next_run_directory,
 )
 from agentperf_local.tui.steps import ESCAPE_ACTION_STEPS, TuiOutcome, TuiStep
-from agentperf_local.tui.styles import APP_CSS, RESULT_CHARTS_MIN_WIDTH
+from agentperf_local.tui.styles import APP_CSS
 from agentperf_local.tui.widgets import (
     DONE_MARK,
     FAILED_MARK,
+    LATENCY_PLOT_EDGE_RATIO,
+    SPEED_PLOT_EDGE_RATIO,
     WARNING_MARK,
     ActivityLog,
     ContextGauge,
-    DistributionChart,
     HeadlineDigits,
     Kitty,
+    RangeChart,
     SpinnerLine,
     scroll_log_to_end,
 )
@@ -800,8 +802,20 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                 with VerticalScroll(id="run-metrics-column"):
                     yield HeadlineDigits(id="run-throughput")
                     yield Static(RUN_THROUGHPUT_WAITING, id="run-throughput-caption")
-                    yield DistributionChart("DECODE SPEED", "tok/s", format_value=integer_label, id="run-decode-chart")
-                    yield DistributionChart("FIRST TOKEN", "ms", format_value=integer_label, id="run-ttft-chart")
+                    yield RangeChart(
+                        "DECODE SPEED",
+                        "tok/s",
+                        format_value=integer_label,
+                        edge_ratio=SPEED_PLOT_EDGE_RATIO,
+                        id="run-decode-chart",
+                    )
+                    yield RangeChart(
+                        "FIRST TOKEN",
+                        "ms",
+                        format_value=integer_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="run-ttft-chart",
+                    )
                     yield Static("TREND · tok/s per turn", id="run-trend-title", classes="section-label")
                     yield Sparkline([], id="run-trend")
             yield Button("Cancel", id="run-cancel", flat=True, compact=True)
@@ -827,12 +841,28 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             yield DisclosureButton("Result details", id="result-details-toggle")
             with Vertical(id="result-details", classes="disclosed"):
                 yield Static("", id="result-metrics-detail", classes="status-row")
-                with Horizontal(id="result-charts"):
-                    yield DistributionChart("FIRST TOKEN", "ms", format_value=integer_label, id="result-ttft-chart")
-                    yield DistributionChart(
-                        "DECODE SPEED", "tok/s", format_value=integer_label, id="result-decode-chart"
+                with Vertical(id="result-charts"):
+                    yield RangeChart(
+                        "FIRST TOKEN",
+                        "ms",
+                        format_value=integer_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="result-ttft-chart",
                     )
-                    yield DistributionChart("TURN TIME", "s", format_value=seconds_label, id="result-e2e-chart")
+                    yield RangeChart(
+                        "DECODE SPEED",
+                        "tok/s",
+                        format_value=integer_label,
+                        edge_ratio=SPEED_PLOT_EDGE_RATIO,
+                        id="result-decode-chart",
+                    )
+                    yield RangeChart(
+                        "TURN TIME",
+                        "s",
+                        format_value=seconds_label,
+                        edge_ratio=LATENCY_PLOT_EDGE_RATIO,
+                        id="result-e2e-chart",
+                    )
             yield CleanSelectStatic("", id="result-upload", classes="card")
             yield ProgressBar(total=1, show_eta=False, id="result-upload-progress")
             with Horizontal(classes="actions"):
@@ -902,7 +932,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
     def on_mount(self) -> None:
         """Seed the model list and initial detail panel."""
         self._show_result_throughput(None)
-        self.query_one("#result-charts", Horizontal).add_class("-empty")
+        self.query_one("#result-charts", Vertical).add_class("-empty")
         self.query_one("#manifest-row", Horizontal).display = self._uses_custom_manifest()
         self.query_one("#preflight-reduced", Static).display = False
         self.query_one("#preflight-ollama", Static).display = False
@@ -943,7 +973,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         if compact and self._showing_server_log():
             # A compact page shows either the log or the details; keep the log the user opened.
             run_page.remove_class("show-details")
-        self.query_one("#result", VerticalScroll).set_class(width < RESULT_CHARTS_MIN_WIDTH, "stack-charts")
         # The gauge draws a narrower bar once the run page carries the compact class.
         self._render_context_gauge()
         self._sync_kitty()
@@ -2244,9 +2273,6 @@ class AgentPerfLocalApp(App[TuiOutcome]):
                     WARNING_MARK,
                     f"Protocol checks recorded · {passed}/{total} passed · submission stays self-reported",
                 )
-        elif kind is RunActivityKind.POWER_UNAVAILABLE:
-            reason = "NVIDIA only" if activity.accelerator_platform != "nvidia-cuda" else "nvidia-smi not found"
-            log.record(WARNING_MARK, f"GPU power not sampled · {reason} · this run can not reach verified")
         elif kind is RunActivityKind.POWER_STARTED:
             log.record(DONE_MARK, "GPU power sampling started · nvidia-smi")
         elif kind is RunActivityKind.POWER_RECORDED:
@@ -2392,8 +2418,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         """Repaint the charts and the running headline from every closed turn so far."""
         samples = self.progress_state.samples
         series = _closed_turn_series(samples)
-        self.query_one("#run-ttft-chart", DistributionChart).update_samples(series.ttft_ms)
-        self.query_one("#run-decode-chart", DistributionChart).update_samples(series.decode_tokens_per_second)
+        self.query_one("#run-ttft-chart", RangeChart).update_samples(series.ttft_ms)
+        self.query_one("#run-decode-chart", RangeChart).update_samples(series.decode_tokens_per_second)
         self.query_one("#run-trend", Sparkline).data = list(series.decode_tokens_per_second)
         rate = cumulative_decode_tokens_per_second(samples)
         throughput = self.query_one("#run-throughput", HeadlineDigits)
@@ -2589,12 +2615,12 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         series = _closed_turn_series(self.progress_state.samples)
         self.query_one("#result-details-toggle", Button).display = True
         turn_seconds = tuple(e2e_ms / MILLISECONDS_PER_SECOND for e2e_ms in series.e2e_ms)
-        self.query_one("#result-charts", Horizontal).set_class(
+        self.query_one("#result-charts", Vertical).set_class(
             not (series.ttft_ms or series.decode_tokens_per_second or turn_seconds), "-empty"
         )
-        self.query_one("#result-ttft-chart", DistributionChart).update_samples(series.ttft_ms)
-        self.query_one("#result-decode-chart", DistributionChart).update_samples(series.decode_tokens_per_second)
-        self.query_one("#result-e2e-chart", DistributionChart).update_samples(turn_seconds)
+        self.query_one("#result-ttft-chart", RangeChart).update_samples(series.ttft_ms)
+        self.query_one("#result-decode-chart", RangeChart).update_samples(series.decode_tokens_per_second)
+        self.query_one("#result-e2e-chart", RangeChart).update_samples(turn_seconds)
 
     def _reveal_result(self) -> None:
         """Show the result page unless the user is reading an information page."""
@@ -2653,7 +2679,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.outcome = outcome
         self.query_one("#result-title", Static).set_classes("hero")
         self.query_one("#result-metrics-detail", Static).update("")
-        self.query_one("#result-charts", Horizontal).add_class("-empty")
+        self.query_one("#result-charts", Vertical).add_class("-empty")
         self.query_one("#result-details-toggle", Button).display = False
 
     def on_replay_failed_message(self, message: ReplayFailedMessage) -> None:

@@ -1,7 +1,7 @@
 """Hold the Textual stylesheet and the geometry constants it interpolates."""
 
 from agentperf_local.tui.branding import AA_BRAND_CSS_VARIABLES
-from agentperf_local.tui.widgets import chart_width
+from agentperf_local.tui.widgets import CHART_WIDTH
 
 # The metrics column is exactly as wide as its charts plus the panel padding and its rule.
 RUN_METRICS_COLUMN_PADDING = 2
@@ -10,7 +10,7 @@ RUN_METRICS_COLUMN_RULE_WIDTH = 1
 # one-cell gutter keeps the charts at full width whether or not the bar is showing.
 RUN_METRICS_COLUMN_SCROLLBAR_WIDTH = 1
 RUN_METRICS_COLUMN_WIDTH = (
-    chart_width() + 2 * RUN_METRICS_COLUMN_PADDING + RUN_METRICS_COLUMN_RULE_WIDTH + RUN_METRICS_COLUMN_SCROLLBAR_WIDTH
+    CHART_WIDTH + 2 * RUN_METRICS_COLUMN_PADDING + RUN_METRICS_COLUMN_RULE_WIDTH + RUN_METRICS_COLUMN_SCROLLBAR_WIDTH
 )
 # Setup-form geometry. The label column and value cap are the two chosen numbers; the
 # status indent and its wrap width are derived from them so the columns cannot drift.
@@ -19,9 +19,6 @@ FIELD_LABEL_GAP = 1
 FIELD_VALUE_MAX_WIDTH = 60
 FIELD_STATUS_INDENT = FIELD_LABEL_WIDTH + FIELD_LABEL_GAP
 FIELD_STATUS_MAX_WIDTH = FIELD_STATUS_INDENT + FIELD_VALUE_MAX_WIDTH
-RESULT_CHART_GAP = 2
-# Three charts, each with its gap, plus the page's two-cell padding on either side.
-RESULT_CHARTS_MIN_WIDTH = 3 * (chart_width() + RESULT_CHART_GAP) + 4
 
 # Every hex value lives in tui.branding, next to a comment naming its brand-kit source.
 APP_CSS = (
@@ -34,7 +31,6 @@ $field-status-indent: {FIELD_STATUS_INDENT};
 $field-status-max-width: {FIELD_STATUS_MAX_WIDTH};
 $run-metrics-column-width: {RUN_METRICS_COLUMN_WIDTH};
 $run-metrics-column-padding: {RUN_METRICS_COLUMN_PADDING};
-$result-chart-gap: {RESULT_CHART_GAP};
 """
     + """
 Screen {
@@ -232,7 +228,7 @@ ContentSwitcher {
     margin-bottom: 1;
 }
 
-DistributionChart {
+RangeChart {
     height: auto;
     margin-bottom: 1;
 }
@@ -256,12 +252,6 @@ Sparkline > .sparkline--max-color {
     height: auto;
     margin-top: 1;
     margin-bottom: 1;
-}
-
-#result-charts DistributionChart {
-    width: auto;
-    margin-right: $result-chart-gap;
-    margin-bottom: 0;
 }
 
 .page.compact #run-metrics-column {
@@ -295,14 +285,6 @@ Sparkline > .sparkline--max-color {
 
 #result-details {
     height: auto;
-}
-
-.page.stack-charts #result-charts {
-    layout: vertical;
-}
-
-.page.stack-charts #result-charts DistributionChart {
-    margin-bottom: 1;
 }
 
 #result-throughput {

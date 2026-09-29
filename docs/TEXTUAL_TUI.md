@@ -241,26 +241,36 @@ and the elapsed time, a context line naming the size of the request now going
 out and the share of the served context window it fills, and a status line
 with the last turn's first-token time, decode speed, and total time. The size
 is the one the recording counted, because nothing has tokenized the prompt
-yet, so the line words it as approximate; a server that never reported a
-context length gets no bar, because there is no honest denominator for one.
+yet, so the line words it as approximate. The line is words only, so it never
+reads as a second progress bar; a server that never reported a context length
+gets no share, because there is no honest denominator for one.
 Below that, an activity log on the left records one line per step — setup
 checked, server answered or model file verified, server ready, GPU startup
 verified, replay loaded — and one line per turn with its decode speed and
 duration. The last-turn status above the log carries first-token latency.
 A single spinning live line names the step in progress. A metrics column on
-the right shows the run's tokens per second so far and a decode-speed histogram.
-Press `d` to reveal the first-token histogram and per-turn trend. A managed run also shows the
+the right shows the run's tokens per second so far and a decode-speed range chart.
+Press `d` to reveal the first-token range chart and per-turn trend. A managed run also shows the
 model download progress in GiB and can swap the activity log for the server's
 own log with `l`. Terminals narrower than 90 columns show the activity log by
-default; `d` switches to the metrics. They also shorten the context bar to its
-share alone. Terminals shorter than 34 rows omit the trend, and shorter than
+default; `d` switches to the metrics. They also shorten the context line. Terminals shorter than 34 rows omit the trend, and shorter than
 27 rows omit the first-token chart.
 
 The result screen leads with the outcome, tokens per second, median response
 times, and the folder containing the reports. **Result details** reveals p90
-timings, per-turn decode percentiles, and three final distributions. The charts
-stack when they cannot fit side by side, so detail remains accessible at every
-supported terminal size. No run or result screen renders
+timings, per-turn decode percentiles, and three final range charts.
+
+A range chart is a one-line box plot of one per-turn metric, labelled under
+the line with the slowest-to-fastest range (min and max) and the median. The
+whiskers reach the min and max, the box spans the middle half of turns (p25 to
+p75), and the lit cell is the median. The plot is a sketch rather than to scale:
+it centres on the median on a log scale, so its width shows how far turns stray
+from typical, and a whisker past the edge ends in an arrow. Decode speed reaches
+2× either side of the median and the two times reach 10×, because latency grows
+with each task's context; one metric always uses the same scale, so runs compare
+by eye. The result screen stacks its three charts.
+
+No run or result screen renders
 prompts, responses, tool arguments, server URLs, or secrets. The server log
 pane shows the owned server's own output, which names only its loopback
 address.
