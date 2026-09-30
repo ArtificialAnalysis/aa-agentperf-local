@@ -47,7 +47,7 @@ The speed-up it shows, such as MTP or DFlash, comes from `speculation_policy`.
 Check what your machine can run before you download anything:
 
 ```console
-uv run agentperf-local deployment-options --profile-id gemma4-12b-it-q4-0
+uv run agentperf-local deployment-options --profile-id qwen38-27b-q4-k-m
 ```
 
 It prints the detected accelerator, the installed frameworks, the recipe's
@@ -55,9 +55,9 @@ memory floor, and whether the recipe fits. Then run it:
 
 ```console
 uv run agentperf-local managed-run \
-  --profile-id gemma4-12b-it-q4-0 \
+  --profile-id qwen38-27b-q4-k-m \
   --framework llama-cpp \
-  --output-dir results/gemma4-12b
+  --output-dir results/qwen38-27b
 ```
 
 - **llama.cpp** recipes do not pin a build. Put a `llama-server` on `PATH`.

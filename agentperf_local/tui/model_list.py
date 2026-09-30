@@ -2,6 +2,7 @@
 
 - ListedRecipe: one recipe and what this computer can do with it.
 - ordered_recipes: this computer's recipes, then other hardware, each grouped by model.
+- opening_recipe: the recipe the list opens on.
 - model_list_options: the list rows, with part, column, and model headings.
 - table_width: the width the widest recipe row needs.
 - standing_mark: the colored mark each standing shows.
@@ -58,6 +59,9 @@ MODEL_HEADING = Style(bold=True)
 DIGIT_RUN = re.compile(r"(\d+)")
 # Device recipes sort first by folder name, then these portable ones, narrowest first.
 PORTABLE_HARDWARE = ("nvidia-cuda", "any")
+# The models on artificialanalysis.ai, in its order, by model_release_slug.
+FEATURED_MODEL_SLUGS = ("qwen3-5-9b", "qwen3-8-27b", "qwen3-6-35b-a3b", "ling-3-0-flash")
+DEFAULT_MODEL_SLUG = "qwen3-8-27b"
 
 
 class ListedRecipe(BaseModel, frozen=True):
@@ -84,12 +88,15 @@ def _natural_key(name: str) -> tuple[tuple[int, int | str], ...]:
     return tuple((0, int(part)) if part.isdigit() else (1, part.casefold()) for part in DIGIT_RUN.split(name))
 
 
-def _sort_key(recipe: ListedRecipe) -> tuple[bool, tuple[tuple[int, int | str], ...], int, int, str, str]:
+def _sort_key(recipe: ListedRecipe) -> tuple[bool, int, tuple[tuple[int, int | str], ...], int, int, str, str]:
+    slug = recipe.candidate.model_release_slug
+    featured_rank = FEATURED_MODEL_SLUGS.index(slug) if slug in FEATURED_MODEL_SLUGS else len(FEATURED_MODEL_SLUGS)
     standing_rank = 0 if recipe.availability is None else RECIPE_STANDING_ORDER.index(recipe.availability.standing)
     hardware = recipe.hardware
     portable_rank = PORTABLE_HARDWARE.index(hardware) + 1 if hardware in PORTABLE_HARDWARE else 0
     return (
         recipe.for_other_hardware,
+        featured_rank,
         _natural_key(recipe.candidate.model_name),
         standing_rank,
         portable_rank,
@@ -104,9 +111,9 @@ def ordered_recipes(
 ) -> tuple[ListedRecipe, ...]:
     """List recipes in screen order.
 
-    This computer's recipes come before other hardware. Within each part, models
-    follow in natural name order, and one model's recipes go best standing first,
-    then device recipes before portable ones.
+    This computer's recipes come before other hardware. Within each part, the
+    featured models come first, then the rest in natural name order. One model's
+    recipes go best standing first, then device recipes before portable ones.
     """
     listed = (
         ListedRecipe(
@@ -117,6 +124,25 @@ def ordered_recipes(
         for candidate in catalog.models
     )
     return tuple(sorted(listed, key=_sort_key))
+
+
+def opening_recipe(recipes: tuple[ListedRecipe, ...]) -> ListedRecipe:
+    """Return the recipe the list opens on.
+
+    That is the default model's best recipe for this computer when it fits, else the
+    first recipe here that fits, else the first here, else the first listed.
+    """
+    here = tuple(recipe for recipe in recipes if not recipe.for_other_hardware)
+    # Without hardware detection nothing is assessed, so every recipe counts as fitting.
+    fitting = tuple(
+        recipe
+        for recipe in here
+        if recipe.availability is None or recipe.availability.standing is not RecipeStanding.TOO_LARGE
+    )
+    default_model = next(
+        (recipe for recipe in fitting if recipe.candidate.model_release_slug == DEFAULT_MODEL_SLUG), None
+    )
+    return default_model or next(iter(fitting), None) or next(iter(here), None) or recipes[0]
 
 
 def model_list_options(recipes: tuple[ListedRecipe, ...], computer: str | None) -> tuple[Option | None, ...]:

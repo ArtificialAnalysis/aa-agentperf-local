@@ -173,6 +173,7 @@ from agentperf_local.tui.messages import (
 from agentperf_local.tui.model_list import (
     ListedRecipe,
     model_list_options,
+    opening_recipe,
     ordered_recipes,
     standing_mark,
     table_width,
@@ -1006,8 +1007,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         return next((recipe.candidate for recipe in self.listed_recipes if not recipe.for_other_hardware), None)
 
     def _default_candidate(self) -> ModelCandidate:
-        """Return the recipe the model screen opens on: the first for this computer, else the first listed."""
-        return self._first_recipe_here() or self.listed_recipes[0].candidate
+        """Return the recipe the model screen opens on."""
+        return opening_recipe(self.listed_recipes).candidate
 
     def _model_option_index(self, option_id: str) -> int:
         return self.query_one("#model-list", OptionList).get_option_index(option_id)
@@ -1204,6 +1205,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             select.value = previous
         else:
             select.value = str(default_context_tokens(deployment, ladder, available_memory_bytes))
+        # An unchanged value fires no watcher, so the shown label would stay the last recipe's.
+        select.mutate_reactive(ManagedContextSelect.value)
 
     def _replay_context_floor(self) -> int | None:
         """Return the bundled replay's declared context demand, when it declares one.
