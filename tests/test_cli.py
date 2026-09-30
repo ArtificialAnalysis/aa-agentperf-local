@@ -84,7 +84,7 @@ def test_cli_detects_hardware_and_offers_only_compatible_frameworks(
 
     output = orjson.loads(capsys.readouterr().out)
     assert status == 0
-    assert output["profile_id"] == "gemma4-12b-it-q4-0"
+    assert output["profile_id"] == "qwen38-27b-q4-k-m"
     assert [offer["framework"] for offer in output["offers"]] == ["llama-cpp"]
     assert output["can_deploy_now"] is True
 

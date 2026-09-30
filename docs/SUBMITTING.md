@@ -9,15 +9,15 @@ Build the submission file from a finished run. The only network request asks
 GitHub for the full commit of the serving framework's build:
 
 ```console
-uv run agentperf-local prepare-submission results/gemma4-12b \
-  --output results/gemma4-12b-submission.json
+uv run agentperf-local prepare-submission results/qwen38-27b \
+  --output results/qwen38-27b-submission.json
 ```
 
 Send it. The command checks the file, prints a privacy notice, and asks you to
 confirm. `--yes` confirms without a prompt:
 
 ```console
-uv run agentperf-local submit results/gemma4-12b-submission.json
+uv run agentperf-local submit results/qwen38-27b-submission.json
 ```
 
 It prints a submission ID. Read its status later:

@@ -82,7 +82,7 @@ SAMPLING_PRESETS: tuple[SamplingPreset, ...] = ("standard", "custom")
 TOOL_REPLAY_MODES: tuple[ToolReplayMode, ...] = ("none", "fixed_delay", "live")
 
 
-DEFAULT_MANAGED_PROFILE_ID = "gemma4-12b-it-q4-0"
+DEFAULT_MANAGED_PROFILE_ID = "qwen38-27b-q4-k-m"
 
 
 BOUND_RESULT_FILENAMES = (

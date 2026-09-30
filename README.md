@@ -73,9 +73,9 @@ installed:
 
 ```console
 uv run agentperf-local managed-run \
-  --profile-id gemma4-12b-it-q4-0 \
+  --profile-id qwen38-27b-q4-k-m \
   --framework llama-cpp \
-  --output-dir results/gemma4-12b
+  --output-dir results/qwen38-27b
 ```
 
 `managed-run` downloads the pinned model into the Hugging Face cache, checks
@@ -232,7 +232,7 @@ details on what is sent to Artificial Analysis.
 | `tui` | Open the guided full-screen app. |
 | `run` | Replay a workload against a server you run. |
 | `managed-run` | Download a catalog model, then serve and benchmark it. |
-| `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `gemma4-12b-it-q4-0`, or `--profile-id`). |
+| `deployment-options` | Show which frameworks can serve one catalog profile on this machine (default `qwen38-27b-q4-k-m`, or `--profile-id`). |
 | `doctor` | Show local hardware facts without identifiers. |
 | `convert` | Convert an agent recording into a replay manifest. |
 | `prepare-submission` | Build a submission file without uploading it. |

@@ -760,7 +760,8 @@ async def test_external_catalog_never_receives_aa_candidate_provenance(tmp_path:
     app = AgentPerfLocalApp(catalog, controller=FakeReplayController())
 
     async with app.run_test(size=(96, 30)) as pilot:
-        await pilot.pause()
+        await pilot.click("#welcome-start")
+        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
 
         assert not catalog.is_bundled_snapshot
         assert app.selection.kind is SelectionKind.EXTERNAL_CATALOG_ENTRY
@@ -782,7 +783,7 @@ async def test_long_variant_leaves_the_detail_pane_readable(tmp_path: Path) -> N
 
     async with app.run_test(size=(90, 30)) as pilot:
         await pilot.click("#welcome-start")
-        await pilot.pause()
+        await _highlight_profile(app, pilot, "gemma4-12b-it-q4-0")
         model_list = app.query_one("#model-list", OptionList)
         row = str(model_list.get_option_at_index(model_list.get_option_index("gemma4-12b-it-q4-0")).prompt)
         pane = app.query_one("#model-detail-pane", VerticalScroll)
@@ -1940,8 +1941,12 @@ async def test_model_list_puts_what_this_computer_can_run_first(
         prompts = tuple(str(row.prompt) for row in rows)
         ids = tuple(row.id for row in rows)
         other_hardware = prompts.index("OTHER HARDWARE")
+        model_names = {candidate.model_name for candidate in catalog.models}
+        models_here = [prompt for prompt in prompts[:other_hardware] if prompt in model_names]
 
         assert prompts[0] == heading
+        assert models_here[:5] == ["Qwen3.5 9B", "Qwen3.8 27B", "Qwen3.6 35B A3B", "Ling 3.0 flash", "Gemma 4 12B"]
+        assert model_list.highlighted == ids.index("qwen38-27b-q4-k-m-mtp")
         assert ids.index(SelectionKind.CUSTOM_ENDPOINT.value) < other_hardware
         for profile_id, mark in marks.items():
             assert ids.index(profile_id) < other_hardware
