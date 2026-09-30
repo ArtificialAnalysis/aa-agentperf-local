@@ -171,9 +171,9 @@ from agentperf_local.tui.messages import (
     UploadProgressMessage,
 )
 from agentperf_local.tui.model_list import (
-    DEFAULT_MODEL_SLUG,
     ListedRecipe,
     model_list_options,
+    opening_recipe,
     ordered_recipes,
     standing_mark,
     table_width,
@@ -1007,20 +1007,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         return next((recipe.candidate for recipe in self.listed_recipes if not recipe.for_other_hardware), None)
 
     def _default_candidate(self) -> ModelCandidate:
-        """Return the recipe the model screen opens on.
-
-        That is the default model's first recipe for this computer, else the first for this computer, else the
-        first listed.
-        """
-        default_model = next(
-            (
-                recipe.candidate
-                for recipe in self.listed_recipes
-                if not recipe.for_other_hardware and recipe.candidate.model_release_slug == DEFAULT_MODEL_SLUG
-            ),
-            None,
-        )
-        return default_model or self._first_recipe_here() or self.listed_recipes[0].candidate
+        """Return the recipe the model screen opens on."""
+        return opening_recipe(self.listed_recipes).candidate
 
     def _model_option_index(self, option_id: str) -> int:
         return self.query_one("#model-list", OptionList).get_option_index(option_id)

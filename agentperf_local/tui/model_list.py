@@ -1,8 +1,8 @@
 """Order recipes for the model screen and word each row.
 
 - ListedRecipe: one recipe and what this computer can do with it.
-- FEATURED_MODEL_SLUGS, DEFAULT_MODEL_SLUG: the models listed first, and the one the list opens on.
 - ordered_recipes: this computer's recipes, then other hardware, each grouped by model.
+- opening_recipe: the recipe the list opens on.
 - model_list_options: the list rows, with part, column, and model headings.
 - table_width: the width the widest recipe row needs.
 - standing_mark: the colored mark each standing shows.
@@ -124,6 +124,25 @@ def ordered_recipes(
         for candidate in catalog.models
     )
     return tuple(sorted(listed, key=_sort_key))
+
+
+def opening_recipe(recipes: tuple[ListedRecipe, ...]) -> ListedRecipe:
+    """Return the recipe the list opens on.
+
+    That is the default model's best recipe for this computer when it fits, else the
+    first recipe here that fits, else the first here, else the first listed.
+    """
+    here = tuple(recipe for recipe in recipes if not recipe.for_other_hardware)
+    # Without hardware detection nothing is assessed, so every recipe counts as fitting.
+    fitting = tuple(
+        recipe
+        for recipe in here
+        if recipe.availability is None or recipe.availability.standing is not RecipeStanding.TOO_LARGE
+    )
+    default_model = next(
+        (recipe for recipe in fitting if recipe.candidate.model_release_slug == DEFAULT_MODEL_SLUG), None
+    )
+    return default_model or next(iter(fitting), None) or next(iter(here), None) or recipes[0]
 
 
 def model_list_options(recipes: tuple[ListedRecipe, ...], computer: str | None) -> tuple[Option | None, ...]:

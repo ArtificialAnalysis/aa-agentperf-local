@@ -126,13 +126,14 @@ recipe's standing:
 | Red `✗` | Too large for this computer's memory at any context the replay allows. |
 | Gray `·` | Made for other hardware. |
 
-Within a part, Qwen3.5 9B, Qwen3.8 27B, Qwen3.6 35B A3B, and Ling 3.0 flash
-come first, then the other models in name order. A model's recipes go best
-standing first. The list opens on Qwen3.8 27B, the default model. Each recipe
-is checked at its full context, whatever context setup last held, against the
-selected replay's minimum. With several
-accelerators and no device chosen yet, a recipe shows its best standing across
-them. The detail pane leads with the standing and, when a recipe cannot start,
+Within a part, the models on the
+[Laptops & Workstations page](https://artificialanalysis.ai/hardware-inference-stack/laptops-workstations)
+come first, in the page's order, then the other models in name order. A model's
+recipes go best standing first. The list opens on Qwen3.8 27B, the default
+model, when it fits this computer, and otherwise on the first recipe that fits.
+Each recipe is checked at its full context, whatever context setup last held,
+against the selected replay's minimum. With several accelerators and no device
+chosen yet, a recipe shows its best standing across them. The detail pane leads with the standing and, when a recipe cannot start,
 the reason; for llama.cpp it also names the backend a recipe pins, such as
 Vulkan. Recipes loaded with `--recipes`
 also carry a note that they are not from Artificial Analysis.
