@@ -1204,6 +1204,8 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             select.value = previous
         else:
             select.value = str(default_context_tokens(deployment, ladder, available_memory_bytes))
+        # An unchanged value fires no watcher, so the shown label would stay the last recipe's.
+        select.mutate_reactive(ManagedContextSelect.value)
 
     def _replay_context_floor(self) -> int | None:
         """Return the bundled replay's declared context demand, when it declares one.
