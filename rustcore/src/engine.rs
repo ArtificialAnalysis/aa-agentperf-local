@@ -18,7 +18,7 @@ use crate::ClockBase;
 
 const ERROR_BODY_LIMIT_BYTES: usize = 512;
 /// Identity shared with the Python client so a server cannot tell them apart.
-const MEASURED_USER_AGENT: &str = "agentperf-local/0.3.2";
+const MEASURED_USER_AGENT: &str = "agentperf-local/0.3.3";
 
 #[derive(Debug, Clone)]
 pub struct CoreError(String);
