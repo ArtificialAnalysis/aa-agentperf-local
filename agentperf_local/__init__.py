@@ -1,3 +1,3 @@
 """Replay recorded agent tasks against a local model endpoint."""
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
