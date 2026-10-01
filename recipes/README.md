@@ -95,8 +95,10 @@ them as not from the Artificial Analysis catalog.
    uv run pytest tests/test_model_catalog.py tests/test_model_candidates.py
    ```
 
-6. Run it once with `managed-run` on the hardware. Put the result summary
-   and your hardware in the pull request.
+6. Run it with `managed-run` on the hardware, and open a pull request.
+   [`CONTRIBUTING.md`](../CONTRIBUTING.md) lists the format rules, the
+   performance numbers, the reproduction details, and the accuracy check that
+   the pull request must include.
 
 [`recipe-v2.schema.json`](../docs/schemas/recipe-v2.schema.json) describes
 every field. The loader in
