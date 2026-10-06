@@ -298,7 +298,7 @@ async def _measurable_output_token_policy(
 ) -> OutputTokenPolicy:
     """Return the policy this run measures under, asking the ready server when the policy depends on it.
 
-    A server that drops ignore_eos, as Splash does, fails every exact-policy turn. An
+    A server that drops ignore_eos fails every exact-policy turn. An
     explicit exact policy is refused on such a server; an unset one falls back to the
     recorded policy, as an attached run does.
     """

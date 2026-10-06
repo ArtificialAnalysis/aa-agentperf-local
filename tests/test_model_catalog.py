@@ -142,7 +142,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert splash.devices == ("apple-silicon",)
     assert splash.deployment.artifact_kind == "splash-package"
     assert splash.deployment.frameworks == ("splash",)
-    assert splash.deployment.runtime_version_for("splash") == "1.0.2"
+    assert splash.deployment.runtime_version_for("splash") == "1.2.1"
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:

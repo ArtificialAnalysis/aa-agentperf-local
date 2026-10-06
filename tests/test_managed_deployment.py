@@ -1856,11 +1856,11 @@ SPLASH_FILES: tuple[tuple[str, bytes], ...] = (
     ("tokenizer/tokenizer.json", b'{"version": "fixture"}'),
 )
 SPLASH_REPOSITORY = "example/model-splash"
-SPLASH_VERSION = "1.0.2"
+SPLASH_VERSION = "1.2.1"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-# A stand-in for the server script inside a Splash install. It reads the flags the
+# A stand-in for the server module inside a Splash install. It reads the flags the
 # launcher passes and serves them through the shared fixture server.
-SPLASH_SERVER_SCRIPT = """\
+SPLASH_SERVER_SOURCE = """\
 import argparse
 import sys
 
@@ -1869,8 +1869,7 @@ from tests.managed_server import main
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--binary", required=True)
-for positional in ("target", "draft"):
-    parser.add_argument(positional)
+parser.add_argument("model_root")
 parser.add_argument("--port", required=True)
 parser.add_argument("--served-model-name", required=True)
 parser.add_argument("--max-context", required=True)
@@ -1924,14 +1923,15 @@ def _cached_splash_package(cache_root: Path, candidate: ModelCandidate) -> Path:
 
 
 def _splash_install(tmp_path: Path) -> CommandFinder:
-    """Lay out a packaged Splash install whose server script is the fixture server."""
+    """Lay out a packaged Splash install whose server module is the fixture server."""
     cellar = tmp_path / "Cellar" / "splash"
     libexec = cellar / "libexec"
     launcher = write_python_executable(cellar / "bin" / "splash", f"print('Splash {SPLASH_VERSION}')\n")
     write_python_executable(libexec / "python" / "bin" / "python3", SPLASH_PYTHON_SCRIPT)
     (libexec / "release.json").write_text(f'{{"version": "{SPLASH_VERSION}"}}')
     (libexec / "server").mkdir()
-    (libexec / "server" / "server.py").write_text(SPLASH_SERVER_SCRIPT.format(root=str(REPOSITORY_ROOT)))
+    (libexec / "server" / "__init__.py").write_text("")
+    (libexec / "server" / "server.py").write_text(SPLASH_SERVER_SOURCE.format(root=str(REPOSITORY_ROOT)))
     (libexec / "engine").mkdir()
     (libexec / "engine" / "splash").write_bytes(b"fixture engine")
     linked = tmp_path / "bin" / "splash"
@@ -1970,15 +1970,15 @@ def test_splash_serves_the_verified_snapshot_and_proves_its_context(
     assert plan.command[plan.command.index("--binary") + 1] == str(engine)
     assert plan.runtime.executable_sha256 == f"sha256:{hashlib.sha256(b'fixture engine').hexdigest()}"
     assert plan.runtime.version == f"Splash {SPLASH_VERSION}"
-    assert str(snapshot_root / "target") in plan.command
-    assert str(snapshot_root / "draft") in plan.command
+    assert plan.command[plan.command.index("--binary") + 2] == str(snapshot_root)
+    assert ("PYTHONPATH", str(tmp_path / "Cellar" / "splash" / "libexec")) in plan.device_environment
     assert plan.command[plan.command.index("--tokenizer") + 1] == str(snapshot_root / "tokenizer")
     assert plan.command[plan.command.index("--model") + 1] == SPLASH_REPOSITORY
     assert plan.command[plan.command.index("--served-model-name") + 1] == "fixture-splash-test"
     assert plan.command[plan.command.index("--max-context") + 1] == str(PROFILE_CONTEXT_TOKENS)
     assert plan.server_launch_command.startswith(
-        '"$SPLASH_HOME"/python/bin/python3 -u "$SPLASH_HOME"/server/server.py --binary "$SPLASH_HOME"/engine/splash '
-        '"$MODEL_DIR"/target "$MODEL_DIR"/draft --tokenizer "$MODEL_DIR"/tokenizer'
+        'PYTHONPATH="$SPLASH_HOME" "$SPLASH_HOME"/python/bin/python3 -u -P -m server.server '
+        '--binary "$SPLASH_HOME"/engine/splash "$MODEL_DIR" --tokenizer "$MODEL_DIR"/tokenizer'
     )
     assert plan.accelerator_backend == "metal"
     plan = replace_fields(

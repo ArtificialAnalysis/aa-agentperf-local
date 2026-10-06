@@ -64,8 +64,7 @@ uv run agentperf-local managed-run \
 - **SGLang** and **vLLM** recipes pin one exact release in
   `runtime_versions`. Run them where `import sglang` or `import vllm` works.
 - **Splash** recipes pin one exact release too. Install it with
-  `brew install incoai/tap/splash`. Splash drops `ignore_eos`, so pass
-  `--output-token-policy recorded`.
+  `brew install incoai/tap/splash`.
 
 To try recipes from another folder, pass `--recipes PATH`. The TUI marks
 them as not from the Artificial Analysis catalog.
