@@ -1860,7 +1860,7 @@ SPLASH_VERSION = "1.2.1"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 # A stand-in for the server module inside a Splash install. It reads the flags the
 # launcher passes and serves them through the shared fixture server.
-SPLASH_SERVER_SCRIPT = """\
+SPLASH_SERVER_SOURCE = """\
 import argparse
 import sys
 
@@ -1923,7 +1923,7 @@ def _cached_splash_package(cache_root: Path, candidate: ModelCandidate) -> Path:
 
 
 def _splash_install(tmp_path: Path) -> CommandFinder:
-    """Lay out a packaged Splash install whose server script is the fixture server."""
+    """Lay out a packaged Splash install whose server module is the fixture server."""
     cellar = tmp_path / "Cellar" / "splash"
     libexec = cellar / "libexec"
     launcher = write_python_executable(cellar / "bin" / "splash", f"print('Splash {SPLASH_VERSION}')\n")
@@ -1931,7 +1931,7 @@ def _splash_install(tmp_path: Path) -> CommandFinder:
     (libexec / "release.json").write_text(f'{{"version": "{SPLASH_VERSION}"}}')
     (libexec / "server").mkdir()
     (libexec / "server" / "__init__.py").write_text("")
-    (libexec / "server" / "server.py").write_text(SPLASH_SERVER_SCRIPT.format(root=str(REPOSITORY_ROOT)))
+    (libexec / "server" / "server.py").write_text(SPLASH_SERVER_SOURCE.format(root=str(REPOSITORY_ROOT)))
     (libexec / "engine").mkdir()
     (libexec / "engine" / "splash").write_bytes(b"fixture engine")
     linked = tmp_path / "bin" / "splash"

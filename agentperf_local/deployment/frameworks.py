@@ -59,8 +59,8 @@ SPLASH_LIBEXEC_DIRECTORY = "libexec"
 SPLASH_RELEASE_FILENAME = "release.json"
 SPLASH_PYTHON_PATH = Path("python/bin/python3")
 SPLASH_SERVER_PATH = Path("server/server.py")
-# Splash 1.2 runs its server as this module of the install root, not as a script.
-SPLASH_SERVER_MODULE = "server.server"
+# Splash 1.2 runs that file as a module of the install root, not as a script.
+SPLASH_SERVER_MODULE = ".".join(SPLASH_SERVER_PATH.with_suffix("").parts)
 SPLASH_ENGINE_PATH = Path("engine/splash")
 
 
