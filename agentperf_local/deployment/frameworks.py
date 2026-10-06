@@ -59,6 +59,8 @@ SPLASH_LIBEXEC_DIRECTORY = "libexec"
 SPLASH_RELEASE_FILENAME = "release.json"
 SPLASH_PYTHON_PATH = Path("python/bin/python3")
 SPLASH_SERVER_PATH = Path("server/server.py")
+# Splash 1.2 runs its server as this module of the install root, not as a script.
+SPLASH_SERVER_MODULE = "server.server"
 SPLASH_ENGINE_PATH = Path("engine/splash")
 
 
@@ -74,6 +76,8 @@ class FrameworkExecutable(BaseModel, frozen=True):
     executable_path: Path
     # The folder a packaged install keeps its runtime in, which a launch command names by placeholder.
     install_root: Path | None = None
+    # Variables the command needs beside the caller's environment.
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 class FrameworkOffer(BaseModel, frozen=True):
@@ -178,8 +182,10 @@ def _resolve_splash_executable(command_finder: CommandFinder) -> FrameworkExecut
 
     `splash serve` downloads whatever revision the model repository's main branch
     names, into its own model directory. A recipe pins one revision, so the launcher
-    starts the install's own server script on the verified snapshot instead. The
-    engine binary it drives is what the fingerprint hashes.
+    starts the install's own server module on the verified snapshot instead. `-P` keeps
+    the working directory off the import path and PYTHONPATH names the install root,
+    as Splash's own launcher does. The engine binary it drives is what the fingerprint
+    hashes.
     """
     launcher = command_finder("splash")
     if launcher is None:
@@ -194,10 +200,11 @@ def _resolve_splash_executable(command_finder: CommandFinder) -> FrameworkExecut
         return None
     return FrameworkExecutable(
         framework="splash",
-        command_prefix=(str(python), "-u", str(server), "--binary", str(engine)),
+        command_prefix=(str(python), "-u", "-P", "-m", SPLASH_SERVER_MODULE, "--binary", str(engine)),
         version_command=(launcher, "--version"),
         executable_path=engine,
         install_root=install_root,
+        environment=(("PYTHONPATH", str(install_root)),),
     )
 
 

@@ -595,15 +595,14 @@ def _splash_argv(
 ) -> tuple[str, ...]:
     """Return the Splash server flags for one recipe, after the executable prefix.
 
-    The package directories come from the verified snapshot, never from Splash's own
+    The package directory comes from the verified snapshot, never from Splash's own
     model directory, so the served weights are the recipe's pinned revision. Splash
     exits unless its engine grants exactly the requested context, and it parses tool
     calls and reasoning itself, so no parser is named. The engine sizes its memory
     budget from the context.
     """
     return (
-        str(model_path / "target"),
-        str(model_path / "draft"),
+        str(model_path),
         "--tokenizer",
         str(model_path / "tokenizer"),
         "--model",
@@ -756,7 +755,7 @@ def create_deployment_plan(
         raise ValueError("managed deployment alias nonce must be non-empty ASCII letters and digits")
     model_alias = f"{candidate.profile_id}-{nonce}"
     recipe_environment = deployment.vllm.environment if framework == "vllm" and deployment.vllm is not None else ()
-    combined_environment = (*recipe_environment, *device_environment)
+    combined_environment = (*recipe_environment, *executable.environment, *device_environment)
     environment_names = tuple(name for name, _ in combined_environment)
     if len(set(environment_names)) != len(environment_names):
         raise ValueError("managed deployment environment names must be unique")

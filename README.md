@@ -85,18 +85,17 @@ stops the server. Every recipe it can run is a YAML file in
 
 The `qwen38-27b-splash-dflash` recipe serves on [Splash](https://github.com/incoai/splash),
 Inco AI's Metal engine for Apple Silicon (M3 or newer, macOS 26.4 or later).
-Install it with `brew install incoai/tap/splash`. The recipe pins Splash 1.0.2
+Install it with `brew install incoai/tap/splash`. The recipe pins Splash 1.2.1
 and the `incoai/Qwen3.8-27B-Splash` package by commit. `managed-run` downloads
 and verifies the package itself, then starts Splash's server on that snapshot,
-so Splash never resolves a newer revision. Splash drops `ignore_eos`, so this
-recipe runs only under the `recorded` output policy, and its KV cache is always
-eight-bit. Both make its results not comparable with `exact` runs:
+so Splash never resolves a newer revision. Splash 1.2.1 honors `ignore_eos` on
+requests with tools, so this recipe runs the `exact` policy. Its KV cache is
+always eight-bit:
 
 ```console
 uv run agentperf-local managed-run \
   --profile-id qwen38-27b-splash-dflash \
   --framework splash \
-  --output-token-policy recorded \
   --output-dir results/qwen38-splash
 ```
 

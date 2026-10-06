@@ -367,7 +367,7 @@ def _add_managed_run_parser(subparsers: argparse._SubParsersAction[argparse.Argu
         default="exact",
         help=(
             "exact generates each turn's recorded length with end-of-sequence ignored (default); "
-            "recorded caps at the recorded length, for a runtime that drops ignore_eos, such as Splash"
+            "recorded caps at the recorded length, for a runtime that drops ignore_eos"
         ),
     )
     parser.add_argument(

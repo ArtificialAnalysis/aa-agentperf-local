@@ -267,4 +267,4 @@ deployment:
     constant_state_bytes: 350224384
     runtime_overhead_bytes: 1860400852
   runtime_versions:
-    splash: 1.0.2
+    splash: 1.2.1
