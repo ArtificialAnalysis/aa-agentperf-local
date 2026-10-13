@@ -55,6 +55,10 @@ NVIDIA_SMI_ADDRESSING_COMMAND = ("nvidia-smi", "-q")
 NVIDIA_COHERENT_ADDRESSING_MODES = ("ATS", "HMM")
 
 
+# The product brand `nvidia-smi -q` gives a neural processing unit, such as the RTX Spark's.
+NVIDIA_NPU_BRAND = "NPU"
+
+
 AMD_SMI_COMMAND = ("amd-smi", "static", "--gpu", "all", "--json")
 
 
@@ -344,21 +348,49 @@ def _parse_nvidia_row(row: str, *, memory_is_unified: bool) -> AcceleratorSnapsh
         return None
 
 
-def _nvidia_addressing_is_coherent(probe: SystemProbe) -> bool:
-    """Report whether the driver says this GPU addresses host memory coherently.
+class _NvidiaDeviceDetails(BaseModel, frozen=True):
+    """Hold the facts `nvidia-smi -q` adds about devices that report no memory size."""
+
+    coherent: bool
+    npu_names: frozenset[str]
+
+
+def _nvidia_device_details(probe: SystemProbe) -> _NvidiaDeviceDetails:
+    """Read the addressing mode and the NPUs from the driver's full device report.
 
     A part such as the GB10 has no framebuffer of its own, so nvidia-smi reports its
     memory as unavailable. Reading the addressing mode tells that case apart from a
     driver that simply failed to answer, which must stay an unknown capacity.
+
+    The RTX Spark's NPU also reports no memory size. nvidia-smi lists it beside the
+    GPU, but it serves no CUDA work, so its brand marks it for removal.
     """
     result = probe.run(NVIDIA_SMI_ADDRESSING_COMMAND)
     if result.returncode != 0:
-        return False
+        return _NvidiaDeviceDetails(coherent=False, npu_names=frozenset())
+    addressing: str | None = None
+    name: str | None = None
+    npu_names: set[str] = set()
     for line in result.stdout.decode("utf-8", errors="replace").splitlines():
         label, separator, value = line.partition(":")
-        if separator and label.strip() == "Addressing Mode":
-            return value.strip() in NVIDIA_COHERENT_ADDRESSING_MODES
-    return False
+        if not separator:
+            continue
+        label, value = label.strip(), value.strip()
+        if label == "Product Name":
+            name = value
+        elif label == "Product Brand" and value == NVIDIA_NPU_BRAND and name is not None:
+            npu_names.add(name)
+        elif label == "Addressing Mode" and addressing is None and name not in npu_names:
+            addressing = value
+    return _NvidiaDeviceDetails(
+        coherent=addressing in NVIDIA_COHERENT_ADDRESSING_MODES,
+        npu_names=frozenset(npu_names),
+    )
+
+
+def _nvidia_row_name(row: str) -> str | None:
+    fields = _nvidia_row_fields(row)
+    return None if fields is None else fields[0]
 
 
 def inspect_nvidia(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...], HardwareWarningCode | None]:
@@ -371,11 +403,18 @@ def inspect_nvidia(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...],
     if result.returncode != 0:
         return (), "nvidia_smi_failed"
     rows = tuple(row for row in result.stdout.decode("utf-8", errors="replace").splitlines() if row.strip())
-    # Only a row without a reported size can be a coherent-memory part, so the second and
-    # much slower query runs only when one appears.
-    coherent = any(_nvidia_row_memory_bytes(row) is None for row in rows) and _nvidia_addressing_is_coherent(probe)
+    # Only a row without a reported size can be a coherent-memory part or an NPU, so the
+    # second and much slower query runs only when one appears.
+    details = (
+        _nvidia_device_details(probe)
+        if any(_nvidia_row_memory_bytes(row) is None for row in rows)
+        else _NvidiaDeviceDetails(coherent=False, npu_names=frozenset())
+    )
+    rows = tuple(row for row in rows if _nvidia_row_name(row) not in details.npu_names)
     accelerators = tuple(
-        accelerator for row in rows if (accelerator := _parse_nvidia_row(row, memory_is_unified=coherent)) is not None
+        accelerator
+        for row in rows
+        if (accelerator := _parse_nvidia_row(row, memory_is_unified=details.coherent)) is not None
     )
     # A dropped row hides a real device, so warn even when the other rows parsed.
     if not accelerators or len(accelerators) != len(rows):
