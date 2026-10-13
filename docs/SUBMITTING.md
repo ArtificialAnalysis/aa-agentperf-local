@@ -32,9 +32,9 @@ same command. A different body for the same run is refused with
 `idempotency_conflict`. A failed or canceled upload in the TUI keeps the file
 and shows the `submit` command that retries it.
 
-A token is optional. Set `AGENTPERF_SUBMIT_TOKEN`, or name another variable with
-`--token-env`. Without a token the upload is anonymous. The client refuses to
-send a token over plain `http` to a non-local host.
+A key is optional. Set `AGENTPERF_SUBMIT_KEY`, or name another variable with
+`--key-env`. Without a key the upload is anonymous. The client refuses to
+send a key over plain `http` to a non-local host.
 
 ## Runs on your own server
 

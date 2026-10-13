@@ -2411,7 +2411,7 @@ async def _start_managed_run_with_submit(
         assert app.upload_submission_path is not None, f"submit={app.submit_requested} upload={upload_card!r}"
 
 
-@pytest.mark.parametrize("outcome", ["accepted", "refused"])
+@pytest.mark.parametrize("outcome", ["accepted", "refused", "rejected-key"])
 async def test_ticking_submit_uploads_the_finished_managed_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2419,12 +2419,13 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
     outcome: str,
 ) -> None:
     from tests.attached_run import record_attached_run
-    from tests.submission_server import SUBMISSION_ID, VALID_TOKEN, FakeSubmissionService, LocalSubmissionServer
+    from tests.submission_server import SUBMISSION_ID, VALID_KEY, FakeSubmissionService, LocalSubmissionServer
 
-    token_env = "AGENTPERF_TUI_TEST_TOKEN"
+    key_env = "AGENTPERF_TUI_TEST_KEY"
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
-    monkeypatch.setenv(token_env, VALID_TOKEN)
-    service = FakeSubmissionService(require_token=True)
+    key = "unknown-key" if outcome == "rejected-key" else VALID_KEY
+    monkeypatch.setenv(key_env, key)
+    service = FakeSubmissionService()
     with LocalSubmissionServer(service) as server:
         monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
         seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
@@ -2442,7 +2443,7 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
                 output_dir=tmp_path / "results",
                 client_backend="python",
                 submit_base_url=server.base_url,
-                submit_token_env=token_env,
+                submit_key_env=key_env,
             ),
         )
         async with app.run_test(size=(96, 32)) as pilot:
@@ -2474,16 +2475,20 @@ async def test_ticking_submit_uploads_the_finished_managed_run(
         assert f"Submitted · {SUBMISSION_ID} · accepted" in upload
         assert f"submission-status {SUBMISSION_ID}" in upload
         assert service.captured[0].status == 202
-        assert service.captured[0].headers["authorization"] == f"Bearer {VALID_TOKEN}"
+        assert service.captured[0].headers["authorization"] == f"Bearer {VALID_KEY}"
         assert service.captured[0].body == parse_json_object(submission_path.read_bytes(), "submission")
-    else:
+    elif outcome == "refused":
         assert app.submission_receipt is None
         assert "Upload failed · idempotency_conflict" in upload
         assert f"agentperf-local submit {submission_path} --yes" in upload
-    assert VALID_TOKEN not in upload
+    else:
+        assert app.submission_receipt is None
+        assert f"Upload failed · submit key rejected; check {key_env}" in upload
+        assert [entry.status for entry in service.captured] == [401]
+    assert key not in upload
 
 
-async def test_submit_checkbox_uploads_anonymously_without_a_token(
+async def test_submit_checkbox_uploads_anonymously_without_a_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -2491,9 +2496,9 @@ async def test_submit_checkbox_uploads_anonymously_without_a_token(
     from tests.attached_run import record_attached_run
     from tests.submission_server import LocalSubmissionServer
 
-    token_env = "AGENTPERF_TUI_TEST_TOKEN"
+    key_env = "AGENTPERF_TUI_TEST_KEY"
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
-    monkeypatch.delenv(token_env, raising=False)
+    monkeypatch.delenv(key_env, raising=False)
     with LocalSubmissionServer() as server:
         monkeypatch.setenv(GITHUB_API_URL_ENV, server.base_url)
         seed = await record_attached_run(tmp_path / "seed", monkeypatch, capsys)
@@ -2508,7 +2513,7 @@ async def test_submit_checkbox_uploads_anonymously_without_a_token(
                 output_dir=tmp_path / "results",
                 client_backend="python",
                 submit_base_url=server.base_url,
-                submit_token_env=token_env,
+                submit_key_env=key_env,
             ),
         )
         async with app.run_test(size=(96, 32)) as pilot:
@@ -2539,9 +2544,9 @@ async def test_submission_stays_busy_until_server_responds(
     from tests.attached_run import record_attached_run
     from tests.submission_server import FakeSubmissionService, LocalSubmissionServer
 
-    token_env = "AGENTPERF_TUI_TEST_TOKEN"
+    key_env = "AGENTPERF_TUI_TEST_KEY"
     monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf-cache"))
-    monkeypatch.delenv(token_env, raising=False)
+    monkeypatch.delenv(key_env, raising=False)
     release = threading.Event()
     service = FakeSubmissionService(response_release=release)
     with LocalSubmissionServer(service) as server:
@@ -2558,7 +2563,7 @@ async def test_submission_stays_busy_until_server_responds(
                 output_dir=tmp_path / "results",
                 client_backend="python",
                 submit_base_url=server.base_url,
-                submit_token_env=token_env,
+                submit_key_env=key_env,
             ),
         )
         async with app.run_test(size=MINIMUM_TERMINAL_SIZE) as pilot:

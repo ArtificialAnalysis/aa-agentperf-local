@@ -11,7 +11,7 @@ from agentperf_local.cli import main
 from agentperf_local.provenance.benchmark import SourceProvenance
 from agentperf_local.submission.builder import encode_submission
 from agentperf_local.submission.client import (
-    CLEARTEXT_TOKEN_MESSAGE,
+    CLEARTEXT_KEY_MESSAGE,
     MAX_REQUEST_BYTES,
     RevisionAllowlist,
     SubmissionError,
@@ -26,12 +26,12 @@ from tests.submission_body import sample_submission
 from tests.submission_server import (
     ALLOWLISTED_REVISION,
     SUBMISSION_ID,
-    VALID_TOKEN,
+    VALID_KEY,
     FakeSubmissionService,
     LocalSubmissionServer,
 )
 
-TOKEN_ENV = "AGENTPERF_TEST_SUBMIT_TOKEN"
+KEY_ENV = "AGENTPERF_TEST_SUBMIT_KEY"
 CANCELLATION_TEST_TIMEOUT_SECONDS = 5.0
 DIFFERENT_WALL_DURATION_MS = 2_000.0
 
@@ -41,18 +41,18 @@ def test_submit_sends_exact_bytes_and_keys_retries_on_run_id() -> None:
     changed = encode_submission(sample_submission(wall_duration_ms=DIFFERENT_WALL_DURATION_MS))
     progress: list[tuple[int, int]] = []
 
-    with LocalSubmissionServer(FakeSubmissionService(require_token=True)) as server:
+    with LocalSubmissionServer(FakeSubmissionService()) as server:
         receipt = submit_body(
             encoded,
             base_url=server.base_url,
-            token=VALID_TOKEN,
+            key=VALID_KEY,
             progress=lambda sent, total: progress.append((sent, total)),
         )
-        again = submit_body(encoded, base_url=server.base_url, token=VALID_TOKEN)
+        again = submit_body(encoded, base_url=server.base_url, key=VALID_KEY)
         with pytest.raises(SubmissionError, match="idempotency_conflict") as conflict:
-            submit_body(changed, base_url=server.base_url, token=VALID_TOKEN)
-        with pytest.raises(SubmissionError, match="auth_required") as refused:
-            submit_body(encoded, base_url=server.base_url, token="wrong-token")
+            submit_body(changed, base_url=server.base_url, key=VALID_KEY)
+        with pytest.raises(SubmissionError, match="unauthorized") as refused:
+            submit_body(encoded, base_url=server.base_url, key="wrong-key")
     captured = server.service.captured
 
     assert receipt.submission_id == again.submission_id == SUBMISSION_ID
@@ -60,7 +60,7 @@ def test_submit_sends_exact_bytes_and_keys_retries_on_run_id() -> None:
     assert receipt.status == again.status == "accepted"
     assert progress[-1] == (len(encoded), len(encoded))
     assert [entry.status for entry in captured] == [202, 200, 409, 401]
-    assert captured[0].headers["authorization"] == f"Bearer {VALID_TOKEN}"
+    assert captured[0].headers["authorization"] == f"Bearer {VALID_KEY}"
     assert captured[0].headers["content-length"] == str(len(encoded))
     assert captured[0].headers["user-agent"].startswith("agentperf-local/")
     assert captured[0].body == orjson.loads(encoded)
@@ -108,8 +108,8 @@ def test_submit_refuses_an_oversized_body_and_a_cleartext_token_before_any_reque
         with pytest.raises(SubmissionError, match="request cap"):
             submit_body(b" " * (MAX_REQUEST_BYTES + 1), base_url=server.base_url)
         assert server.service.captured == []
-    with pytest.raises(ValueError, match=CLEARTEXT_TOKEN_MESSAGE):
-        submit_body(encode_submission(sample_submission()), base_url="http://submit.example/", token=VALID_TOKEN)
+    with pytest.raises(ValueError, match=CLEARTEXT_KEY_MESSAGE):
+        submit_body(encode_submission(sample_submission()), base_url="http://submit.example/", key=VALID_KEY)
 
 
 def test_status_and_allowlist_round_trip() -> None:
@@ -142,27 +142,25 @@ def test_status_and_allowlist_round_trip() -> None:
     assert revision_advice(RevisionAllowlist(revisions=(), window_days=14), stale) is None
 
 
-def test_submit_cli_requires_acknowledgement_and_never_prints_the_token(
+def test_submit_cli_requires_acknowledgement_and_never_prints_the_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     submission_path = tmp_path / "submission.json"
     submission_path.write_bytes(encode_submission(sample_submission()))
-    monkeypatch.setenv(TOKEN_ENV, VALID_TOKEN)
+    monkeypatch.setenv(KEY_ENV, VALID_KEY)
 
-    with LocalSubmissionServer(FakeSubmissionService(require_token=True)) as server:
-        base = ["submit", str(submission_path), "--base-url", server.base_url, "--token-env", TOKEN_ENV]
+    with LocalSubmissionServer(FakeSubmissionService()) as server:
+        base = ["submit", str(submission_path), "--base-url", server.base_url, "--key-env", KEY_ENV]
         assert main(base) == 1
         refused = capsys.readouterr()
         assert main([*base, "--yes"]) == 0
         accepted = capsys.readouterr()
-        status_code = main(
-            ["submission-status", SUBMISSION_ID, "--base-url", server.base_url, "--token-env", TOKEN_ENV]
-        )
+        status_code = main(["submission-status", SUBMISSION_ID, "--base-url", server.base_url, "--key-env", KEY_ENV])
         status_output = capsys.readouterr()
-        monkeypatch.delenv(TOKEN_ENV)
-        assert main([*base, "--yes"]) == 1
+        monkeypatch.delenv(KEY_ENV)
+        assert main([*base, "--yes"]) == 0
         anonymous = capsys.readouterr()
 
     assert "needs --yes" in refused.err
@@ -173,8 +171,42 @@ def test_submit_cli_requires_acknowledgement_and_never_prints_the_token(
     assert response["created"] is True
     assert response["privacy_notice_version"] == PRIVACY_NOTICE_VERSION
     assert "private storage indefinitely" in accepted.err
-    assert VALID_TOKEN not in accepted.out + accepted.err
+    assert VALID_KEY not in accepted.out + accepted.err
     assert status_code == 1
     assert "not_found" in status_output.err
     assert "submitting anonymously" in anonymous.err
-    assert "auth_required" in anonymous.err
+    assert orjson.loads(anonymous.out)["authenticated"] is False
+    assert "authorization" not in server.service.captured[-1].headers
+
+
+@pytest.mark.parametrize(
+    ("service", "key", "status", "message"),
+    [
+        # An unknown key stops the upload; the client never retries it anonymously.
+        (FakeSubmissionService(), "unknown-key", 401, f"submit key rejected; check {KEY_ENV}"),
+        # A key store outage is retryable like any 503: the error is shown and the file is kept.
+        (FakeSubmissionService(keys_unavailable=True), VALID_KEY, 503, "submitter_keys_unavailable"),
+    ],
+)
+def test_submit_cli_stops_on_a_key_the_service_cannot_accept(
+    service: FakeSubmissionService,
+    key: str,
+    status: int,
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    submission_path = tmp_path / "submission.json"
+    submission_path.write_bytes(encode_submission(sample_submission()))
+    monkeypatch.setenv(KEY_ENV, key)
+
+    with LocalSubmissionServer(service) as server:
+        exit_code = main(["submit", str(submission_path), "--base-url", server.base_url, "--key-env", KEY_ENV, "--yes"])
+    output = capsys.readouterr()
+
+    assert exit_code == 1
+    assert message in output.err
+    assert [entry.status for entry in server.service.captured] == [status]
+    assert submission_path.is_file()
+    assert key not in output.out + output.err

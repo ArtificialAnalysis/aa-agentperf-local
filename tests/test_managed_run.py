@@ -52,7 +52,8 @@ FAKE_RUNTIME_VERSIONS: dict[DeploymentFramework, str] = {
     "vllm": "0.11.0",
 }
 FAKE_RUNTIME_REFS: dict[DeploymentFramework, str] = {"llama-cpp": "c1d0e7a00", "vllm": "v0.11.0"}
-SUBMIT_TOKEN_ENV = "AGENTPERF_TEST_SUBMIT_TOKEN"
+SUBMIT_KEY_ENV = "AGENTPERF_TEST_SUBMIT_KEY"
+SUBMIT_KEY = "aa-test-key"
 REPLAY_TIMEOUT_SECONDS = 30.0
 
 
@@ -296,7 +297,7 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
     manifest_path = write_replay_workload(tmp_path / "workload", name="managed-e2e", task_count=2)
     output_dir = tmp_path / "results"
     if entry_point == "cli":
-        monkeypatch.setenv(SUBMIT_TOKEN_ENV, "aa-test-token")
+        monkeypatch.setenv(SUBMIT_KEY_ENV, SUBMIT_KEY)
         with LocalSubmissionServer() as submission_server:
             status = main(
                 [
@@ -316,14 +317,17 @@ def test_managed_run_binds_every_record_to_one_run_and_the_chosen_device(
                     str(runtime.port),
                     "--submit-base-url",
                     submission_server.base_url,
-                    "--submit-token-env",
-                    SUBMIT_TOKEN_ENV,
+                    "--submit-key-env",
+                    SUBMIT_KEY_ENV,
                 ]
             )
         captured = capsys.readouterr()
         assert status == 0, captured.err
-        # A configured submit token turns on the advisory allowlist check; this checkout is never listed.
+        # A configured submit key turns on the advisory allowlist check; this checkout is never listed.
         assert "self-reported only" in captured.err
+        # The key is read for that check only; no console line or recorded file holds it.
+        assert SUBMIT_KEY not in captured.out + captured.err
+        assert all(SUBMIT_KEY.encode() not in path.read_bytes() for path in output_dir.iterdir())
     else:
         controller, request = _tui_launch(runtime, manifest_path, output_dir)
         assert asyncio.run(controller.execute(request, _RecordingObserver())).success

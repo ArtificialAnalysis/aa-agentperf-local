@@ -2,8 +2,8 @@
 
 Public surface: submit_body, submit_body_async, fetch_submission_status,
 fetch_revision_allowlist, check_revision_allowlist, revision_advice,
-read_submit_token, SubmissionReceipt, SubmissionStatus, RevisionAllowlist,
-RevisionCheck, SubmissionError, and the URL, size, error-code, and token constants.
+read_submit_key, rejected_key_text, SubmissionReceipt, SubmissionStatus, RevisionAllowlist,
+RevisionCheck, SubmissionError, and the URL, size, error-code, and key constants.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from agentperf_local.provenance.benchmark import SourceProvenance
 from agentperf_local.replay.config import API_KEY_ENV_PATTERN
 
 SUBMIT_BASE_URL = "https://submit.artificialanalysis.ai"
-SUBMIT_TOKEN_ENV = "AGENTPERF_SUBMIT_TOKEN"
+SUBMIT_KEY_ENV = "AGENTPERF_SUBMIT_KEY"
 SUBMISSIONS_PATH = "/v1/submissions"
 REVISIONS_PATH = "/v1/revisions"
 # The service refuses a larger body with 413.
@@ -38,7 +38,10 @@ SUBMISSION_ID_PATTERN = re.compile(r"^sub_[a-z2-7]{26}$")
 SUBMISSION_STATUSES = frozenset(("accepted", "queued"))
 # The service's error code for a run_id it already holds with other content.
 IDEMPOTENCY_CONFLICT = "idempotency_conflict"
-CLEARTEXT_TOKEN_MESSAGE = "refusing to send a submit token over cleartext http to a non-loopback host"
+# The service's error code for a key it does not know, or a scheme other than Bearer. Sending
+# the same request again, or without the key, cannot help, so the client stops.
+UNAUTHORIZED = "unauthorized"
+CLEARTEXT_KEY_MESSAGE = "refusing to send a submit key over cleartext http to a non-loopback host"
 type UploadProgress = Callable[[int, int], None]
 
 
@@ -116,25 +119,30 @@ class RevisionCheck(BaseModel, frozen=True):
     advice: str | None
 
 
-def read_submit_token(name: str) -> str | None:
-    """Read the submit token from the named variable; unset or blank means an anonymous submission."""
+def read_submit_key(name: str) -> str | None:
+    """Read the submit key from the named variable; unset or blank means an anonymous submission."""
     if not API_KEY_ENV_PATTERN.fullmatch(name):
-        raise ValueError("token environment variable names use letters, digits, and underscores")
+        raise ValueError("key environment variable names use letters, digits, and underscores")
     value = os.environ.get(name)
     if value is None or not value.strip():
         return None
     return value.strip()
 
 
-def _reject_cleartext_token(base_url: str, token: str | None) -> None:
-    if token is not None and url_is_cleartext_remote(base_url):
-        raise ValueError(CLEARTEXT_TOKEN_MESSAGE)
+def rejected_key_text(key_env: str) -> str:
+    """Tell a person the service refused their submit key, naming the variable to check."""
+    return f"submit key rejected; check {key_env}"
 
 
-def _headers(token: str | None) -> dict[str, str]:
+def _reject_cleartext_key(base_url: str, key: str | None) -> None:
+    if key is not None and url_is_cleartext_remote(base_url):
+        raise ValueError(CLEARTEXT_KEY_MESSAGE)
+
+
+def _headers(key: str | None) -> dict[str, str]:
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    if token is not None:
-        headers["Authorization"] = f"Bearer {token}"
+    if key is not None:
+        headers["Authorization"] = f"Bearer {key}"
     return headers
 
 
@@ -239,14 +247,14 @@ def _receipt(response: httpx.Response, bytes_sent: int) -> SubmissionReceipt:
     )
 
 
-def _prepared_upload(encoded: bytes, base_url: str, token: str | None) -> _PreparedUpload:
-    _reject_cleartext_token(base_url, token)
+def _prepared_upload(encoded: bytes, base_url: str, key: str | None) -> _PreparedUpload:
+    _reject_cleartext_key(base_url, key)
     if len(encoded) > MAX_REQUEST_BYTES:
         raise SubmissionError(
             f"the submission is {len(encoded)} bytes, above the {MAX_REQUEST_BYTES}-byte request cap",
             code="request_too_large",
         )
-    headers = _headers(token)
+    headers = _headers(key)
     headers["Content-Type"] = "application/json"
     headers["Content-Length"] = str(len(encoded))
     return _PreparedUpload(url=f"{base_url.rstrip('/')}{SUBMISSIONS_PATH}", headers=headers, encoded=encoded)
@@ -277,7 +285,7 @@ def submit_body(
     encoded: bytes,
     *,
     base_url: str = SUBMIT_BASE_URL,
-    token: str | None = None,
+    key: str | None = None,
     progress: UploadProgress | None = None,
     timeout_seconds: float = SUBMIT_TIMEOUT_SECONDS,
     transport: httpx.BaseTransport | None = None,
@@ -288,7 +296,7 @@ def submit_body(
     the recovery: the service keys a submission on its run_id and answers a retry with
     the same content with 200.
     """
-    prepared = _prepared_upload(encoded, base_url, token)
+    prepared = _prepared_upload(encoded, base_url, key)
     response = _request(
         "POST",
         prepared.url,
@@ -305,13 +313,13 @@ async def submit_body_async(
     encoded: bytes,
     *,
     base_url: str = SUBMIT_BASE_URL,
-    token: str | None = None,
+    key: str | None = None,
     progress: UploadProgress | None = None,
     timeout_seconds: float = SUBMIT_TIMEOUT_SECONDS,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> SubmissionReceipt:
     """Send one validated body without hiding cancellation in an executor thread."""
-    prepared = _prepared_upload(encoded, base_url, token)
+    prepared = _prepared_upload(encoded, base_url, key)
     response = await _async_request(
         "POST",
         prepared.url,
@@ -345,19 +353,19 @@ def fetch_submission_status(
     submission_id: str,
     *,
     base_url: str = SUBMIT_BASE_URL,
-    token: str | None = None,
+    key: str | None = None,
     timeout_seconds: float = STATUS_TIMEOUT_SECONDS,
     transport: httpx.BaseTransport | None = None,
 ) -> SubmissionStatus:
     """Read one submission's status and reason codes."""
     if SUBMISSION_ID_PATTERN.fullmatch(submission_id) is None:
         raise ValueError("submission identifiers look like sub_ followed by 26 base32 characters")
-    _reject_cleartext_token(base_url, token)
+    _reject_cleartext_key(base_url, key)
     response = _request(
         "GET",
         f"{base_url.rstrip('/')}{SUBMISSIONS_PATH}/{submission_id}",
         label="status",
-        headers=_headers(token),
+        headers=_headers(key),
         timeout_seconds=timeout_seconds,
         transport=transport,
     )

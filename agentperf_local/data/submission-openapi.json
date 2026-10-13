@@ -44,7 +44,7 @@
     "/v1/submissions": {
       "post": {
         "summary": "Submit",
-        "description": "Submit one AgentPerf run.\n\n`run_id` is the idempotency key. A retry with the same content returns 200 and the same\n`submission_id`. The same `run_id` with different content returns 409.\n\nThe service keeps the exact request body indefinitely in private storage. Sending\n`privacy_notice_version` acknowledges the privacy notice of that version.",
+        "description": "Submit one AgentPerf run.\n\nSend `Authorization: Bearer <key>` to mark the run as first-party; omit it to submit\nanonymously. An unknown key returns 401.\n\n`run_id` is the idempotency key. A retry with the same content returns 200 and the same\n`submission_id`. The same `run_id` with different content returns 409.\n\nThe service keeps the exact request body indefinitely in private storage. Sending\n`privacy_notice_version` acknowledges the privacy notice of that version.",
         "operationId": "submit_v1_submissions_post",
         "requestBody": {
           "content": {
@@ -79,6 +79,16 @@
           },
           "400": {
             "description": "Content-Length is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The API key is not valid.",
             "content": {
               "application/json": {
                 "schema": {
@@ -127,7 +137,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/submissions/{submission_id}": {
@@ -208,12 +224,14 @@
             "type": "string",
             "enum": [
               "invalid_request",
+              "unauthorized",
               "request_too_large",
               "validation_failed",
               "idempotency_conflict",
               "not_found",
               "storage_unavailable",
-              "warehouse_unavailable"
+              "warehouse_unavailable",
+              "submitter_keys_unavailable"
             ],
             "title": "Code"
           },
@@ -1617,6 +1635,12 @@
         ],
         "title": "SubmissionRequest",
         "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

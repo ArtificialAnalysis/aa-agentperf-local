@@ -82,11 +82,13 @@ from agentperf_local.submission.builder import (
 )
 from agentperf_local.submission.client import (
     SUBMIT_BASE_URL,
-    SUBMIT_TOKEN_ENV,
+    SUBMIT_KEY_ENV,
+    UNAUTHORIZED,
     SubmissionError,
     SubmissionReceipt,
     check_revision_allowlist,
-    read_submit_token,
+    read_submit_key,
+    rejected_key_text,
     submit_body_async,
 )
 from agentperf_local.submission.notice import PRIVACY_NOTICE
@@ -498,7 +500,7 @@ class TuiDefaults(BaseModel, frozen=True):
     deployment_startup_timeout_seconds: float = DEFAULT_STARTUP_TIMEOUT_SECONDS
     device_index: int | None = None
     submit_base_url: str = SUBMIT_BASE_URL
-    submit_token_env: str = SUBMIT_TOKEN_ENV
+    submit_key_env: str = SUBMIT_KEY_ENV
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -2048,9 +2050,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         self.query_one("#run-start", Button).disabled = True
         self._reset_submit_controls(enabled)
 
-    def _submit_token(self) -> str | None:
-        """Return the submit token from the configured variable, or None when it is unset or blank."""
-        return read_submit_token(self.defaults.submit_token_env)
+    def _submit_key(self) -> str | None:
+        """Return the submit key from the configured variable, or None when it is unset or blank."""
+        return read_submit_key(self.defaults.submit_key_env)
 
     def _reset_submit_controls(self, enabled: bool) -> None:
         """Offer the submit checkbox for a managed setup that is ready to run.
@@ -2068,7 +2070,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
         panel.display = enabled
         notice.update(SUBMIT_NOTICE if managed else SUBMIT_ATTACHED_NOTE)
         self.workers.cancel_group(self, "revision")
-        if enabled and managed and self.request is not None and self._submit_token() is not None:
+        if enabled and managed and self.request is not None and self._submit_key() is not None:
             self.check_revision_allowlist(self.request)
 
     @work(thread=True, exclusive=True, group="revision", exit_on_error=False)
@@ -2568,7 +2570,7 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             receipt = await submit_body_async(
                 encoded,
                 base_url=self.defaults.submit_base_url,
-                token=self._submit_token(),
+                key=self._submit_key(),
                 progress=self._upload_progress(generation),
             )
         except asyncio.CancelledError:
@@ -2577,7 +2579,9 @@ class AgentPerfLocalApp(App[TuiOutcome]):
             raise
         except (SubmissionError, ValueError, OSError) as error:
             kept = submission_path if encoded is not None else None
-            self.post_message(UploadFailedMessage(generation, error_text(error), kept))
+            rejected_key = isinstance(error, SubmissionError) and error.code == UNAUTHORIZED
+            reason = rejected_key_text(self.defaults.submit_key_env) if rejected_key else error_text(error)
+            self.post_message(UploadFailedMessage(generation, reason, kept))
             return
         self.post_message(UploadCompletedMessage(generation, receipt, submission_path))
 

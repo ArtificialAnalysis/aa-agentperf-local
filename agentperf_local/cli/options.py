@@ -64,7 +64,7 @@ from agentperf_local.reports.reporting import (
     validate_run_artifact_output,
 )
 from agentperf_local.submission.client import (
-    read_submit_token,
+    read_submit_key,
 )
 from agentperf_local.telemetry.power import (
     POWER_SUMMARY_FILENAME,
@@ -246,6 +246,6 @@ def print_json(value: JsonObject) -> None:
     print(orjson.dumps(value, option=orjson.OPT_INDENT_2).decode("utf-8"))
 
 
-def resolve_submit_token(namespace: argparse.Namespace, attribute: str = "token_env") -> str | None:
-    """Read the submit token from the named variable; an unset variable means anonymous."""
-    return read_submit_token(read_string(namespace, attribute))
+def resolve_submit_key(namespace: argparse.Namespace, attribute: str = "key_env") -> str | None:
+    """Read the submit key from the named variable; an unset variable means anonymous."""
+    return read_submit_key(read_string(namespace, attribute))

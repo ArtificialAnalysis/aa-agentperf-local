@@ -17,7 +17,7 @@ from agentperf_local.common.models import read_record
 from agentperf_local.submission.contract import SubmissionRequest
 from agentperf_local.submission.spec import validate_against_spec
 
-VALID_TOKEN = "aa-test-token"
+VALID_KEY = "aa-test-key"
 SUBMISSION_ID = "sub_abcdefghijklmnopqrstuvwxyz"
 ALLOWLISTED_REVISION = "2" * 40
 GITHUB_COMMIT_PATH = re.compile(r"^/repos/[^/]+/[^/]+/commits/(?P<ref>[^/]+)$")
@@ -37,7 +37,8 @@ class CapturedSubmission(BaseModel, frozen=True):
 class FakeSubmissionService:
     """Hold the fake service's state across requests."""
 
-    require_token: bool = False
+    # The service cannot read its key table, so a request that sends a key gets a retryable 503.
+    keys_unavailable: bool = False
     response_release: threading.Event | None = None
     # The canonical content accepted for each run_id; the service keys submissions on it.
     accepted_content: dict[str, bytes] = field(default_factory=dict)
@@ -76,11 +77,17 @@ def _handler(service: FakeSubmissionService) -> type[BaseHTTPRequestHandler]:
             if service.response_release is not None:
                 service.response_release.wait()
             headers = {name.lower(): value for name, value in self.headers.items()}
-            token = headers.get("authorization", "").removeprefix("Bearer ")
-            if service.require_token and token != VALID_TOKEN:
-                service.captured.append(CapturedSubmission(headers=headers, body={}, status=401))
-                _error(self, HTTPStatus.UNAUTHORIZED, "auth_required", "token missing or invalid", {})
-                return
+            # No header is an anonymous submission; a header must carry a known Bearer key.
+            authorization = headers.get("authorization")
+            if authorization is not None:
+                if service.keys_unavailable:
+                    service.captured.append(CapturedSubmission(headers=headers, body={}, status=503))
+                    _error(self, HTTPStatus.SERVICE_UNAVAILABLE, "submitter_keys_unavailable", "keys unavailable", {})
+                    return
+                if authorization != f"Bearer {VALID_KEY}":
+                    service.captured.append(CapturedSubmission(headers=headers, body={}, status=401))
+                    _error(self, HTTPStatus.UNAUTHORIZED, "unauthorized", "the API key is not valid", {})
+                    return
             body = normalize_json_object(orjson.loads(raw))
             try:
                 request = read_record(SubmissionRequest, raw, "request")

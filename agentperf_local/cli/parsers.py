@@ -39,7 +39,7 @@ from agentperf_local.replay.config import (
 )
 from agentperf_local.submission.client import (
     SUBMIT_BASE_URL,
-    SUBMIT_TOKEN_ENV,
+    SUBMIT_KEY_ENV,
 )
 from agentperf_local.workload.bundled import BUNDLED_REPLAYS, DEFAULT_BUNDLED_REPLAY
 
@@ -308,10 +308,10 @@ def _add_tui_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _add_tool_choice_flag(parser)
     parser.add_argument("--submit-base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
     parser.add_argument(
-        "--submit-token-env",
+        "--submit-key-env",
         metavar="NAME",
-        default=SUBMIT_TOKEN_ENV,
-        help=f"optional environment variable holding the submit token ({SUBMIT_TOKEN_ENV})",
+        default=SUBMIT_KEY_ENV,
+        help=f"optional environment variable holding the submit key ({SUBMIT_KEY_ENV})",
     )
 
 
@@ -378,10 +378,10 @@ def _add_managed_run_parser(subparsers: argparse._SubParsersAction[argparse.Argu
     )
     parser.add_argument("--submit-base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
     parser.add_argument(
-        "--submit-token-env",
+        "--submit-key-env",
         metavar="NAME",
-        default=SUBMIT_TOKEN_ENV,
-        help="environment variable holding the submit token; when set, the commit allowlist is checked",
+        default=SUBMIT_KEY_ENV,
+        help="environment variable holding the submit key; when set, the commit allowlist is checked",
     )
 
 
@@ -398,10 +398,10 @@ def _add_submit_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     parser.add_argument("submission", type=nonempty_path, help="JSON file written by prepare-submission")
     parser.add_argument("--base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
     parser.add_argument(
-        "--token-env",
+        "--key-env",
         metavar="NAME",
-        default=SUBMIT_TOKEN_ENV,
-        help=f"environment variable holding the submit token (default: {SUBMIT_TOKEN_ENV}); unset sends anonymously",
+        default=SUBMIT_KEY_ENV,
+        help=f"environment variable holding the submit key (default: {SUBMIT_KEY_ENV}); unset sends anonymously",
     )
     parser.add_argument(
         "--yes",
@@ -414,7 +414,7 @@ def _add_submission_status_parser(subparsers: argparse._SubParsersAction[argpars
     parser = subparsers.add_parser("submission-status", help="read one submission's status and reason codes")
     parser.add_argument("submission_id", help="identifier returned by submit")
     parser.add_argument("--base-url", default=SUBMIT_BASE_URL, help="submission service base URL")
-    parser.add_argument("--token-env", metavar="NAME", default=SUBMIT_TOKEN_ENV)
+    parser.add_argument("--key-env", metavar="NAME", default=SUBMIT_KEY_ENV)
 
 
 def build_parser() -> argparse.ArgumentParser:
