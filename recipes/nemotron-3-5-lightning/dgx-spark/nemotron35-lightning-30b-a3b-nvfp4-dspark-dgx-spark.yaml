@@ -210,7 +210,7 @@ deployment:
     constant_state_bytes: 1073741824
     runtime_overhead_bytes: 84515794605
   runtime_versions:
-    vllm: 0.28.1
+    vllm: 0.29.0
   vllm:
     arguments:
     - --moe-backend
