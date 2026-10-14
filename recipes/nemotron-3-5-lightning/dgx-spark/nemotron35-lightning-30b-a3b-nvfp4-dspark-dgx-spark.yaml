@@ -1,5 +1,5 @@
 profile_id: nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark
-as_of: '2026-09-21'
+as_of: '2026-10-15'
 model_name: Nemotron 3.5 Lightning 30B A3B
 quantization: NVFP4
 model_release_slug: nemotron-3-5-lightning
@@ -237,5 +237,7 @@ deployment:
     - dspark
     - --speculative_config.model
     - nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark
+    - --speculative_config.revision
+    - 6d127b50ecd98562cea85d0087680b7d86091fb0
     - --speculative_config.num_speculative_tokens
     - '7'

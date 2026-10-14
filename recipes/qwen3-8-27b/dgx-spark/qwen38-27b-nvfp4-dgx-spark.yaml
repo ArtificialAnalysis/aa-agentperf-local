@@ -1,10 +1,10 @@
 profile_id: qwen38-27b-nvfp4-dgx-spark
-as_of: '2026-09-21'
+as_of: '2026-10-15'
 model_name: Qwen3.8 27B
 quantization: NVFP4
 model_release_slug: qwen3-8-27b
-hf_repository: RadixArk/Qwen3.8-27B-NVFP4
-hf_revision: 319f741cce68d7914884900c138a1fbb70a42f30
+hf_repository: nvidia/Qwen3.8-27B-NVFP4
+hf_revision: 482ca0f3832238542f8f5295dde86b5f22711d80
 devices:
 - nvidia-cuda
 tool_call_parser: qwen3_xml
@@ -18,25 +18,25 @@ deployment:
     sha256: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
     size_bytes: 8952
   - filename: config.json
-    sha256: 7ff41ec6f96ad50efea3c92751cd261b63839d39936eb6e6ffc9066db8672740
-    size_bytes: 73003
+    sha256: 71fa01bb64de20971045cd82a82c0ebb25a54e1b0a3f09ef23cf5479e9c54df8
+    size_bytes: 87506
   - filename: generation_config.json
-    sha256: a4cef85934ea1fdcb207944dbc6eee70dbbf16806874428556ae33023336c0a4
+    sha256: 8a3a817a9d330f6f9e62f048fe62a48594946c4a5c4cb314a8011316d5094986
     size_bytes: 214
   - filename: hf_quant_config.json
-    sha256: 0f39e8cd23abdfb79adc89ac1b19acad990aa6ac32973f9ab0a67d1e3449535c
-    size_bytes: 53749
+    sha256: 5f4aaa9e462ddb26a9790ab459eee69d100b9ade7541f0c86038e925c013f80b
+    size_bytes: 53760
   - filename: merges.txt
     sha256: a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d
     size_bytes: 3353259
   - filename: model-00001-of-00003.safetensors
-    sha256: fbcdb5ba1cdda462b5f38592d071e772c4d398afea61a0aa9188b32d1a239a79
+    sha256: 7d0fd155118901373eb0fd13ed3aae68f95be747bc205be72ebc41739c25ee80
     size_bytes: 9965652544
   - filename: model-00002-of-00003.safetensors
-    sha256: db6146a5464fb0a891181b93c81593f0ca65c602eb14120a1c2b1b09bca11f85
+    sha256: 98a7e9486baa860c792c9463a770cb9d017696bdd17606300a5b9334149f4c27
     size_bytes: 9985757064
   - filename: model-00003-of-00003.safetensors
-    sha256: d3cfb92742e30c8b46564665791dbe0a86ed64cfc02b1275081530793c0c9581
+    sha256: 0506ad35dc21469708e7813bd76c592cef08bd0317b4a1fe899745ebe2435271
     size_bytes: 1970287672
   - filename: model.safetensors.index.json
     sha256: 7aa103a2582b7d26631988de33dea19e8a308ee9c239e8e14feb374af30905e2
@@ -44,6 +44,9 @@ deployment:
   - filename: preprocessor_config.json
     sha256: 27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516
     size_bytes: 390
+  - filename: processor_config.json
+    sha256: d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1
+    size_bytes: 1191
   - filename: tokenizer.json
     sha256: 0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3
     size_bytes: 12809320
@@ -86,6 +89,6 @@ deployment:
     - --async-scheduling
     - --enable-prefix-caching
     - --speculative-config
-    - '{"method":"dflash","model":"z-lab/Qwen3.8-27B-DFlash2","num_speculative_tokens":8}'
+    - '{"method":"dflash","model":"z-lab/Qwen3.8-27B-DFlash2","revision":"50307d4c4cde6860d4eee73e2547cd786fe8e8a4","num_speculative_tokens":8}'
     - --load-format
     - safetensors
