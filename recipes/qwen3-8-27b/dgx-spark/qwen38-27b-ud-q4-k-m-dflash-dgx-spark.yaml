@@ -1,0 +1,49 @@
+profile_id: qwen38-27b-ud-q4-k-m-dflash-dgx-spark
+as_of: '2026-10-15'
+model_name: Qwen3.8 27B
+quantization: UD-Q4_K_M
+model_release_slug: qwen3-8-27b
+hf_repository: unsloth/Qwen3.8-27B-GGUF
+hf_revision: 4ca720788d1e01f1bff70c033e0d0028fd02e502
+devices:
+- nvidia-cuda
+tool_call_parser: qwen3_coder
+reasoning_parser: qwen3
+thinking_policy: enabled-medium-candidate
+speculation_policy: enabled-dflash-external-draft
+deployment:
+  artifact_kind: gguf-file-set
+  artifacts:
+  - filename: Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+    sha256: 1a25c56858e1ebe93f2718ac1d49d1151f9323325c1bbfd6209370f4db131ebd
+    size_bytes: 1143006816
+    source_repository: incoai/Qwen3.8-27B-DFlash2-GGUF
+    source_revision: 51962825493a48b846b40126d35c799ac4093ad0
+  - filename: Qwen3.8-27B-UD-Q4_K_M.gguf
+    sha256: 322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482
+    size_bytes: 16464440224
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    full_attention_layers: 16
+    full_kv_heads: 4
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 470679552
+    runtime_overhead_bytes: 2423084064
+  model_filename: Qwen3.8-27B-UD-Q4_K_M.gguf
+  llama_cpp:
+    batch_size: 4096
+    ubatch_size: 512
+    speculative_tokens: 7
+    draft_model_filename: Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+    target_backend_sampling: false
+    draft_backend_sampling: true
+    flash_attention: false
+    disable_fit: false
