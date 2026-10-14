@@ -1,0 +1,47 @@
+profile_id: lfm25-24b-a2b-q4-k-m-rtx-spark
+as_of: '2026-10-14'
+model_name: LFM2.5 24B A2B
+quantization: Q4_K_M
+model_release_slug: lfm2-5-24b-a2b
+hf_repository: LiquidAI/LFM2.5-24B-A2B-GGUF
+hf_revision: 0912d33141f77e10705345a6732bfd83f0252fdc
+devices:
+- nvidia-cuda
+tool_call_parser: lfm2
+reasoning_parser: qwen3
+thinking_policy: enabled
+speculation_policy: disabled-target-only-baseline
+deployment:
+  artifact_kind: gguf-single-file
+  artifacts:
+  - filename: LFM2.5-24B-A2B-Q4_K_M.gguf
+    sha256: d3334405b96228eb9908cdebb5c6194908f2da64282bda852afc3a3910c64e7d
+    size_bytes: 14526258464
+  context_tokens: 65536
+  frameworks:
+  - llama-cpp
+  memory:
+    # 30 of the 40 layers are short convolutions; their state is the 0.47 MiB constant.
+    full_attention_layers: 10
+    full_kv_heads: 8
+    full_kv_head_dimension: 64
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 2
+    recurrent_state_slots: 1
+    constant_state_bytes: 491520
+    # Weights loaded over the file size (197 MiB), CUDA compute and output
+    # buffers (229 MiB), and llama.cpp's default 32 context checkpoints of 0.47 MiB each.
+    runtime_overhead_bytes: 462684568
+  # LFM2.5 may write text after its tool calls. llama.cpp b11609 ends the tool-call
+  # grammar at <|tool_call_end|>, so about a third of replay turns abort with
+  # "Unexpected empty grammar stack". Serve with a build that has the LFM2 parser fix.
+  llama_cpp:
+    batch_size: 2048
+    ubatch_size: 512
+    target_backend_sampling: false
+    draft_backend_sampling: false
+    flash_attention: true
+    disable_fit: true

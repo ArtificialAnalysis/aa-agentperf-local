@@ -43,9 +43,9 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:e2edc1bdfef267fcca83df66cbe11bb7200fa10cc08ba0db2236e942a91b3b6b"
+BUNDLED_RECIPES_DIGEST = "sha256:331d6f3b941e6a3920a639e8d698cf294a5661e44ed0adf909a37cd7d5ebffd0"
 
-type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
+type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "lfm2", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
 type ThinkingPolicy = Literal["disabled", "enabled", "enabled-medium-candidate"]
 type SpeculationPolicy = Literal[
@@ -100,7 +100,7 @@ SPECULATION_POLICIES: tuple[SpeculationPolicy, ...] = (
     "enabled-dspark-draft",
     "enabled-vllm-external-draft",
 )
-TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml")
+TOOL_CALL_PARSERS: tuple[ToolCallParser, ...] = ("gemma4", "glm45", "gpt-oss", "lfm2", "qwen3_coder", "qwen3_xml")
 ARTIFACT_KINDS: tuple[ArtifactKind, ...] = (
     "gguf-single-file",
     "gguf-file-set",
