@@ -1916,6 +1916,14 @@ def _only_llama_server(command: str) -> str | None:
             {"qwen38-27b-q4-k-m-mtp": "●", "gemma4-26b-a4b-nvfp4": "▲", "qwen38-27b-nvfp4-dgx-spark": "▲"},
             "qwen38-27b-q4-k-m-mtp",
         ),
+        # On a DGX Spark the recipe built for it comes before the RTX 5090 one that also runs.
+        (
+            _hardware_with(_accelerator("NVIDIA GB10", 128 * 1024**3)),
+            "agentperf-default-v1",
+            "THIS COMPUTER: NVIDIA GB10 · 128 GiB",
+            {"qwen38-27b-ud-q4-k-m-dflash-dgx-spark": "●", "qwen38-27b-q4-k-m-mtp": "●"},
+            "qwen38-27b-ud-q4-k-m-dflash-dgx-spark",
+        ),
         # The default model is too large here, so the list opens on the first recipe that fits.
         (
             _hardware_with(_accelerator("NVIDIA GeForce RTX 4080", 16 * 1024**3)),

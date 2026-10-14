@@ -94,6 +94,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen36-35b-a3b-q4-k-m-mtp-strix-halo", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-nvfp4-dgx-spark", "482ca0f3832238542f8f5295dde86b5f22711d80"),
+        ("qwen38-27b-ud-q4-k-m-dflash-dgx-spark", "4ca720788d1e01f1bff70c033e0d0028fd02e502"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-splash-dflash", "9d27070b71f7142c6b6025f03ac011d70a73cb48"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
@@ -109,13 +110,15 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 11
+    assert len(dgx_spark) == 12
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
-    # LFM2.5 24B A2B and Ling 3.0 flash are the DGX Spark recipes that llama.cpp serves; the rest run vLLM.
+    # LFM2.5 24B A2B, Ling 3.0 flash and the Qwen3.8 27B Q4 recipe are the DGX Spark recipes that llama.cpp
+    # serves; the rest run vLLM.
     assert [model.profile_id for model in dgx_spark if model.deployment.vllm is None] == [
         "lfm25-24b-a2b-qad-q4-0-dgx-spark",
         "ling3-flash-q4-k-m-dspark-dgx-spark",
+        "qwen38-27b-ud-q4-k-m-dflash-dgx-spark",
     ]
     # SGLang profiles share their qualified release. llama.cpp publishes no comparable
     # release version to pin.
