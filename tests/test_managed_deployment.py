@@ -178,6 +178,20 @@ def _snapshot_path(cache_root: Path, candidate: ModelCandidate) -> Path:
     return revision_dir / candidate.deployment.artifacts[0].filename
 
 
+def _cache_pinned_file(
+    cache_root: Path, repository: str, revision: str, artifact: DeploymentArtifact, content: bytes
+) -> Path:
+    """Lay one pinned file out exactly as huggingface_hub caches it, and return its blob."""
+    repository_root = cache_root / repo_folder_name(repo_id=repository, repo_type="model")
+    blob = repository_root / "blobs" / artifact.sha256
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_bytes(content)
+    snapshot = repository_root / "snapshots" / revision / artifact.filename
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
+    return blob
+
+
 def _cached_artifact(
     cache_root: Path,
     candidate: ModelCandidate,
@@ -417,13 +431,8 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     )
     repository_root = tmp_path / repo_folder_name(repo_id=candidate.hf_repository, repo_type="model")
     snapshot_root = repository_root / "snapshots" / candidate.hf_revision
-    for (name, content), artifact in zip(parts, artifacts, strict=True):
-        blob = repository_root / "blobs" / artifact.sha256
-        blob.parent.mkdir(parents=True, exist_ok=True)
-        blob.write_bytes(content)
-        snapshot = snapshot_root / name
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
+    for (_, content), artifact in zip(parts, artifacts, strict=True):
+        _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, artifact, content)
 
     plan = create_deployment_plan(
         _hardware("NVIDIA", "CUDA"),
@@ -436,18 +445,6 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     )
 
     assert plan.command[plan.command.index("--model") + 1] == str(snapshot_root / artifacts[0].filename)
-
-
-def _cache_pinned_file(cache_root: Path, artifact: DeploymentArtifact, content: bytes) -> None:
-    """Put one pinned file in the hub cache layout under its source repository and revision."""
-    assert artifact.source_repository is not None and artifact.source_revision is not None
-    repository_root = cache_root / repo_folder_name(repo_id=artifact.source_repository, repo_type="model")
-    blob = repository_root / "blobs" / artifact.sha256
-    blob.parent.mkdir(parents=True, exist_ok=True)
-    blob.write_bytes(content)
-    snapshot = repository_root / "snapshots" / artifact.source_revision / artifact.filename
-    snapshot.parent.mkdir(parents=True, exist_ok=True)
-    snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
 
 
 def _source(filename: str, content: bytes, repository: str, revision: str) -> DeploymentArtifact:
@@ -498,11 +495,9 @@ def test_converted_draft_recipe_converts_once_and_serves_the_converted_draft(tmp
             ),
         ),
     )
-    _cache_pinned_file(
-        tmp_path, replace_fields(target, source_repository="example/model-gguf", source_revision="a" * 40), target_bytes
-    )
+    _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, target, target_bytes)
     for key, artifact in sources.items():
-        _cache_pinned_file(tmp_path, artifact, contents[key])
+        _cache_pinned_file(tmp_path, key[0], revisions[key[0]], artifact, contents[key])
     jobs: list[ConversionJob] = []
     converted_bytes = [b"converted draft"]
 
@@ -515,13 +510,20 @@ def test_converted_draft_recipe_converts_once_and_serves_the_converted_draft(tmp
         assert (job.tokenizer_dir / "tokenizer.json").read_bytes() == b"tokenizer"
         job.output_path.write_bytes(converted_bytes[-1])
 
-    first = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
-    again = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
+    first = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
+    # A cached conversion covers its sources' digests, so a warm run never reads them.
+    draft_tensors = sources["example/draft", "model.safetensors"]
+    draft_blob = (
+        tmp_path / repo_folder_name(repo_id="example/draft", repo_type="model") / "blobs" / draft_tensors.sha256
+    )
+    draft_blob.unlink()
+    again = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
+    draft_blob.write_bytes(b"draft tensors")
     assert first.converted_draft is not None
     # A cached draft whose bytes no longer match its record is converted again.
     first.converted_draft.path.write_bytes(b"tampered")
     converted_bytes.append(b"converted draft again")
-    rebuilt = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
+    rebuilt = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
     plan = create_deployment_plan(
         _hardware("NVIDIA", "CUDA"),
         candidate,
@@ -589,20 +591,10 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
         deployment=deployment,
     )
 
-    def cache_artifact(repository: str, revision: str, artifact: DeploymentArtifact, content: bytes) -> Path:
-        repository_root = tmp_path / repo_folder_name(repo_id=repository, repo_type="model")
-        blob = repository_root / "blobs" / artifact.sha256
-        blob.parent.mkdir(parents=True, exist_ok=True)
-        blob.write_bytes(content)
-        snapshot = repository_root / "snapshots" / revision / artifact.filename
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
-        return blob
-
-    target_path = cache_artifact(candidate.hf_repository, candidate.hf_revision, target, target_bytes)
+    target_path = _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, target, target_bytes)
     assert draft.source_repository is not None
     assert draft.source_revision is not None
-    draft_path = cache_artifact(draft.source_repository, draft.source_revision, draft, draft_bytes)
+    draft_path = _cache_pinned_file(tmp_path, draft.source_repository, draft.source_revision, draft, draft_bytes)
     verified = ensure_model_artifacts(tmp_path, candidate)
 
     plan = create_deployment_plan(

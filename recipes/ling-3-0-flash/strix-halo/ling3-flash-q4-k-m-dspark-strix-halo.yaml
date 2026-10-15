@@ -50,11 +50,9 @@ deployment:
     flash_attention: true
     context_checkpoints: 2
     disable_fit: true
-    # On an RTX Spark, b11236 accepted under 1% of this draft's tokens and b11583 accepted
-    # 40-52%, with the same converted draft. b11583 is the oldest build tested, not proven.
+    # b11236 accepted under 1% of this draft's tokens on an RTX Spark; b11583 accepted 40-52%.
     minimum_build: 11583
-    # The DSpark draft is published as safetensors only, so llama.cpp's converter at
-    # b11236 turns it into GGUF on first use. The converted bytes are not pinned.
+    # inclusionAI publishes this draft as safetensors only.
     draft_conversion:
       converter_commit: f1ea206218210afb913ae2f5d2c51faed35915da
       outtype: bf16

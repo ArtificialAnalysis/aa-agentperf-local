@@ -12,7 +12,7 @@ import yaml
 from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, ValidationInfo, field_validator, model_validator
 
 from agentperf_local.common.durable_files import read_bounded_file
-from agentperf_local.common.identity import sha256_bytes, validate_identifier
+from agentperf_local.common.identity import is_git_commit, sha256_bytes, validate_identifier
 from agentperf_local.common.json_types import JsonObject, normalize_json_object
 from agentperf_local.common.models import read_object
 from agentperf_local.common.package_paths import PACKAGE_DATA_ROOT, PACKAGE_ROOT
@@ -43,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:d6a3f8c5001e8635edb6ae977897ea3cbb85f7ae1df0b5a7c57d93febf3c9a73"
+BUNDLED_RECIPES_DIGEST = "sha256:a10e31d4830f5a40044d8372924bbb7dca9486068ca6cfc1b553c44134654efe"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -225,7 +225,8 @@ class LlamaCppDraftConversion(BaseModel, frozen=True):
     @model_validator(mode="after")
     def check_invariants(self) -> Self:
         """Require one pinned source repository per file group and the files the converter reads."""
-        _revision(self.converter_commit, "draft_conversion.converter_commit")
+        if not is_git_commit(self.converter_commit):
+            raise ValueError("draft_conversion.converter_commit must be one full, lowercase git commit")
         validate_artifact_path(self.output_filename, "draft_conversion.output_filename")
         if not self.output_filename.endswith(".gguf"):
             raise ValueError("draft_conversion.output_filename must name a .gguf file")
@@ -521,9 +522,14 @@ class ModelDeployment(BaseModel, frozen=True):
 
         A converted draft's sources count, so its tensors count toward the memory floor.
         """
-        conversion = self.llama_cpp.draft_conversion if self.llama_cpp is not None else None
+        conversion = self.draft_conversion
         sources = conversion.source_files if conversion is not None else ()
         return sum(artifact.size_bytes for artifact in (*self.artifacts, *sources))
+
+    @property
+    def draft_conversion(self) -> LlamaCppDraftConversion | None:
+        """Return the llama.cpp draft this recipe converts at deployment, if any."""
+        return self.llama_cpp.draft_conversion if self.llama_cpp is not None else None
 
     @property
     def resident_artifact_bytes(self) -> int:

@@ -1,58 +1,61 @@
 """Convert a recipe's safetensors draft model into the GGUF llama.cpp loads.
 
-- ConvertedDraft: one converted draft file and the commit that converted it.
+- ConvertedDraft: one converted draft file and its digest.
 - ConversionJob: the inputs and output path of one conversion.
 - DraftConverter: the callable that runs one conversion.
-- ensure_converted_draft: reuse a cached conversion, or run one.
+- cached_converted_draft: return a cached conversion that still matches its record.
+- convert_draft: run one conversion and cache its output.
 - convert_with_llama_cpp: run llama.cpp's convert_hf_to_gguf.py at a pinned commit with uv.
-- fetch_converter: put one llama.cpp commit's converter files in the cache.
 """
 
 from __future__ import annotations
 
 import hashlib
-import io
 import os
 import shutil
 import subprocess
 import tarfile
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 import httpx
 import orjson
 from pydantic import BaseModel
 
+from agentperf_local.common.durable_files import NewFile, write_new_file
+from agentperf_local.common.identity import sha256_file
+from agentperf_local.common.json_records import json_record
 from agentperf_local.common.models import read_record
 from agentperf_local.deployment.catalog import DeploymentArtifact, LlamaCppConversionType, LlamaCppDraftConversion
+from agentperf_local.deployment.frameworks import CommandFinder, find_executable
 
 # Cache folders beside the Hugging Face repositories in the same cache root.
 CONVERSION_CACHE_DIRECTORY = "agentperf-draft-conversions"
 CONVERTER_CACHE_DIRECTORY = "agentperf-llama-cpp-converters"
 CONVERSION_RECORD_FILENAME = "conversion.json"
 LLAMA_CPP_ARCHIVE_URL = "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/{commit}"
+CONVERTER_SCRIPT = "convert_hf_to_gguf.py"
+CONVERTER_REQUIREMENTS = "requirements/requirements-convert_hf_to_gguf.txt"
 # The parts of a llama.cpp source tree the converter needs: the script, its model
 # classes, the gguf package it imports from the tree, and its pinned requirements.
-CONVERTER_PATHS = ("convert_hf_to_gguf.py", "conversion", "gguf-py", "requirements")
-CONVERTER_REQUIREMENTS = "requirements/requirements-convert_hf_to_gguf.txt"
+CONVERTER_PATHS = (CONVERTER_SCRIPT, "conversion", "gguf-py", "requirements")
 # torch, which the converter needs, publishes wheels for this Python on every platform we serve.
 CONVERTER_PYTHON_VERSION = "3.12"
 CONVERTER_DOWNLOAD_TIMEOUT_SECONDS = 300.0
 # Installing torch on first use dominates; a conversion of a few gigabytes takes minutes.
 CONVERSION_TIMEOUT_SECONDS = 3_600.0
 CONVERSION_ERROR_LINES = 12
-HASH_CHUNK_BYTES = 4 * 1024 * 1024
 UV_INSTALL_HINT = "converting this recipe's draft model needs uv on PATH: https://docs.astral.sh/uv/"
 
 
 class ConvertedDraft(BaseModel, frozen=True):
-    """Store one converted draft file, its digest, and the llama.cpp commit that wrote it."""
+    """Store one converted draft file and its digest."""
 
     path: Path
     sha256: str
     size_bytes: int
-    converter_commit: str
 
 
 class ConversionJob(BaseModel, frozen=True):
@@ -66,94 +69,95 @@ class ConversionJob(BaseModel, frozen=True):
 
 
 type DraftConverter = Callable[[ConversionJob], None]
-type CommandFinder = Callable[[str], str | None]
 
 
 class _ConversionRecord(BaseModel, frozen=True):
-    """Record what one cached conversion produced, so a later run can verify it."""
+    """Record one cached conversion's digest and the file state it was taken from."""
 
-    converter_commit: str
-    outtype: LlamaCppConversionType
     sha256: str
     size_bytes: int
+    modified_ns: int
 
 
-def _conversion_key(conversion: LlamaCppDraftConversion) -> str:
-    """Name one conversion by everything that decides its output."""
+def _conversion_dir(cache_root: Path, conversion: LlamaCppDraftConversion) -> Path:
+    """Name one conversion's cache folder by everything that decides its output."""
     sources = [
         [artifact.source_repository, artifact.source_revision, artifact.filename, artifact.sha256]
         for artifact in conversion.source_files
     ]
     identity = [conversion.converter_commit, conversion.outtype, conversion.output_filename, sources]
-    return hashlib.sha256(orjson.dumps(identity)).hexdigest()
+    return cache_root / CONVERSION_CACHE_DIRECTORY / hashlib.sha256(orjson.dumps(identity)).hexdigest()
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(HASH_CHUNK_BYTES):
-            digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
+@contextmanager
+def _staged_folder(final_dir: Path) -> Iterator[Path]:
+    """Yield an empty folder beside final_dir that replaces it when the block succeeds.
+
+    A folder left by an interrupted run is replaced whole, and a failed build leaves
+    the previous folder alone.
+    """
+    final_dir.parent.mkdir(parents=True, exist_ok=True)
+    work_dir = Path(tempfile.mkdtemp(prefix=f"{final_dir.name[:16]}-", dir=final_dir.parent))
+    try:
+        yield work_dir
+        shutil.rmtree(final_dir, ignore_errors=True)
+        os.replace(work_dir, final_dir)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def _reuse_cached(output_path: Path, record_path: Path, converter_commit: str) -> ConvertedDraft | None:
-    """Return a cached conversion whose file still matches its record, or None."""
-    if not output_path.is_file() or not record_path.is_file():
+def cached_converted_draft(cache_root: Path, conversion: LlamaCppDraftConversion) -> ConvertedDraft | None:
+    """Return the cached conversion while its file is unchanged since it was recorded, or None.
+
+    The converted bytes are not pinned, so the size and modification time recorded when
+    the file was written stand in for re-hashing it on every run.
+    """
+    folder = _conversion_dir(cache_root, conversion)
+    output_path = folder / conversion.output_filename
+    record_path = folder / CONVERSION_RECORD_FILENAME
+    if output_path.is_symlink() or not output_path.is_file() or not record_path.is_file():
         return None
     try:
         record = read_record(_ConversionRecord, record_path.read_bytes(), str(record_path))
     except ValueError:
         return None
-    if output_path.stat().st_size != record.size_bytes or _file_sha256(output_path) != record.sha256:
+    metadata = output_path.stat()
+    if metadata.st_size != record.size_bytes or metadata.st_mtime_ns != record.modified_ns:
         return None
-    return ConvertedDraft(
-        path=output_path, sha256=record.sha256, size_bytes=record.size_bytes, converter_commit=converter_commit
-    )
+    return ConvertedDraft(path=output_path, sha256=record.sha256, size_bytes=record.size_bytes)
 
 
-def _link_inputs(directory: Path, files: tuple[tuple[DeploymentArtifact, Path], ...]) -> None:
+def _link_inputs(
+    directory: Path, files: tuple[DeploymentArtifact, ...], paths: Mapping[DeploymentArtifact, Path]
+) -> None:
     """Lay out verified files under their repository names, as the converter expects.
 
     A hard link costs no space; a copy covers a file system that refuses links.
     """
-    for artifact, path in files:
+    for artifact in files:
         entry = directory / PurePosixPath(artifact.filename)
         entry.parent.mkdir(parents=True, exist_ok=True)
         try:
-            os.link(path, entry)
+            os.link(paths[artifact], entry)
         except OSError:
-            shutil.copyfile(path, entry)
+            shutil.copyfile(paths[artifact], entry)
 
 
-def ensure_converted_draft(
+def convert_draft(
     cache_root: Path,
     conversion: LlamaCppDraftConversion,
-    verified_sources: tuple[tuple[DeploymentArtifact, Path], ...],
+    source_paths: Mapping[DeploymentArtifact, Path],
     *,
     convert: DraftConverter,
 ) -> ConvertedDraft:
-    """Return the draft GGUF for one conversion, converting it once per set of pinned inputs.
-
-    The output is cached under a key over the converter commit, the tensor type, and
-    every source file's digest, and reused only while it still matches the size and
-    digest recorded when it was written.
-    """
-    key = _conversion_key(conversion)
-    final_dir = cache_root / CONVERSION_CACHE_DIRECTORY / key
-    record_path = final_dir / CONVERSION_RECORD_FILENAME
-    cached = _reuse_cached(final_dir / conversion.output_filename, record_path, conversion.converter_commit)
-    if cached is not None:
-        return cached
-    final_dir.parent.mkdir(parents=True, exist_ok=True)
-    work_dir = Path(tempfile.mkdtemp(prefix=f"{key[:16]}-", dir=final_dir.parent))
-    try:
-        draft_dir = work_dir / "draft"
-        tokenizer_dir = work_dir / "tokenizer"
-        output_dir = work_dir / "output"
-        output_dir.mkdir()
-        # Both groups pin a config.json, so a file is placed by its whole pinned identity.
-        _link_inputs(draft_dir, tuple(pair for pair in verified_sources if pair[0] in conversion.model_files))
-        _link_inputs(tokenizer_dir, tuple(pair for pair in verified_sources if pair[0] in conversion.tokenizer_files))
+    """Convert one draft from its verified sources into the conversion's cache folder."""
+    folder = _conversion_dir(cache_root, conversion)
+    with _staged_folder(folder) as output_dir, tempfile.TemporaryDirectory(dir=folder.parent) as inputs:
+        draft_dir = Path(inputs) / "draft"
+        tokenizer_dir = Path(inputs) / "tokenizer"
+        # Each group gets its own folder, because both pin a config.json.
+        _link_inputs(draft_dir, conversion.model_files, source_paths)
+        _link_inputs(tokenizer_dir, conversion.tokenizer_files, source_paths)
         output_path = output_dir / conversion.output_filename
         convert(
             ConversionJob(
@@ -166,69 +170,58 @@ def ensure_converted_draft(
         )
         if not output_path.is_file():
             raise ValueError(f"the draft converter wrote no {conversion.output_filename}")
+        metadata = output_path.stat()
         record = _ConversionRecord(
-            converter_commit=conversion.converter_commit,
-            outtype=conversion.outtype,
-            sha256=_file_sha256(output_path),
-            size_bytes=output_path.stat().st_size,
+            sha256=sha256_file(output_path), size_bytes=metadata.st_size, modified_ns=metadata.st_mtime_ns
         )
-        (output_dir / CONVERSION_RECORD_FILENAME).write_bytes(orjson.dumps(record.model_dump(mode="json")))
-        # A folder left by an interrupted run never got a matching record; replace it.
-        shutil.rmtree(final_dir, ignore_errors=True)
-        os.replace(output_dir, final_dir)
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
-    return ConvertedDraft(
-        path=final_dir / conversion.output_filename,
-        sha256=record.sha256,
-        size_bytes=record.size_bytes,
-        converter_commit=conversion.converter_commit,
-    )
+        write_new_file(NewFile(path=output_dir / CONVERSION_RECORD_FILENAME, data=orjson.dumps(json_record(record))))
+    return ConvertedDraft(path=folder / conversion.output_filename, sha256=record.sha256, size_bytes=record.size_bytes)
 
 
-def fetch_converter(cache_root: Path, commit: str, *, transport: httpx.BaseTransport | None = None) -> Path:
+def _fetch_converter(cache_root: Path, commit: str, transport: httpx.BaseTransport | None) -> Path:
     """Return a folder with one llama.cpp commit's converter, downloading it once.
 
-    Only the converter's own files are kept from the source archive, and an archive
-    member that would land outside the folder is refused.
+    The source archive is streamed to disk and read in one pass. Only the converter's
+    own files are kept, and a member that would land outside the folder is refused.
     """
     final_dir = cache_root / CONVERTER_CACHE_DIRECTORY / commit
-    if (final_dir / CONVERTER_PATHS[0]).is_file():
+    if (final_dir / CONVERTER_SCRIPT).is_file():
         return final_dir
-    url = LLAMA_CPP_ARCHIVE_URL.format(commit=commit)
-    with httpx.Client(timeout=CONVERTER_DOWNLOAD_TIMEOUT_SECONDS, transport=transport, follow_redirects=True) as client:
+    with _staged_folder(final_dir) as work_dir, tempfile.TemporaryDirectory(dir=final_dir.parent) as scratch:
+        archive_path = Path(scratch) / "llama.cpp.tar.gz"
+        url = LLAMA_CPP_ARCHIVE_URL.format(commit=commit)
         try:
-            response = client.get(url)
+            with (
+                httpx.Client(
+                    timeout=CONVERTER_DOWNLOAD_TIMEOUT_SECONDS, transport=transport, follow_redirects=True
+                ) as client,
+                client.stream("GET", url) as response,
+            ):
+                if response.status_code != httpx.codes.OK:
+                    status = response.status_code
+                    raise ValueError(f"could not download the llama.cpp converter at {commit}: HTTP {status}")
+                with archive_path.open("wb") as archive_file:
+                    for chunk in response.iter_bytes():
+                        archive_file.write(chunk)
         except httpx.HTTPError as error:
             reason = type(error).__name__
             raise ValueError(f"could not download the llama.cpp converter at {commit}: {reason}") from error
-    if response.status_code != httpx.codes.OK:
-        raise ValueError(f"could not download the llama.cpp converter at {commit}: HTTP {response.status_code}")
-    final_dir.parent.mkdir(parents=True, exist_ok=True)
-    work_dir = Path(tempfile.mkdtemp(prefix=f"{commit[:12]}-", dir=final_dir.parent))
-    try:
-        with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as archive:
-            members = []
-            for member in archive.getmembers():
+        with tarfile.open(archive_path, mode="r|gz") as archive:
+            for member in archive:
                 parts = PurePosixPath(member.name).parts
                 # The archive holds one top-level folder named after the repository and commit.
                 if len(parts) >= 2 and parts[1] in CONVERTER_PATHS:
                     member.name = PurePosixPath(*parts[1:]).as_posix()
-                    members.append(member)
-            archive.extractall(work_dir, members=members, filter="data")
-        if not (work_dir / CONVERTER_PATHS[0]).is_file() or not (work_dir / CONVERTER_REQUIREMENTS).is_file():
+                    archive.extract(member, work_dir, filter="data")
+        if not (work_dir / CONVERTER_SCRIPT).is_file() or not (work_dir / CONVERTER_REQUIREMENTS).is_file():
             raise ValueError(f"the llama.cpp source at {commit} has no draft converter")
-        shutil.rmtree(final_dir, ignore_errors=True)
-        os.replace(work_dir, final_dir)
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
     return final_dir
 
 
 def convert_with_llama_cpp(
     cache_root: Path,
     *,
-    command_finder: CommandFinder = shutil.which,
+    command_finder: CommandFinder = find_executable,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     transport: httpx.BaseTransport | None = None,
 ) -> DraftConverter:
@@ -242,7 +235,7 @@ def convert_with_llama_cpp(
         uv = command_finder("uv")
         if uv is None:
             raise ValueError(UV_INSTALL_HINT)
-        converter = fetch_converter(cache_root, job.converter_commit, transport=transport)
+        converter = _fetch_converter(cache_root, job.converter_commit, transport)
         command = (
             uv,
             "run",
@@ -252,7 +245,7 @@ def convert_with_llama_cpp(
             "--with-requirements",
             str(converter / CONVERTER_REQUIREMENTS),
             "python",
-            str(converter / CONVERTER_PATHS[0]),
+            str(converter / CONVERTER_SCRIPT),
             str(job.draft_dir),
             "--target-model-dir",
             str(job.tokenizer_dir),

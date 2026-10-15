@@ -371,12 +371,12 @@ RUNTIME_VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 # llama-server reports its build as "version: 0.6.0-dev (build 11583, commit 988015788)",
 # and before its 0.x versions as "version: 6890 (c1d0e7a00)".
-LLAMA_CPP_BUILD_PATTERNS = (re.compile(r"\(build (\d+),"), re.compile(r"^version: (\d+) \("))
+_LLAMA_CPP_BUILD_PATTERNS = (re.compile(r"\(build (\d+),"), re.compile(r"^version: (\d+) \("))
 
 
-def llama_cpp_build(version: str) -> int | None:
+def _llama_cpp_build(version: str) -> int | None:
     """Return the build number a llama.cpp version line reports, or None when it names none."""
-    for pattern in LLAMA_CPP_BUILD_PATTERNS:
+    for pattern in _LLAMA_CPP_BUILD_PATTERNS:
         match = pattern.search(version)
         if match is not None:
             return int(match.group(1))
@@ -385,7 +385,7 @@ def llama_cpp_build(version: str) -> int | None:
 
 def _require_llama_cpp_build(minimum_build: int, version: str) -> None:
     """Refuse a llama.cpp older than the recipe's minimum build, or one that reports no build."""
-    build = llama_cpp_build(version)
+    build = _llama_cpp_build(version)
     if build is None:
         raise ValueError(
             f"this recipe needs llama.cpp build {minimum_build} or newer, and the installed llama.cpp "
