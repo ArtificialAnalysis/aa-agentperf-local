@@ -93,7 +93,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen36-35b-a3b-ud-q4-k-m-mtp-rtx-spark", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen36-35b-a3b-q4-k-m-mtp-strix-halo", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
-        ("qwen38-27b-nvfp4-dgx-spark", "319f741cce68d7914884900c138a1fbb70a42f30"),
+        ("qwen38-27b-nvfp4-dgx-spark", "482ca0f3832238542f8f5295dde86b5f22711d80"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-splash-dflash", "9d27070b71f7142c6b6025f03ac011d70a73cb48"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
