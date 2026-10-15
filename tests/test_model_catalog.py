@@ -48,7 +48,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-10-13"
+    assert catalog.as_of == "2026-10-15"
     # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),

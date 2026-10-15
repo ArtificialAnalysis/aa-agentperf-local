@@ -56,7 +56,7 @@ from agentperf_local.deployment.frameworks import (
     resolve_framework_executable,
 )
 from agentperf_local.deployment.launch_command import LocalPath, render_launch_command
-from agentperf_local.deployment.model_cache import VerifiedDeployment
+from agentperf_local.deployment.model_cache import VerifiedArtifact, VerifiedDeployment
 from agentperf_local.provenance.benchmark import SubmissionContext
 from agentperf_local.provenance.context import below_benchmark_context
 from agentperf_local.provenance.hardware import (
@@ -422,7 +422,7 @@ def _llama_cpp_argv(
     elif candidate.speculation_policy == "disabled-target-only-baseline":
         speculation = ()
     else:
-        if launch.draft_model_filename is not None and draft_model_path is None:
+        if launch.uses_draft_model and draft_model_path is None:
             raise ValueError("llama.cpp external-draft recipe is missing its verified draft model path")
         if launch.speculative_tokens is None:
             raise ValueError("speculative llama.cpp recipe is missing its speculative_tokens")
@@ -438,7 +438,7 @@ def _llama_cpp_argv(
                 str(draft_model_path),
                 *(("--gpu-layers-draft", "all") if launch.backend is not None else ()),
             )
-            if launch.draft_model_filename is not None and draft_model_path is not None
+            if launch.uses_draft_model and draft_model_path is not None
             else ()
         )
         target_sampling = ("--backend-sampling",) if launch.target_backend_sampling else ()
@@ -664,7 +664,7 @@ def _known_launch_paths(
     paths = [
         *(
             LocalPath(path=str(artifact.path), placeholder=f"{MODEL_DIRECTORY_PLACEHOLDER}/{artifact.filename}")
-            for artifact in artifacts.artifacts
+            for artifact in artifacts.served_files
         ),
         LocalPath(
             path=str(artifacts.model_path),
@@ -678,10 +678,24 @@ def _known_launch_paths(
     return tuple(paths)
 
 
+def _require_unchanged_file(artifact: VerifiedArtifact) -> None:
+    """Reject a verified file that is no longer the same regular file on disk."""
+    if artifact.path.is_symlink() or not artifact.path.is_file():
+        raise ValueError(f"verified model artifact {artifact.filename} is no longer a regular file")
+    metadata = artifact.path.stat()
+    if (
+        metadata.st_dev != artifact.device_id
+        or metadata.st_ino != artifact.inode
+        or metadata.st_size != artifact.size_bytes
+        or metadata.st_mtime_ns != artifact.modified_ns
+    ):
+        raise ValueError(f"verified model artifact {artifact.filename} changed before deployment planning")
+
+
 def _require_unchanged_artifacts(artifacts: VerifiedDeployment, deployment: ModelDeployment) -> None:
     """Reject a verified artifact set that no longer matches the catalog or the disk.
 
-    Verification and launch are separate steps, so every pinned file is re-checked
+    Verification and launch are separate steps, so every served file is re-checked
     here by identity: a file swapped between the two would otherwise be served.
     """
     pinned = {artifact.filename: artifact for artifact in deployment.artifacts}
@@ -692,16 +706,8 @@ def _require_unchanged_artifacts(artifacts: VerifiedDeployment, deployment: Mode
         artifact = verified[filename]
         if artifact.sha256 != f"sha256:{expected.sha256}" or artifact.size_bytes != expected.size_bytes:
             raise ValueError("verified model artifacts do not match the selected catalog deployment")
-        if artifact.path.is_symlink() or not artifact.path.is_file():
-            raise ValueError(f"verified model artifact {filename} is no longer a regular file")
-        metadata = artifact.path.stat()
-        if (
-            metadata.st_dev != artifact.device_id
-            or metadata.st_ino != artifact.inode
-            or metadata.st_size != artifact.size_bytes
-            or metadata.st_mtime_ns != artifact.modified_ns
-        ):
-            raise ValueError(f"verified model artifact {filename} changed before deployment planning")
+    for artifact in artifacts.served_files:
+        _require_unchanged_file(artifact)
 
 
 def create_deployment_plan(

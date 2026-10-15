@@ -73,6 +73,20 @@
         }
       }
     },
+    "pinned_source_artifact": {
+      "description": "An artifact that names the repository and revision it comes from.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "required": [
+            "source_repository",
+            "source_revision"
+          ]
+        }
+      ]
+    },
     "llama_cpp": {
       "type": "object",
       "additionalProperties": false,
@@ -161,6 +175,65 @@
             "null"
           ],
           "minimum": 1
+        },
+        "draft_conversion": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/llama_cpp_draft_conversion"
+            }
+          ]
+        },
+        "minimum_build": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "The oldest llama.cpp build number the recipe serves well; older builds are refused."
+        }
+      }
+    },
+    "llama_cpp_draft_conversion": {
+      "description": "A draft model llama.cpp's convert_hf_to_gguf.py turns into GGUF at deployment. The sources and the converter commit are pinned; the converted GGUF is not.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "converter_commit",
+        "outtype",
+        "output_filename",
+        "model_files",
+        "tokenizer_files"
+      ],
+      "properties": {
+        "converter_commit": {
+          "$ref": "#/$defs/revision"
+        },
+        "outtype": {
+          "enum": [
+            "bf16",
+            "f16",
+            "q8_0"
+          ]
+        },
+        "output_filename": {
+          "$ref": "#/$defs/artifact_path"
+        },
+        "model_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pinned_source_artifact"
+          }
+        },
+        "tokenizer_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pinned_source_artifact"
+          }
         }
       }
     },

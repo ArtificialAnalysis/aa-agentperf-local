@@ -32,6 +32,7 @@ from agentperf_local.deployment.catalog import (
     DeploymentArtifact,
     DeploymentFramework,
     DeploymentMemory,
+    LlamaCppDraftConversion,
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
@@ -43,6 +44,7 @@ from agentperf_local.deployment.context_policy import (
     MINIMUM_CONTEXT_TOKENS,
     derived_minimum_memory_bytes,
 )
+from agentperf_local.deployment.draft_conversion import ConversionJob
 from agentperf_local.deployment.endpoint_probes import probe_served_context_tokens
 from agentperf_local.deployment.frameworks import (
     CommandFinder,
@@ -174,6 +176,20 @@ def _blob_path(cache_root: Path) -> Path:
 def _snapshot_path(cache_root: Path, candidate: ModelCandidate) -> Path:
     revision_dir = cache_root / HF_REPOSITORY_DIRECTORY / "snapshots" / candidate.hf_revision
     return revision_dir / candidate.deployment.artifacts[0].filename
+
+
+def _cache_pinned_file(
+    cache_root: Path, repository: str, revision: str, artifact: DeploymentArtifact, content: bytes
+) -> Path:
+    """Lay one pinned file out exactly as huggingface_hub caches it, and return its blob."""
+    repository_root = cache_root / repo_folder_name(repo_id=repository, repo_type="model")
+    blob = repository_root / "blobs" / artifact.sha256
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_bytes(content)
+    snapshot = repository_root / "snapshots" / revision / artifact.filename
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
+    return blob
 
 
 def _cached_artifact(
@@ -415,13 +431,8 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     )
     repository_root = tmp_path / repo_folder_name(repo_id=candidate.hf_repository, repo_type="model")
     snapshot_root = repository_root / "snapshots" / candidate.hf_revision
-    for (name, content), artifact in zip(parts, artifacts, strict=True):
-        blob = repository_root / "blobs" / artifact.sha256
-        blob.parent.mkdir(parents=True, exist_ok=True)
-        blob.write_bytes(content)
-        snapshot = snapshot_root / name
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
+    for (_, content), artifact in zip(parts, artifacts, strict=True):
+        _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, artifact, content)
 
     plan = create_deployment_plan(
         _hardware("NVIDIA", "CUDA"),
@@ -434,6 +445,106 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     )
 
     assert plan.command[plan.command.index("--model") + 1] == str(snapshot_root / artifacts[0].filename)
+
+
+def _source(filename: str, content: bytes, repository: str, revision: str) -> DeploymentArtifact:
+    return DeploymentArtifact(
+        filename=filename,
+        sha256=hashlib.sha256(content).hexdigest(),
+        size_bytes=len(content),
+        source_repository=repository,
+        source_revision=revision,
+    )
+
+
+def test_converted_draft_recipe_converts_once_and_serves_the_converted_draft(tmp_path: Path) -> None:
+    """A safetensors draft is converted from its pinned sources, cached, and handed to llama.cpp."""
+    target_bytes = b"target GGUF fixture"
+    target = DeploymentArtifact(
+        filename="target.gguf", sha256=hashlib.sha256(target_bytes).hexdigest(), size_bytes=len(target_bytes)
+    )
+    contents = {
+        ("example/draft", "config.json"): b'{"architectures": ["LingDSparkModel"]}',
+        ("example/draft", "model.safetensors"): b"draft tensors",
+        ("example/target", "config.json"): b'{"architectures": ["BailingMoeV3ForCausalLM"]}',
+        ("example/target", "tokenizer.json"): b"tokenizer",
+    }
+    revisions = {"example/draft": "c" * 40, "example/target": "d" * 40}
+    sources = {key: _source(key[1], content, key[0], revisions[key[0]]) for key, content in contents.items()}
+    conversion = LlamaCppDraftConversion(
+        converter_commit="e" * 40,
+        outtype="bf16",
+        output_filename="draft-bf16.gguf",
+        model_files=(sources["example/draft", "config.json"], sources["example/draft", "model.safetensors"]),
+        tokenizer_files=(sources["example/target", "config.json"], sources["example/target", "tokenizer.json"]),
+    )
+    base = _candidate()
+    candidate = replace_fields(
+        base,
+        speculation_policy="enabled-dspark-external-draft",
+        deployment=replace_fields(
+            base.deployment,
+            artifacts=(target,),
+            llama_cpp=LlamaCppLaunch(
+                batch_size=2048,
+                ubatch_size=512,
+                speculative_tokens=8,
+                target_backend_sampling=False,
+                draft_backend_sampling=False,
+                draft_conversion=conversion,
+            ),
+        ),
+    )
+    _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, target, target_bytes)
+    for key, artifact in sources.items():
+        _cache_pinned_file(tmp_path, key[0], revisions[key[0]], artifact, contents[key])
+    jobs: list[ConversionJob] = []
+    converted_bytes = [b"converted draft"]
+
+    def convert(job: ConversionJob) -> None:
+        jobs.append(job)
+        # Each group sits in its own folder under its repository names, so the two config.json files never mix.
+        assert (job.draft_dir / "config.json").read_bytes() == contents["example/draft", "config.json"]
+        assert (job.draft_dir / "model.safetensors").read_bytes() == b"draft tensors"
+        assert (job.tokenizer_dir / "config.json").read_bytes() == contents["example/target", "config.json"]
+        assert (job.tokenizer_dir / "tokenizer.json").read_bytes() == b"tokenizer"
+        job.output_path.write_bytes(converted_bytes[-1])
+
+    first = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
+    # A cached conversion covers its sources' digests, so a warm run never reads them.
+    draft_tensors = sources["example/draft", "model.safetensors"]
+    draft_blob = (
+        tmp_path / repo_folder_name(repo_id="example/draft", repo_type="model") / "blobs" / draft_tensors.sha256
+    )
+    draft_blob.unlink()
+    again = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
+    draft_blob.write_bytes(b"draft tensors")
+    assert first.converted_draft is not None
+    # A cached draft whose bytes no longer match its record is converted again.
+    first.converted_draft.path.write_bytes(b"tampered")
+    converted_bytes.append(b"converted draft again")
+    rebuilt = ensure_model_artifacts(tmp_path, candidate, draft_converter=convert)
+    plan = create_deployment_plan(
+        _hardware("NVIDIA", "CUDA"),
+        candidate,
+        "llama-cpp",
+        rebuilt,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
+        command_finder=_installed_command,
+        alias_nonce="test",
+    )
+
+    assert [job.outtype for job in jobs] == ["bf16", "bf16"]
+    assert again.converted_draft == first.converted_draft
+    assert rebuilt.converted_draft is not None
+    assert rebuilt.converted_draft.path.read_bytes() == b"converted draft again"
+    assert plan.command[plan.command.index("--model-draft") + 1] == str(rebuilt.converted_draft.path)
+    assert plan.command[plan.command.index("--spec-type") + 1] == "draft-dspark"
+    # The converted bytes are not pinned, so their digest joins the identity of what was served.
+    assert first.manifest_sha256 != rebuilt.manifest_sha256
+    assert plan.artifact_manifest_sha256 == rebuilt.manifest_sha256
+    # The memory floor counts the draft's source tensors, since the converted size is not known up front.
+    assert candidate.deployment.artifact_size_bytes == len(target_bytes) + sum(len(c) for c in contents.values())
 
 
 @pytest.mark.parametrize(
@@ -480,20 +591,10 @@ def test_external_draft_recipe_launches_both_pinned_gguf_files(
         deployment=deployment,
     )
 
-    def cache_artifact(repository: str, revision: str, artifact: DeploymentArtifact, content: bytes) -> Path:
-        repository_root = tmp_path / repo_folder_name(repo_id=repository, repo_type="model")
-        blob = repository_root / "blobs" / artifact.sha256
-        blob.parent.mkdir(parents=True, exist_ok=True)
-        blob.write_bytes(content)
-        snapshot = repository_root / "snapshots" / revision / artifact.filename
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
-        return blob
-
-    target_path = cache_artifact(candidate.hf_repository, candidate.hf_revision, target, target_bytes)
+    target_path = _cache_pinned_file(tmp_path, candidate.hf_repository, candidate.hf_revision, target, target_bytes)
     assert draft.source_repository is not None
     assert draft.source_revision is not None
-    draft_path = cache_artifact(draft.source_repository, draft.source_revision, draft, draft_bytes)
+    draft_path = _cache_pinned_file(tmp_path, draft.source_repository, draft.source_revision, draft, draft_bytes)
     verified = ensure_model_artifacts(tmp_path, candidate)
 
     plan = create_deployment_plan(
@@ -1822,6 +1923,52 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
         assert plan().framework == "sglang"
     else:
         with pytest.raises(ValueError, match=expected_error):
+            plan()
+
+
+@pytest.mark.parametrize(
+    ("reported", "expected_error"),
+    [
+        ("version: 0.6.0-dev (build 11590, commit 1a2b3c4d5)", None),
+        ("version: 0.5.0-dev (build 11236, commit f1ea20621)", "needs llama.cpp build 11583 or newer, but build 11236"),
+        # llama.cpp named its builds this way before its 0.x versions.
+        ("version: 6890 (c1d0e7a00)", "but build 6890 is installed"),
+        # A source build cloned without history counts from its clone.
+        ("version: 0.5.0-dev (build 1, commit f1ea206)", "full git history"),
+        ("llama.cpp", "did not report a build number"),
+    ],
+)
+def test_launch_refuses_a_llama_cpp_older_than_the_recipes_minimum_build(
+    tmp_path: Path, reported: str, expected_error: str | None
+) -> None:
+    """llama.cpp is not pinned, but a recipe can name the oldest build that serves it well."""
+    base = _candidate()
+    launch = LlamaCppLaunch(
+        batch_size=2048,
+        ubatch_size=512,
+        target_backend_sampling=False,
+        draft_backend_sampling=False,
+        minimum_build=11583,
+    )
+    candidate = replace_fields(base, deployment=replace_fields(base.deployment, llama_cpp=launch))
+    _cached_artifact(tmp_path, candidate)
+    server = write_python_executable(tmp_path / "llama-server", f"import sys\nsys.stderr.write({reported!r} + '\\n')\n")
+
+    def plan() -> DeploymentPlan:
+        return create_deployment_plan(
+            _hardware("NVIDIA", "CUDA"),
+            candidate,
+            "llama-cpp",
+            ensure_model_artifacts(tmp_path, candidate),
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
+            command_finder=lambda command: str(server),
+            alias_nonce="test",
+        )
+
+    if expected_error is None:
+        assert plan().framework == "llama-cpp"
+    else:
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
             plan()
 
 
