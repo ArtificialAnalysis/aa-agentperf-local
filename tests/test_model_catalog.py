@@ -19,11 +19,13 @@ from agentperf_local.deployment.catalog import (
     ModelDeployment,
     load_model_catalog,
 )
+from agentperf_local.deployment.context_policy import derived_minimum_memory_bytes
 
 CATALOG_PATH = BUNDLED_RECIPES_ROOT
 GEMMA_RECIPE = Path("gemma-4-12b", "any", "gemma4-12b-it-q4-0.yaml")
 METAL_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-q4-k-m-mtp-m5-pro.yaml")
 SPLASH_RECIPE = Path("qwen3-8-27b", "m5-pro", "qwen38-27b-splash-dflash.yaml")
+B12X_RECIPE = Path("qwen3-8-flash-next", "dgx-spark", "qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark.yaml")
 
 
 def test_bundled_catalog_matches_its_pinned_digest() -> None:
@@ -48,7 +50,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-10-13"
+    assert catalog.as_of == "2026-10-15"
     # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
@@ -95,6 +97,9 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen38-27b-ud-iq4-xs-dflash-rtx-spark", "4ca720788d1e01f1bff70c033e0d0028fd02e502"),
         ("qwen38-27b-ud-q4-k-m-dflash-rtx-spark", "4ca720788d1e01f1bff70c033e0d0028fd02e502"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark", "6c01ac378d22f6652c9f392c87700496eca8e5dc"),
+        ("qwen38-flash-next-nvfp4-mtp-dgx-spark", "7c4f1bc1a2d6847e0cbc01ac6b823f00251de8dd"),
+        ("qwen38-flash-next-q4-k-m-mtp-strix-halo", "db3a185731e162be9ffa4d52d20d7509939e60e8"),
     ]
     # The DGX Spark NVFP4 recipe is a safetensors weights repository served by vLLM on CUDA.
     qwen_weights = _named(catalog, "qwen38-27b-nvfp4-dgx-spark")
@@ -104,7 +109,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 10
+    assert len(dgx_spark) == 12
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
     # Ling 3.0 flash is the one DGX Spark recipe that llama.cpp serves; the rest run vLLM.
@@ -152,6 +157,22 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert splash.deployment.artifact_kind == "splash-package"
     assert splash.deployment.frameworks == ("splash",)
     assert splash.deployment.runtime_version_for("splash") == "1.2.1"
+    # Flash-Next reads its per-layer-embedding table from disk on demand, so the floor leaves the table out.
+    # Upstream llama.cpp's "auto" lazy mode turns lazy reads off on an iGPU, so the Strix Halo recipe asks for
+    # them. A memory-mapped load stalled for over ten minutes there, so the weights are read directly.
+    halo = _named(catalog, "qwen38-flash-next-q4-k-m-mtp-strix-halo").deployment
+    assert halo.llama_cpp is not None
+    assert (halo.llama_cpp.load_mode, halo.llama_cpp.lazy_mode) == ("none", "on")
+    assert derived_minimum_memory_bytes(halo, 65536) < halo.artifact_size_bytes
+    b12x = _named(catalog, "qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark").deployment
+    assert b12x.vllm is not None
+    assert b12x.vllm.reads_ple_table_from_disk
+    assert b12x.runtime_version_for("vllm") == "0.1.dev21818+g3a947437c.d20261014"
+    assert derived_minimum_memory_bytes(b12x, 65536) < b12x.artifact_size_bytes
+    # The resident-table vLLM recipe pins the precompiled development build it was measured on.
+    resident = _named(catalog, "qwen38-flash-next-nvfp4-mtp-dgx-spark").deployment
+    assert resident.runtime_version_for("vllm") == "0.30.1rc1.dev187+g066a1598f.precompiled"
+    assert resident.memory.lazy_read_bytes == 0
 
 
 def test_managed_candidate_can_limit_hardware_and_framework_compatibility() -> None:
@@ -244,7 +265,8 @@ def test_managed_frameworks_must_be_a_unique_canonical_subset(case: str) -> None
             f"{METAL_RECIPE.as_posix()}: deployment.llama_cpp.threads: Input should be greater than 0",
         ),
         ("llama-negative-cache", "cache_ram_mib must be non-negative"),
-        ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode can read artifact bytes"),
+        ("llama-lazy-read-without-lazy-mode", "only a llama.cpp recipe with a lazy_mode or a vLLM recipe"),
+        ("vllm-lazy-read-with-resident-ple-table", "only a llama.cpp recipe with a lazy_mode or a vLLM recipe"),
         ("llama-speculative-without-depth", "a speculative llama.cpp recipe must set speculative_tokens"),
         ("llama-target-only-with-depth", "a target-only llama.cpp recipe must not set speculative_tokens"),
         ("splash-other-runtime", "a Splash package is served by Splash alone"),
@@ -326,6 +348,16 @@ def test_rejects_malformed_or_promoted_recipes(tmp_path: Path, case: str, messag
         else:
             launch["cache_ram_mib"] = -1
         _write(root, METAL_RECIPE, metal)
+    elif case == "vllm-lazy-read-with-resident-ple-table":
+        b12x = _read(root, B12X_RECIPE)
+        deployment = b12x.get("deployment")
+        assert isinstance(deployment, dict)
+        launch = deployment.get("vllm")
+        assert isinstance(launch, dict)
+        environment = launch.get("environment")
+        assert isinstance(environment, dict)
+        environment["VLLM_PLE_TABLE_MEMORY"] = "ram"
+        _write(root, B12X_RECIPE, b12x)
     elif case.startswith("splash-"):
         splash = _read(root, SPLASH_RECIPE)
         deployment = splash.get("deployment")

@@ -1,0 +1,254 @@
+profile_id: qwen38-flash-next-nvfp4-mtp-b12x-dgx-spark
+as_of: '2026-10-15'
+model_name: Qwen3.8 Flash-Next
+quantization: NVFP4
+variant: b12x
+model_release_slug: qwen3-8-flash-next
+hf_repository: local-inference-lab/Qwen3.8-Flash-Next-NVFP4
+hf_revision: 6c01ac378d22f6652c9f392c87700496eca8e5dc
+devices:
+- nvidia-cuda
+tool_call_parser: qwen3_xml
+reasoning_parser: qwen3
+thinking_policy: enabled-medium-candidate
+speculation_policy: enabled-mtp-self-draft
+deployment:
+  artifact_kind: safetensors-repository
+  artifacts:
+  - filename: HYBRID.json
+    sha256: c0ebf65ab2466773485b7b5a7a90f7cad2c6130d03cda21d9ab6ddb4f168a45f
+    size_bytes: 14605
+  - filename: LICENSE
+    sha256: a0dc422560841fd68e06d974907f8b4c709bca44a67daad2b528437bdf676c08
+    size_bytes: 3235
+  - filename: chat_template.jinja
+    sha256: c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041
+    size_bytes: 8952
+  - filename: config.json
+    sha256: fffcfb4bd7870c52cb0359b3a1f541b3b95465cc5fa427407e0e704b6e740fc1
+    size_bytes: 60795
+  - filename: export-manifest.json
+    sha256: e661248072f16123c4b53ff494a395f64fe9c7877c9a55697142d859c0237880
+    size_bytes: 3674
+  - filename: generation_config.json
+    sha256: e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e
+    size_bytes: 202
+  - filename: hf_quant_config.json
+    sha256: 369953bc72fbe6d5af5558fae1a4492b61bad9429110d471163eaedf55644673
+    size_bytes: 53187
+  - filename: hybrid-main-00001.safetensors
+    sha256: b5b960f6f2c6466985391dd2b569d65dac5b4c6a55645fb7ffc49c7ae470e2a0
+    size_bytes: 1416127904
+  - filename: hybrid-main-00002.safetensors
+    sha256: 94994a8d548461eba44e86805c4e373ec90fd9c6080cb6bbce088a1836a9cb60
+    size_bytes: 2786893032
+  - filename: merges.txt
+    sha256: a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d
+    size_bytes: 3353259
+  - filename: model-00001-of-00041.safetensors
+    sha256: c65c1bbe3e3cef00f4cc6982a206aa434c321b357b9e34a30a9d99157503df48
+    size_bytes: 4248628952
+  - filename: model-00002-of-00041.safetensors
+    sha256: 5e416aaacb1210fabeb3411e280a082a5aa3267126bfa23956bc2168caca031e
+    size_bytes: 4248633272
+  - filename: model-00003-of-00041.safetensors
+    sha256: 7c39525440079be9afd73254160f5d3bd0bd8c5fbf327746e2d129f951433f50
+    size_bytes: 4248633272
+  - filename: model-00004-of-00041.safetensors
+    sha256: 4752d94927b15b5c6bb24f13d0a0035879ee8703993657aab22f00cf5e66bc23
+    size_bytes: 4248645368
+  - filename: model-00005-of-00041.safetensors
+    sha256: dabe5010052ab17787a17c283f2fe6501c46f869a8c2b73666aaa9a26d0d3e5a
+    size_bytes: 4248647096
+  - filename: model-00006-of-00041.safetensors
+    sha256: a6557d4fce9663a9885588b2a6508cb52f147202cc1018296db121f267336d99
+    size_bytes: 4248647096
+  - filename: model-00007-of-00041.safetensors
+    sha256: c5b0d0a3ca0f6c6da27de382e0b5201aa125b3b6b5427dabf152aeca53db718b
+    size_bytes: 4248647096
+  - filename: model-00008-of-00041.safetensors
+    sha256: 538379d4f1c8a82846a6028e6373f90c53ea88125e22fec74e89b2ded46fbbd6
+    size_bytes: 4248647096
+  - filename: model-00009-of-00041.safetensors
+    sha256: 1dca2dea74867adf58b079a1043002d9058ec8471e673fc96bfc14b59043276e
+    size_bytes: 4248647096
+  - filename: model-00010-of-00041.safetensors
+    sha256: 8b5b935561f39184f2be07a0bab4902caff01135aae75a13c12f7c5c5583de32
+    size_bytes: 4248647096
+  - filename: model-00011-of-00041.safetensors
+    sha256: 96eaec8cf053b3194452b6a37d022e9a9559a178333d8e2c4ad37ff59320b418
+    size_bytes: 4248647096
+  - filename: model-00012-of-00041.safetensors
+    sha256: 9b95bbac9d10f6c772a59ed9f7cf481328311be6598a260f7a62de00890894a2
+    size_bytes: 4248647096
+  - filename: model-00013-of-00041.safetensors
+    sha256: 2359135b9bb1fc8c747219da0bc88ddc9e5a9a3678fd408505e54f0afcbbc182
+    size_bytes: 4248647096
+  - filename: model-00014-of-00041.safetensors
+    sha256: bc5e41da35cd352cd74d9272e0fe4203101c3aad8b61819049f3ba606f12e7aa
+    size_bytes: 4248647096
+  - filename: model-00015-of-00041.safetensors
+    sha256: 14a2443b5384a69189b09a48ec40af5cd4cbbb899613e3114812afa8253dfa21
+    size_bytes: 4248647096
+  - filename: model-00016-of-00041.safetensors
+    sha256: d1b324912f5a7a526336060636552d77554471e14a4cf6ae089824344ad70cd0
+    size_bytes: 4248647096
+  - filename: model-00017-of-00041.safetensors
+    sha256: 699749bfe7b369cdc1d8651efaa1c39852927bfe95669923a040ff5741097803
+    size_bytes: 2609490248
+  - filename: model-00018-of-00041.safetensors
+    sha256: 6c658ba6a1c7988664cbdc09a88310416670795c407dc2b9c628f6671e98fa90
+    size_bytes: 591938104
+  - filename: model-00019-of-00041.safetensors
+    sha256: 3f815e784dedba1d7ae62dad023d79d59b0a1035f9fd33d7c140e27e7c551a02
+    size_bytes: 360698832
+  - filename: model-00020-of-00041.safetensors
+    sha256: 724e104ba8e24134270e39ae06e37cf0654240269d47977ef75c9bf8ee64f08e
+    size_bytes: 128587568
+  - filename: model-00021-of-00041.safetensors
+    sha256: 0d0ec7505ca780c66d6f1c2fbf90211a77731acf263c2c388edbf5c1de3c49c6
+    size_bytes: 9669968
+  - filename: model-00022-of-00041.safetensors
+    sha256: 77de96023b11762f626f05a5a100f7e7113209e7cd38854a023a9023158b4b0a
+    size_bytes: 1652473080
+  - filename: model-00023-of-00041.safetensors
+    sha256: 60d95b10b6e140a9626a7058d5038528f2ff80148dc4569b881db56052046509
+    size_bytes: 40
+  - filename: model-00024-of-00041.safetensors
+    sha256: 60d95b10b6e140a9626a7058d5038528f2ff80148dc4569b881db56052046509
+    size_bytes: 40
+  - filename: model-00025-of-00041.safetensors
+    sha256: 60d95b10b6e140a9626a7058d5038528f2ff80148dc4569b881db56052046509
+    size_bytes: 40
+  - filename: model-00026-of-00041.safetensors
+    sha256: fd00d38f3989adf3ebb5f0c0928e62ef82b809805319915b7f3f089d4ef16047
+    size_bytes: 1800134612
+  - filename: model-00027-of-00041.safetensors
+    sha256: 4bf82cf0238a1d38c3c97005bf3d4144a3e2aef81c6c4628e2f9e3a5b715c0fc
+    size_bytes: 1800011248
+  - filename: model-00028-of-00041.safetensors
+    sha256: 33669aa6fdabe969e41701496880d40040445ca15f9cc63bcb9a29c462851ee0
+    size_bytes: 1800011248
+  - filename: model-00029-of-00041.safetensors
+    sha256: 1ff77ff74ec6418fb30fac577c3343fe10aefea2471462d9ec28b0544b59757c
+    size_bytes: 1800011248
+  - filename: model-00030-of-00041.safetensors
+    sha256: 38cc36fffd12e717fb16de4ff6ed77bac178a1b45c248f87d43432528261b38f
+    size_bytes: 1800011248
+  - filename: model-00031-of-00041.safetensors
+    sha256: 1cad5c773a6a0ae60a98330b568a0b46ef0710b04e6d1157a10eb6d7b27593f0
+    size_bytes: 1800011248
+  - filename: model-00032-of-00041.safetensors
+    sha256: e17bf0258583fbb98d37b9e58bf44d703bbb3ba57392502c0ab6f4b2bb916ef9
+    size_bytes: 1800011248
+  - filename: model-00033-of-00041.safetensors
+    sha256: 32b4e171d12b61fd5778757ac4ce94a287b4461f6b82858cd43a214b8dd43d69
+    size_bytes: 1800011248
+  - filename: model-00034-of-00041.safetensors
+    sha256: 1c1c614195b7c5294cbd9aabe249816a7c874151bf7d262bffdcd48aefc81904
+    size_bytes: 1800011248
+  - filename: model-00035-of-00041.safetensors
+    sha256: b5e2ace729bd83b094675abceb0c626ca683fcf3a25e6c15ecab96e3b7c23290
+    size_bytes: 1800011248
+  - filename: model-00036-of-00041.safetensors
+    sha256: 05ff79bf4788b478e7614be0b104d3d60f99cac1facc357ad3deb722c9eeecdd
+    size_bytes: 1800011248
+  - filename: model-00037-of-00041.safetensors
+    sha256: 3897a5102e2380fa6030a190d5e402688ad31ec94105bcf391703ef04b39418b
+    size_bytes: 1800011248
+  - filename: model-00038-of-00041.safetensors
+    sha256: 32cec97d1f5698dcf44c775f111f393b380b509d561b289be9234afad860449a
+    size_bytes: 1800011248
+  - filename: model-00039-of-00041.safetensors
+    sha256: fddeaea6a1850bdfb396833970258ed27b1d3663f9493f91f8725b12441ec6ce
+    size_bytes: 1800011248
+  - filename: model-00040-of-00041.safetensors
+    sha256: b67f2ce571b54986b0eab2ca956bceb07d2aaed46a87c3039ae9e998189bee1e
+    size_bytes: 1800011248
+  - filename: model-00041-of-00041.safetensors
+    sha256: 66de4fee053fb82caf51ac0ede4cfc5514b91124d4234a049fba95b54528a7a7
+    size_bytes: 1800011248
+  - filename: model.safetensors.index.json
+    sha256: e65210a65667dae8d83edde5ee7f833f68a79110f54264445e421f6c26ad7ccb
+    size_bytes: 33267634
+  - filename: preprocessor_config.json
+    sha256: 27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516
+    size_bytes: 390
+  - filename: tokenizer.json
+    sha256: 0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3
+    size_bytes: 12809320
+  - filename: tokenizer_config.json
+    sha256: b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27
+    size_bytes: 17928
+  - filename: video_preprocessor_config.json
+    sha256: 7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13
+    size_bytes: 385
+  - filename: vocab.json
+    sha256: ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003
+    size_bytes: 6722759
+  context_tokens: 65536
+  frameworks:
+  - vllm
+  memory:
+    full_attention_layers: 12
+    full_kv_heads: 2
+    full_kv_head_dimension: 256
+    sliding_attention_layers: 0
+    sliding_kv_heads: 0
+    sliding_kv_head_dimension: 0
+    sliding_cached_tokens: 0
+    kv_bytes_per_scalar: 1
+    recurrent_state_slots: 1
+    constant_state_bytes: 117669888
+    runtime_overhead_bytes: 26100000000
+    lazy_read_bytes: 28865879324
+  runtime_versions:
+    vllm: 0.1.dev21818+g3a947437c.d20261014
+  vllm:
+    arguments:
+    - --trust-remote-code
+    - --pipeline-parallel-size
+    - '1'
+    - --mamba-cache-mode
+    - align
+    - --enable-prefix-caching
+    - --enable-chunked-prefill
+    - --dtype
+    - bfloat16
+    - --kv-cache-dtype
+    - fp8
+    - --quantization
+    - modelopt_mixed
+    - --block-size
+    - '16'
+    - --load-format
+    - b12x
+    - --max-num-batched-tokens
+    - '4096'
+    - --speculative-config
+    - '{"method":"mtp","num_speculative_tokens":4}'
+    - --gdn-decode-kernel
+    - b12x
+    - --linear-backend
+    - b12x
+    - --moe-backend
+    - b12x
+    - --no-enable-flashinfer-autotune
+    - --mm-encoder-tp-mode
+    - data
+    - --compilation-config
+    - '{"pass_config":{"fuse_act_quant":true}}'
+    - --gpu-memory-utilization
+    - '0.8'
+    environment:
+      B12X_POLICY_MODE: auto
+      CUTE_DSL_ARCH: sm_121a
+      SAFETENSORS_FAST_GPU: '1'
+      VLLM_B12X_MOE_FP4_LAYER_MAX_INPUT_SCALE: w13
+      VLLM_MXFP8_LM_HEAD: '1'
+      VLLM_PLE_TABLE_MEMORY: disk
+      VLLM_SSM_CONV_STATE_LAYOUT: DS
+      VLLM_USE_AOT_COMPILE: '1'
+      VLLM_USE_MEGA_AOT_ARTIFACT: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
