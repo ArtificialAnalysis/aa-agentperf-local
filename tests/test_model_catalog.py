@@ -60,6 +60,11 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("gemma4-26b-a4b-q4-k-m-mtp-strix-halo", "c099eb48e663fd284577b04978a94ffccb261841"),
         ("gemma4-31b-it-nvfp4-dgx-spark", "4135a98a9b728a548947683219633b25682223ac"),
         ("gpt-oss-120b-mxfp4", "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"),
+        ("lfm25-24b-a2b-qad-q4-0-dgx-spark", "0912d33141f77e10705345a6732bfd83f0252fdc"),
+        ("lfm25-24b-a2b-qad-q4-0-m5-pro", "0912d33141f77e10705345a6732bfd83f0252fdc"),
+        ("lfm25-24b-a2b-qad-q4-0-rtx5090", "0912d33141f77e10705345a6732bfd83f0252fdc"),
+        ("lfm25-24b-a2b-q4-k-m-rtx-spark", "0912d33141f77e10705345a6732bfd83f0252fdc"),
+        ("lfm25-24b-a2b-qad-q4-0-strix-halo", "0912d33141f77e10705345a6732bfd83f0252fdc"),
         ("ling3-flash-q4-k-m", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("ling3-flash-q4-k-m-dspark-dgx-spark", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("ling3-flash-q4-k-m-dspark-strix-halo", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
@@ -104,12 +109,13 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     assert qwen_weights.deployment.runtime_version_for("vllm") == "0.28.0"
     assert qwen_weights.deployment.vllm is not None
     dgx_spark = [model for model in catalog.models if model.profile_id.endswith("dgx-spark")]
-    assert len(dgx_spark) == 10
+    assert len(dgx_spark) == 11
     for candidate in dgx_spark:
         assert candidate.deployment.context_tokens == 65536
-    # Ling 3.0 flash is the one DGX Spark recipe that llama.cpp serves; the rest run vLLM.
+    # LFM2.5 24B A2B and Ling 3.0 flash are the DGX Spark recipes that llama.cpp serves; the rest run vLLM.
     assert [model.profile_id for model in dgx_spark if model.deployment.vllm is None] == [
-        "ling3-flash-q4-k-m-dspark-dgx-spark"
+        "lfm25-24b-a2b-qad-q4-0-dgx-spark",
+        "ling3-flash-q4-k-m-dspark-dgx-spark",
     ]
     # SGLang profiles share their qualified release. llama.cpp publishes no comparable
     # release version to pin.
