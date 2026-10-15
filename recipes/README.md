@@ -61,6 +61,8 @@ uv run agentperf-local managed-run \
 ```
 
 - **llama.cpp** recipes do not pin a build. Put a `llama-server` on `PATH`.
+  A recipe can name a `minimum_build`; an older build, or one that reports no
+  build number, is refused.
 - **SGLang** and **vLLM** recipes pin one exact release in
   `runtime_versions`. Run them where `import sglang` or `import vllm` works.
 - **Splash** recipes pin one exact release too. Install it with

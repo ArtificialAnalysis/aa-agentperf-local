@@ -1934,6 +1934,52 @@ def test_launch_serves_only_the_runtime_version_the_recipe_names(
             plan()
 
 
+@pytest.mark.parametrize(
+    ("reported", "expected_error"),
+    [
+        ("version: 0.6.0-dev (build 11590, commit 1a2b3c4d5)", None),
+        ("version: 0.5.0-dev (build 11236, commit f1ea20621)", "needs llama.cpp build 11583 or newer, but build 11236"),
+        # llama.cpp named its builds this way before its 0.x versions.
+        ("version: 6890 (c1d0e7a00)", "but build 6890 is installed"),
+        # A source build cloned without history counts from its clone.
+        ("version: 0.5.0-dev (build 1, commit f1ea206)", "full git history"),
+        ("llama.cpp", "did not report a build number"),
+    ],
+)
+def test_launch_refuses_a_llama_cpp_older_than_the_recipes_minimum_build(
+    tmp_path: Path, reported: str, expected_error: str | None
+) -> None:
+    """llama.cpp is not pinned, but a recipe can name the oldest build that serves it well."""
+    base = _candidate()
+    launch = LlamaCppLaunch(
+        batch_size=2048,
+        ubatch_size=512,
+        target_backend_sampling=False,
+        draft_backend_sampling=False,
+        minimum_build=11583,
+    )
+    candidate = replace_fields(base, deployment=replace_fields(base.deployment, llama_cpp=launch))
+    _cached_artifact(tmp_path, candidate)
+    server = write_python_executable(tmp_path / "llama-server", f"import sys\nsys.stderr.write({reported!r} + '\\n')\n")
+
+    def plan() -> DeploymentPlan:
+        return create_deployment_plan(
+            _hardware("NVIDIA", "CUDA"),
+            candidate,
+            "llama-cpp",
+            ensure_model_artifacts(tmp_path, candidate),
+            catalog_digest=BUNDLED_RECIPES_DIGEST,
+            command_finder=lambda command: str(server),
+            alias_nonce="test",
+        )
+
+    if expected_error is None:
+        assert plan().framework == "llama-cpp"
+    else:
+        with pytest.raises(ValueError, match=re.escape(expected_error)):
+            plan()
+
+
 def test_launch_names_a_version_check_that_timed_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A slow version command is not a missing version; the refusal must say which it was."""
     candidate = _weights_candidate()
