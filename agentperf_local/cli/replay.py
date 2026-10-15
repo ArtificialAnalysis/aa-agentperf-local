@@ -27,7 +27,7 @@ from agentperf_local.cli.options import (
     read_tool_choice,
     read_tool_mode,
     require_fresh_output_dir,
-    resolve_submit_token,
+    resolve_submit_key,
 )
 from agentperf_local.client.endpoint import url_names_loopback_host
 from agentperf_local.client.rust_client import validate_rustcore_available
@@ -266,11 +266,11 @@ def _download_progress_printer() -> Callable[[int, int], None]:
 def _advise_on_revision(namespace: argparse.Namespace, provenance: SourceProvenance) -> None:
     """Warn before a run, not after, when this build cannot reach verified.
 
-    Only a user who has a submit token configured intends to submit, so only they
+    Only a user who has a submit key configured intends to submit, so only they
     pay for the network round trip. The service check stays authoritative; a
     service that cannot be reached leaves the run untouched.
     """
-    if resolve_submit_token(namespace, "submit_token_env") is None:
+    if resolve_submit_key(namespace, "submit_key_env") is None:
         return
     check = check_revision_allowlist(provenance, base_url=read_string(namespace, "submit_base_url"))
     if not check.reachable:
@@ -584,7 +584,7 @@ def tui_command(namespace: argparse.Namespace) -> int:
             model_cache_root=read_path(namespace, "cache_root"),
             deployment_port=read_integer(namespace, "port"),
             submit_base_url=read_string(namespace, "submit_base_url"),
-            submit_token_env=read_string(namespace, "submit_token_env"),
+            submit_key_env=read_string(namespace, "submit_key_env"),
             deployment_startup_timeout_seconds=read_number(namespace, "startup_timeout_seconds"),
             device_index=read_optional_integer(namespace, "device"),
             tool_choice=read_tool_choice(namespace),

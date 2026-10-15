@@ -47,7 +47,7 @@ uv run agentperf-local tui \
 | `--port PORT` | Set the owned localhost port used by a managed server. |
 | `--startup-timeout-seconds N` | Bound managed server startup. |
 | `--device N` | Preselect the detected accelerator a managed model uses. |
-| `--submit-token-env NAME` | Name the optional environment variable holding an Artificial Analysis submit token. Without one, the upload is anonymous. Default `AGENTPERF_SUBMIT_TOKEN`. |
+| `--submit-key-env NAME` | Name the optional environment variable holding an Artificial Analysis submit key. Without one, the upload is anonymous. Default `AGENTPERF_SUBMIT_KEY`. |
 | `--submit-base-url URL` | Point the upload at another submission service, for testing. |
 
 ## Keyboard flow
@@ -176,10 +176,10 @@ The confirm screen groups a second checkbox and a compact upload summary in one
 panel: "Submit this run to Artificial Analysis." It is offered for every ready
 managed run. A run on a server you started needs a description of that server,
 which only the command line collects, so for it the panel shows the commands
-instead. A token is optional; an upload without one is anonymous. The summary
+instead. A key is optional; an upload without one is anonymous. The summary
 separates what may be published, what the service keeps privately with no end
 date, what is never sent, and how failed qualification probes are handled. When
-a token is set, the app also asks the service whether this client commit is
+a key is set, the app also asks the service whether this client commit is
 inside the allowlist window and adds a short eligibility note. That note is
 advisory; the service decides.
 
@@ -204,7 +204,7 @@ that a named API-key environment variable is set, collects a minimal hardware
 summary, and classifies the server URL as local or remote. When a check fails,
 the readiness page reports the failure without showing private values. Some
 checks name the specific field; others report a generic message that lists the
-fields to review. With a submit token configured, an advisory revision check can
+fields to review. With a submit key configured, an advisory revision check can
 contact Artificial Analysis without blocking the run.
 
 For a server you run yourself, the app sends one `GET /v1/models` request after

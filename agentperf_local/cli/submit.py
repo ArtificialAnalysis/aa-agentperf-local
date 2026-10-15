@@ -6,7 +6,7 @@ import argparse
 import sys
 from collections.abc import Callable
 
-from agentperf_local.cli.options import print_json, resolve_submit_token
+from agentperf_local.cli.options import print_json, resolve_submit_key
 from agentperf_local.common.argparse_fields import (
     read_boolean,
     read_path,
@@ -20,8 +20,10 @@ from agentperf_local.submission.builder import (
 )
 from agentperf_local.submission.client import (
     IDEMPOTENCY_CONFLICT,
+    UNAUTHORIZED,
     SubmissionError,
     fetch_submission_status,
+    rejected_key_text,
     submit_body,
 )
 from agentperf_local.submission.notice import PRIVACY_NOTICE, PRIVACY_NOTICE_VERSION
@@ -78,14 +80,16 @@ def _upload_progress_printer() -> Callable[[int, int], None]:
 def submit_command(namespace: argparse.Namespace) -> int:
     submission_path = read_path(namespace, "submission")
     base_url = read_string(namespace, "base_url")
-    token = resolve_submit_token(namespace)
-    if token is None:
-        print(f"note: {read_string(namespace, 'token_env')} is unset or blank; submitting anonymously", file=sys.stderr)
+    key = resolve_submit_key(namespace)
+    if key is None:
+        print(f"note: {read_string(namespace, 'key_env')} is unset or blank; submitting anonymously", file=sys.stderr)
     prepared = read_prepared_submission(submission_path)
     _confirm_privacy_notice(namespace)
     try:
-        receipt = submit_body(prepared.encoded, base_url=base_url, token=token, progress=_upload_progress_printer())
+        receipt = submit_body(prepared.encoded, base_url=base_url, key=key, progress=_upload_progress_printer())
     except SubmissionError as error:
+        if error.code == UNAUTHORIZED:
+            raise ValueError(rejected_key_text(read_string(namespace, "key_env"))) from error
         if error.code == IDEMPOTENCY_CONFLICT:
             raise ValueError(
                 f"submission refused: the service already holds run {prepared.request.run_id} with other content; "
@@ -101,7 +105,7 @@ def submit_command(namespace: argparse.Namespace) -> int:
             "bytes_sent": receipt.bytes_sent,
             "submission": str(submission_path),
             "run_id": prepared.request.run_id,
-            "authenticated": token is not None,
+            "authenticated": key is not None,
             "privacy_notice_version": PRIVACY_NOTICE_VERSION,
             "upload_performed": True,
         }
@@ -114,9 +118,11 @@ def submission_status_command(namespace: argparse.Namespace) -> int:
         status = fetch_submission_status(
             read_string(namespace, "submission_id"),
             base_url=read_string(namespace, "base_url"),
-            token=resolve_submit_token(namespace),
+            key=resolve_submit_key(namespace),
         )
     except SubmissionError as error:
+        if error.code == UNAUTHORIZED:
+            raise ValueError(rejected_key_text(read_string(namespace, "key_env"))) from error
         raise ValueError(f"status request refused: {error}") from error
     print_json(status.to_json())
     return 0
