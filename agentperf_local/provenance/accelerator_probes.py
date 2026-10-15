@@ -63,7 +63,7 @@ NVIDIA_NPU_BRAND = "NPU"
 # dedicated memory, which is all nvidia-smi reports. CUDA also serves allocations from the
 # shared system memory Windows grants the GPU, which is the same physical memory, so both
 # count. On a discrete card shared memory sits across PCIe and does not count.
-NVIDIA_WINDOWS_UNIFIED_NAME_MARKERS = ("RTX Spark",)
+NVIDIA_WINDOWS_UNIFIED_NAME_MARKER = "RTX Spark"
 
 
 AMD_SMI_COMMAND = ("amd-smi", "static", "--gpu", "all", "--json")
@@ -433,9 +433,7 @@ def inspect_nvidia(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...],
 
 def _with_windows_shared_memory(probe: SystemProbe, accelerator: AcceleratorSnapshot) -> AcceleratorSnapshot:
     """Add the shared memory Windows grants a unified-memory NVIDIA part to its reported memory."""
-    if accelerator.memory_bytes is None or not any(
-        marker in accelerator.name for marker in NVIDIA_WINDOWS_UNIFIED_NAME_MARKERS
-    ):
+    if accelerator.memory_bytes is None or NVIDIA_WINDOWS_UNIFIED_NAME_MARKER not in accelerator.name:
         return accelerator
     shared = probe.gpu_shared_memory_bytes(accelerator.name)
     if shared is None:

@@ -692,6 +692,10 @@ RTX_SPARK_DETAILS = (
 )
 
 
+# nvidia-smi reports the RTX Spark's dedicated carve-out as 64000 MiB.
+RTX_SPARK_DEDICATED_BYTES = 64_000 * 1024**2
+
+
 def test_an_nvidia_npu_is_not_an_accelerator() -> None:
     """The RTX Spark's NPU serves no CUDA work, so the GPU is the one accelerator."""
     snapshot = collect_hardware_snapshot(_nvidia_probe(RTX_SPARK_ROWS, RTX_SPARK_DETAILS))
@@ -699,7 +703,7 @@ def test_an_nvidia_npu_is_not_an_accelerator() -> None:
     assert [accelerator.name for accelerator in snapshot.accelerators] == [
         "NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)"
     ]
-    assert snapshot.accelerators[0].memory_bytes == 64_000 * 1024**2
+    assert snapshot.accelerators[0].memory_bytes == RTX_SPARK_DEDICATED_BYTES
     assert snapshot.warnings == ()
 
 
@@ -712,23 +716,18 @@ RTX_5090_ROW = b"NVIDIA GeForce RTX 5090, 32607, 617.07\n"
     ("system", "row", "expected_memory_bytes"),
     [
         # On Windows the RTX Spark's GPU uses its carve-out and the shared memory, one physical pool.
-        ("Windows", RTX_SPARK_ROWS, 64_000 * 1024**2 + WINDOWS_SHARED_GPU_MEMORY),
+        ("Windows", RTX_SPARK_ROWS, RTX_SPARK_DEDICATED_BYTES + WINDOWS_SHARED_GPU_MEMORY),
         # A discrete card's shared memory is across PCIe, so only its own memory counts.
         ("Windows", RTX_5090_ROW, 32_607 * 1024**2),
         # Other systems report no shared GPU memory to add.
-        ("Linux", RTX_SPARK_ROWS, 64_000 * 1024**2),
+        ("Linux", RTX_SPARK_ROWS, RTX_SPARK_DEDICATED_BYTES),
     ],
 )
 def test_a_windows_unified_memory_part_counts_its_shared_gpu_memory(
     system: str, row: bytes, expected_memory_bytes: int
 ) -> None:
-    probe = FakeSystemProbe(
-        system=system,
-        cpu="NVIDIA test CPU",
-        command_name="nvidia-smi",
-        result=CommandResult(returncode=0, stdout=row, stderr=b""),
-        query_result=CommandResult(returncode=0, stdout=RTX_SPARK_DETAILS, stderr=b""),
-        gpu_shared_memory=WINDOWS_SHARED_GPU_MEMORY,
+    probe = replace_fields(
+        _nvidia_probe(row, RTX_SPARK_DETAILS), system=system, gpu_shared_memory=WINDOWS_SHARED_GPU_MEMORY
     )
 
     snapshot = collect_hardware_snapshot(probe)

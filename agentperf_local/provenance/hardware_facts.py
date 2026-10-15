@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Literal, Protocol, Self
 
@@ -186,24 +187,13 @@ def _windows_total_memory_bytes() -> int | None:
 
 
 # IID_IDXGIFactory1, the interface CreateDXGIFactory1 is asked for.
-_DXGI_FACTORY1_IID = (0x770AAE78, 0xF26F, 0x4DBA, (0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87))
+_DXGI_FACTORY1_IID = uuid.UUID("770aae78-f26f-4dba-a829-253c83d1b387")
 # Slots in the COM tables: IUnknown has 3 methods and IDXGIObject 4 more. IDXGIFactory adds 5
 # before IDXGIFactory1::EnumAdapters1, and IDXGIAdapter adds 3 before IDXGIAdapter1::GetDesc1.
 _COM_RELEASE_SLOT = 2
 _DXGI_ENUM_ADAPTERS1_SLOT = 12
 _DXGI_GET_DESC1_SLOT = 10
 _DXGI_ADAPTER_DESCRIPTION_CHARACTERS = 128
-
-
-class _Guid(ctypes.Structure):
-    """Mirror GUID, which names the interface CreateDXGIFactory1 returns."""
-
-    _fields_ = [
-        ("Data1", ctypes.c_uint32),
-        ("Data2", ctypes.c_uint16),
-        ("Data3", ctypes.c_uint16),
-        ("Data4", ctypes.c_uint8 * 8),
-    ]
 
 
 class _DxgiAdapterDesc1(ctypes.Structure):
@@ -244,8 +234,8 @@ def _windows_gpu_shared_memory_bytes(adapter_name: str) -> int | None:
         ctypes.c_long, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)
     )
     get_desc1 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(_DxgiAdapterDesc1))
-    data1, data2, data3, data4 = _DXGI_FACTORY1_IID
-    iid = _Guid(data1, data2, data3, (ctypes.c_uint8 * 8)(*data4))
+    # A GUID is laid out in memory as the UUID's little-endian bytes.
+    iid = (ctypes.c_char * len(_DXGI_FACTORY1_IID.bytes_le)).from_buffer_copy(_DXGI_FACTORY1_IID.bytes_le)
     factory = ctypes.c_void_p()
     try:
         if ctypes.windll.dxgi.CreateDXGIFactory1(ctypes.byref(iid), ctypes.byref(factory)) != 0:
