@@ -672,6 +672,31 @@ def test_a_reported_framebuffer_is_never_unified_memory() -> None:
     assert accelerator.memory_is_unified is False
 
 
+# An RTX Spark on Windows lists its NPU beside the GPU, with no memory size.
+RTX_SPARK_ROWS = b"NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU), 64000, 617.07\nNVIDIA NPU, [N/A], 617.07\n"
+RTX_SPARK_DETAILS = (
+    b"GPU 0000000F:01:00.0\n"
+    b"    Product Name : NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)\n"
+    b"    Product Brand : GeForce\n"
+    b"    Addressing Mode : N/A\n"
+    b"GPU \n"
+    b"    Product Name : NVIDIA NPU\n"
+    b"    Product Brand : NPU\n"
+    b"    Addressing Mode : N/A\n"
+)
+
+
+def test_an_nvidia_npu_is_not_an_accelerator() -> None:
+    """The RTX Spark's NPU serves no CUDA work, so the GPU is the one accelerator."""
+    snapshot = collect_hardware_snapshot(_nvidia_probe(RTX_SPARK_ROWS, RTX_SPARK_DETAILS))
+
+    assert [accelerator.name for accelerator in snapshot.accelerators] == [
+        "NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)"
+    ]
+    assert snapshot.accelerators[0].memory_bytes == 64_000 * 1024**2
+    assert snapshot.warnings == ()
+
+
 class RecordingProbe:
     """Delegate to one fake probe while recording every command it is asked to run."""
 

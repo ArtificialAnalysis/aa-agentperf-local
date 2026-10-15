@@ -53,6 +53,7 @@ HARDWARE_TARGET_NAMES: dict[str, str] = {
     "dgx-spark": "DGX Spark",
     "m5-pro": "M5 Pro",
     "rtx-5090": "RTX 5090",
+    "rtx-spark": "RTX Spark",
     "strix-halo": "Strix Halo",
     "nvidia-cuda": "NVIDIA GPU",
     "any": "Any GPU",

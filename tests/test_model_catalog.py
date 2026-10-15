@@ -48,7 +48,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
     """Expose the exact pilot intent without promoting its trust state."""
     catalog = load_model_catalog(CATALOG_PATH)
 
-    assert catalog.as_of == "2026-09-30"
+    assert catalog.as_of == "2026-10-13"
     # Recipes load in recipes/<model_release_slug>/<hardware>/ order, and "any" sorts first within a model.
     assert [(model.profile_id, model.hf_revision) for model in catalog.models] == [
         ("gemma4-12b-it-q4-0", "29d097773436b69ff9feafd636ab4cf873786537"),
@@ -56,6 +56,7 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("gemma4-26b-a4b-nvfp4-dgx-spark", "a19cfe00be84568a6867111c9a68c9c44fdcffe6"),
         ("gemma4-26b-a4b-nvfp4", "a19cfe00be84568a6867111c9a68c9c44fdcffe6"),
         ("gemma4-26b-a4b-q4-k-m-mtp-rtx5090", "c099eb48e663fd284577b04978a94ffccb261841"),
+        ("gemma4-26b-a4b-ud-q4-k-m-mtp-rtx-spark", "c099eb48e663fd284577b04978a94ffccb261841"),
         ("gemma4-26b-a4b-q4-k-m-mtp-strix-halo", "c099eb48e663fd284577b04978a94ffccb261841"),
         ("gemma4-31b-it-nvfp4-dgx-spark", "4135a98a9b728a548947683219633b25682223ac"),
         ("gpt-oss-120b-mxfp4", "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"),
@@ -63,15 +64,19 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("ling3-flash-q4-k-m-dspark-dgx-spark", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("ling3-flash-q4-k-m-dspark-strix-halo", "29edce5130491e638f3e5ebec91fa0a5ed4f780e"),
         ("muse-glimmer-30b-q4-k-m-dflash-rtx5090", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
+        ("muse-glimmer-30b-q4-k-m-dflash-rtx-spark", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("muse-glimmer-30b-q4-k-m-dflash-strix-halo", "70bf1b61ac09f91b24d39038091b41c582bc5d7a"),
         ("nemotron35-lightning-30b-a3b-nvfp4-dspark-dgx-spark", "bee7596271d1495f6992ae224aefde4410e816b8"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-rtx5090", "f2d3fe3694501008786e81e5f20360cbf715496a"),
+        ("nemotron35-lightning-30b-a3b-ud-q4-k-m-mtp-rtx-spark", "f2d3fe3694501008786e81e5f20360cbf715496a"),
+        ("nemotron35-lightning-30b-a3b-ud-q4-k-xl-mtp-rtx-spark", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron35-lightning-30b-a3b-q4-k-m-dflash-strix-halo", "f2d3fe3694501008786e81e5f20360cbf715496a"),
         ("nemotron3-super-120b-a12b-nvfp4-mtp-dgx-spark", "ff433f5493e25d631c9f12b5d55c674229923d02"),
         ("qwen35-122b-a10b-nvfp4-mtp-dgx-spark", "98915d837c4e7c87ac8296d02e89de19b3207e6d"),
         ("qwen35-9b-nvfp4-mtp-dgx-spark", "97aef92393f126bf649f310cd40861be8dad3279"),
         ("qwen35-9b-q4-k-m-mtp-m5-pro", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-rtx5090", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
+        ("qwen35-9b-ud-q4-k-xl-mtp-rtx-spark", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen35-9b-q4-k-m-mtp-strix-halo", "9716a636ee4bddc3fed678220b7a33dd2a4160ae"),
         ("qwen36-27b-nvfp4-mtp-dgx-spark", "0893e1606ff3d5f97a441f405d5fc541a6bdf404"),
         ("qwen36-27b-q4-k-m-mtp-rtx5090", "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace"),
@@ -79,12 +84,16 @@ def test_loads_recipes_as_typed_records_in_path_order() -> None:
         ("qwen36-35b-a3b-nvfp4-mtp-dgx-spark", "1355db6a052410cfd62085d94b58866fd0f2c3c5"),
         ("qwen36-35b-a3b-q4-k-m-mtp-m5-pro", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen36-35b-a3b-q4-k-m-mtp-rtx5090", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
+        ("qwen36-35b-a3b-ud-iq4-xs-mtp-rtx-spark", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
+        ("qwen36-35b-a3b-ud-q4-k-m-mtp-rtx-spark", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen36-35b-a3b-q4-k-m-mtp-strix-halo", "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d"),
         ("qwen38-27b-q4-k-m", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-nvfp4-dgx-spark", "319f741cce68d7914884900c138a1fbb70a42f30"),
         ("qwen38-27b-q4-k-m-mtp-m5-pro", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
         ("qwen38-27b-splash-dflash", "9d27070b71f7142c6b6025f03ac011d70a73cb48"),
         ("qwen38-27b-q4-k-m-mtp", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
+        ("qwen38-27b-ud-iq4-xs-dflash-rtx-spark", "4ca720788d1e01f1bff70c033e0d0028fd02e502"),
+        ("qwen38-27b-ud-q4-k-m-dflash-rtx-spark", "4ca720788d1e01f1bff70c033e0d0028fd02e502"),
         ("qwen38-27b-q4-k-m-mtp-strix-halo", "f1bfb127c64f7072bdd2cad55f258b9c8b2910fe"),
     ]
     # The DGX Spark NVFP4 recipe is a safetensors weights repository served by vLLM on CUDA.
