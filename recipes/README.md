@@ -97,6 +97,24 @@ them as not from the Artificial Analysis catalog.
 6. Run it once with `managed-run` on the hardware. Put the result summary
    and your hardware in the pull request.
 
+### A draft published only as safetensors
+
+llama.cpp needs a GGUF draft. When the draft's publisher ships only
+safetensors, as `inclusionAI/Ling-3.0-flash-dspark` does, use
+`llama_cpp.draft_conversion` instead of `draft_model_filename`:
+
+- Pin the draft's `config.json` and tensors under `model_files`, and the
+  target's `config.json`, `tokenizer.json`, and other tokenizer files under
+  `tokenizer_files`. Each file names its `source_repository` and
+  `source_revision`.
+- Set `converter_commit` to the full llama.cpp commit whose
+  `convert_hf_to_gguf.py` runs, and `outtype` to the tensor type.
+
+On first use, `managed-run` downloads that commit's converter and runs it
+with `uv run --with-requirements`, so `uv` must be on `PATH`. The converted
+GGUF is cached and not pinned, because its bytes differ between machines.
+Its SHA-256 is part of the run's artifact manifest.
+
 [`recipe-v2.schema.json`](../docs/schemas/recipe-v2.schema.json) describes
 every field. The loader in
 [`catalog.py`](../agentperf_local/deployment/catalog.py) is stricter than the

@@ -43,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:e2edc1bdfef267fcca83df66cbe11bb7200fa10cc08ba0db2236e942a91b3b6b"
+BUNDLED_RECIPES_DIGEST = "sha256:a0bfe123c2765d1bbb2ef50175ddd01a6d0d417ed1d84723ce528b516352ed0b"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -63,6 +63,8 @@ type DeploymentFramework = Literal["llama-cpp", "sglang", "vllm", "splash"]
 type ArtifactKind = Literal["gguf-single-file", "gguf-file-set", "safetensors-repository", "splash-package"]
 type LlamaCppBackend = Literal["rocm", "vulkan", "metal"]
 type LlamaCppLoadMode = Literal["none", "mmap"]
+# The GGUF tensor types convert_hf_to_gguf.py writes that a draft recipe may ask for.
+type LlamaCppConversionType = Literal["bf16", "f16", "q8_0"]
 # How llama.cpp serves tensors it reads on demand. "on-direct" serves the rows of a
 # per-layer-embedding table with explicit reads from disk, so the table is never resident.
 type LlamaCppLazyMode = Literal["on-direct"]
@@ -202,6 +204,54 @@ class DeploymentArtifact(BaseModel, frozen=True):
         return self
 
 
+class LlamaCppDraftConversion(BaseModel, frozen=True):
+    """Pin a draft model that llama.cpp's own converter turns into GGUF at deployment.
+
+    A draft published only as safetensors has no GGUF to pin, and the converted bytes
+    differ from one machine to the next. So the recipe pins the converter's inputs and
+    the llama.cpp commit whose converter runs, and the GGUF itself is not pinned.
+    """
+
+    # The llama.cpp commit whose convert_hf_to_gguf.py and requirements run.
+    converter_commit: str
+    outtype: LlamaCppConversionType
+    # The name the converted draft is written under, such as Ling-3.0-flash-DSpark-bf16.gguf.
+    output_filename: str
+    # The draft repository's config and tensors, all from one repository and revision.
+    model_files: Annotated[tuple[DeploymentArtifact, ...], Field(min_length=1)]
+    # The target model's tokenizer and config, which the converter copies into the draft.
+    tokenizer_files: Annotated[tuple[DeploymentArtifact, ...], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def check_invariants(self) -> Self:
+        """Require one pinned source repository per file group and the files the converter reads."""
+        _revision(self.converter_commit, "draft_conversion.converter_commit")
+        validate_artifact_path(self.output_filename, "draft_conversion.output_filename")
+        if not self.output_filename.endswith(".gguf"):
+            raise ValueError("draft_conversion.output_filename must name a .gguf file")
+        for files, field, required in (
+            (self.model_files, "model_files", ("config.json",)),
+            (self.tokenizer_files, "tokenizer_files", ("config.json", "tokenizer.json")),
+        ):
+            sources = {(artifact.source_repository, artifact.source_revision) for artifact in files}
+            if len(sources) != 1 or None in next(iter(sources)):
+                raise ValueError(f"draft_conversion.{field} must come from one pinned source repository and revision")
+            filenames = tuple(artifact.filename for artifact in files)
+            if len(set(filenames)) != len(filenames) or filenames != tuple(sorted(filenames)):
+                raise ValueError(f"draft_conversion.{field} filenames must be unique and sorted")
+            missing = tuple(name for name in required if name not in filenames)
+            if missing:
+                raise ValueError(f"draft_conversion.{field} must pin {', '.join(missing)}")
+        if not any(artifact.filename.endswith(".safetensors") for artifact in self.model_files):
+            raise ValueError("draft_conversion.model_files must pin at least one safetensors file")
+        return self
+
+    @property
+    def source_files(self) -> tuple[DeploymentArtifact, ...]:
+        """Return every pinned file the converter reads."""
+        return (*self.model_files, *self.tokenizer_files)
+
+
 class LlamaCppLaunch(BaseModel, frozen=True):
     """Pin llama.cpp loading, batching, and speculative decoding."""
 
@@ -222,6 +272,8 @@ class LlamaCppLaunch(BaseModel, frozen=True):
     # How many recurrent-state checkpoints llama.cpp keeps per slot. A checkpoint also
     # copies an external draft's KV cache, so a draft recipe caps them to bound memory.
     context_checkpoints: PositiveInt | None = None
+    # A draft converted from safetensors at deployment, in place of a pinned draft GGUF.
+    draft_conversion: LlamaCppDraftConversion | None = None
 
     @field_validator("flash_attention", "disable_fit", mode="before")
     @classmethod
@@ -246,7 +298,14 @@ class LlamaCppLaunch(BaseModel, frozen=True):
             raise ValueError("llama.cpp lazy_mode must be on-direct")
         if self.cache_ram_mib is not None and self.cache_ram_mib < 0:
             raise ValueError("llama.cpp cache_ram_mib must be non-negative")
+        if self.draft_model_filename is not None and self.draft_conversion is not None:
+            raise ValueError("a llama.cpp draft is either a pinned GGUF or a conversion, not both")
         return self
+
+    @property
+    def uses_draft_model(self) -> bool:
+        """Return whether llama.cpp is given a separate draft model file."""
+        return self.draft_model_filename is not None or self.draft_conversion is not None
 
     @property
     def backend_device(self) -> str | None:
@@ -455,8 +514,13 @@ class ModelDeployment(BaseModel, frozen=True):
 
     @property
     def artifact_size_bytes(self) -> int:
-        """Return the bytes every pinned file of this recipe occupies together."""
-        return sum(artifact.size_bytes for artifact in self.artifacts)
+        """Return the bytes every pinned file of this recipe occupies together.
+
+        A converted draft's sources count, so its tensors count toward the memory floor.
+        """
+        conversion = self.llama_cpp.draft_conversion if self.llama_cpp is not None else None
+        sources = conversion.source_files if conversion is not None else ()
+        return sum(artifact.size_bytes for artifact in (*self.artifacts, *sources))
 
     @property
     def resident_artifact_bytes(self) -> int:
@@ -531,8 +595,8 @@ class ModelCandidate(BaseModel, frozen=True):
             "enabled-dflash-external-draft",
             "enabled-dspark-external-draft",
         ):
-            if llama_cpp is None or llama_cpp.draft_model_filename is None:
-                raise ValueError("an external-draft policy requires a pinned llama.cpp draft model")
+            if llama_cpp is None or not llama_cpp.uses_draft_model:
+                raise ValueError("an external-draft policy requires a pinned or converted llama.cpp draft model")
         if llama_cpp is not None:
             drafts = self.speculation_policy != "disabled-target-only-baseline"
             if drafts and llama_cpp.speculative_tokens is None:
@@ -540,7 +604,7 @@ class ModelCandidate(BaseModel, frozen=True):
             if not drafts and llama_cpp.speculative_tokens is not None:
                 raise ValueError("a target-only llama.cpp recipe must not set speculative_tokens")
         if self.speculation_policy == "enabled-mtp-self-draft" and llama_cpp is not None:
-            if llama_cpp.draft_model_filename is not None:
+            if llama_cpp.uses_draft_model:
                 raise ValueError("an MTP self-draft policy must not name an external draft model")
         return self
 
