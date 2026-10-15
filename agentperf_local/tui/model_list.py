@@ -59,6 +59,15 @@ MODEL_HEADING = Style(bold=True)
 DIGIT_RUN = re.compile(r"(\d+)")
 # Device recipes sort first by folder name, then these portable ones, narrowest first.
 PORTABLE_HARDWARE = ("nvidia-cuda", "any")
+# Part of the accelerator name each device folder's recipes were built for. A recipe
+# built for the detected accelerator sorts before another device's recipe that also runs.
+DEVICE_FOLDER_ACCELERATORS: dict[str, str] = {
+    "dgx-spark": "GB10",
+    "m5-pro": "M5 Pro",
+    "rtx-5090": "RTX 5090",
+    "rtx-spark": "RTX Spark",
+    "strix-halo": "Radeon 8060S",
+}
 # The models on artificialanalysis.ai, in its order, by model_release_slug.
 FEATURED_MODEL_SLUGS = ("qwen3-5-9b", "qwen3-8-27b", "qwen3-6-35b-a3b", "ling-3-0-flash")
 DEFAULT_MODEL_SLUG = "qwen3-8-27b"
@@ -88,7 +97,18 @@ def _natural_key(name: str) -> tuple[tuple[int, int | str], ...]:
     return tuple((0, int(part)) if part.isdigit() else (1, part.casefold()) for part in DIGIT_RUN.split(name))
 
 
-def _sort_key(recipe: ListedRecipe) -> tuple[bool, int, tuple[tuple[int, int | str], ...], int, int, str, str]:
+def _built_for_this_accelerator(recipe: ListedRecipe) -> bool:
+    """Return whether the recipe's device folder names the one detected accelerator."""
+    if recipe.availability is None:
+        return False
+    name = recipe.availability.hardware.accelerator_name
+    marker = DEVICE_FOLDER_ACCELERATORS.get(recipe.hardware)
+    return name is not None and marker is not None and marker in name
+
+
+def _sort_key(
+    recipe: ListedRecipe,
+) -> tuple[bool, int, tuple[tuple[int, int | str], ...], int, bool, int, str, str]:
     slug = recipe.candidate.model_release_slug
     featured_rank = FEATURED_MODEL_SLUGS.index(slug) if slug in FEATURED_MODEL_SLUGS else len(FEATURED_MODEL_SLUGS)
     standing_rank = 0 if recipe.availability is None else RECIPE_STANDING_ORDER.index(recipe.availability.standing)
@@ -99,6 +119,7 @@ def _sort_key(recipe: ListedRecipe) -> tuple[bool, int, tuple[tuple[int, int | s
         featured_rank,
         _natural_key(recipe.candidate.model_name),
         standing_rank,
+        not _built_for_this_accelerator(recipe),
         portable_rank,
         hardware,
         recipe.candidate.profile_id,
@@ -113,7 +134,8 @@ def ordered_recipes(
 
     This computer's recipes come before other hardware. Within each part, the
     featured models come first, then the rest in natural name order. One model's
-    recipes go best standing first, then device recipes before portable ones.
+    recipes go best standing first, then the ones built for this accelerator, then
+    other device recipes before portable ones.
     """
     listed = (
         ListedRecipe(
