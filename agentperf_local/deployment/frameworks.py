@@ -369,6 +369,36 @@ def framework_identity(executable: FrameworkExecutable) -> FrameworkIdentity:
 RUNTIME_VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
+# llama-server reports its build as "version: 0.6.0-dev (build 11583, commit 988015788)",
+# and before its 0.x versions as "version: 6890 (c1d0e7a00)".
+LLAMA_CPP_BUILD_PATTERNS = (re.compile(r"\(build (\d+),"), re.compile(r"^version: (\d+) \("))
+
+
+def llama_cpp_build(version: str) -> int | None:
+    """Return the build number a llama.cpp version line reports, or None when it names none."""
+    for pattern in LLAMA_CPP_BUILD_PATTERNS:
+        match = pattern.search(version)
+        if match is not None:
+            return int(match.group(1))
+    return None
+
+
+def _require_llama_cpp_build(minimum_build: int, version: str) -> None:
+    """Refuse a llama.cpp older than the recipe's minimum build, or one that reports no build."""
+    build = llama_cpp_build(version)
+    if build is None:
+        raise ValueError(
+            f"this recipe needs llama.cpp build {minimum_build} or newer, and the installed llama.cpp "
+            f"did not report a build number ({version})"
+        )
+    if build < minimum_build:
+        # A source build cloned without its history counts its commits from the clone, so it reports build 1.
+        raise ValueError(
+            f"this recipe needs llama.cpp build {minimum_build} or newer, but build {build} is installed; "
+            "a build from source needs its full git history to report its build number"
+        )
+
+
 def require_supported_runtime(
     deployment: ModelDeployment, runtime: FrameworkIdentity, framework: DeploymentFramework
 ) -> None:
@@ -379,6 +409,8 @@ def require_supported_runtime(
     place to catch it is here, before a replay produces a plausible-looking number. Each
     profile names the runtime version that produced its verified behavior.
     """
+    if framework == "llama-cpp" and deployment.llama_cpp is not None and deployment.llama_cpp.minimum_build is not None:
+        _require_llama_cpp_build(deployment.llama_cpp.minimum_build, runtime.version)
     required = deployment.runtime_version_for(framework)
     if required is None:
         return

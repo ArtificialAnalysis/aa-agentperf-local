@@ -43,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:e0eeb39b76cf0e2289c9470c5c19a1dd0d701ba87a757b333691c0881c07ef22"
+BUNDLED_RECIPES_DIGEST = "sha256:d6a3f8c5001e8635edb6ae977897ea3cbb85f7ae1df0b5a7c57d93febf3c9a73"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
@@ -274,6 +274,9 @@ class LlamaCppLaunch(BaseModel, frozen=True):
     context_checkpoints: PositiveInt | None = None
     # A draft converted from safetensors at deployment, in place of a pinned draft GGUF.
     draft_conversion: LlamaCppDraftConversion | None = None
+    # The oldest llama.cpp build this recipe is known to work on. llama.cpp ships builds
+    # too often to pin one, but an older build can serve a recipe badly without failing.
+    minimum_build: PositiveInt | None = None
 
     @field_validator("flash_attention", "disable_fit", mode="before")
     @classmethod

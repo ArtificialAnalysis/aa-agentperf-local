@@ -171,6 +171,14 @@
               "$ref": "#/$defs/llama_cpp_draft_conversion"
             }
           ]
+        },
+        "minimum_build": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "The oldest llama.cpp build number the recipe serves well; older builds are refused."
         }
       }
     },
