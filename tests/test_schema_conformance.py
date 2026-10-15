@@ -18,6 +18,7 @@ from agentperf_local.common.json_types import JsonObject
 from agentperf_local.deployment.catalog import (
     DeploymentArtifact,
     DeploymentMemory,
+    LlamaCppDraftConversion,
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
@@ -34,6 +35,7 @@ SCHEMA_OBJECTS: tuple[tuple[str, str, type[BaseModel]], ...] = (
     ("recipe-v2.schema.json", "$defs/artifact", DeploymentArtifact),
     ("recipe-v2.schema.json", "$defs/memory", DeploymentMemory),
     ("recipe-v2.schema.json", "$defs/llama_cpp", LlamaCppLaunch),
+    ("recipe-v2.schema.json", "$defs/llama_cpp_draft_conversion", LlamaCppDraftConversion),
     ("recipe-v2.schema.json", "$defs/vllm", VllmLaunch),
     ("recipe-v2.schema.json", "$defs/deployment", ModelDeployment),
     ("recipe-v2.schema.json", "$defs/model", ModelCandidate),

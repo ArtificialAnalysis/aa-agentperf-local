@@ -1,5 +1,5 @@
 profile_id: ling3-flash-q4-k-m-dspark-dgx-spark
-as_of: '2026-09-28'
+as_of: '2026-10-15'
 model_name: Ling 3.0 flash
 quantization: Q4_K_M
 model_release_slug: ling-3-0-flash
@@ -14,11 +14,6 @@ speculation_policy: enabled-dspark-external-draft
 deployment:
   artifact_kind: gguf-file-set
   artifacts:
-  - filename: Ling-3.0-flash-DSpark-bf16.gguf
-    sha256: 9141bf96a8d418fd380a3fa11838f7bae54980afd59460c12bafb6c976df9ad2
-    size_bytes: 1929183168
-    source_repository: inclusionAI/Ling-3.0-flash-dspark
-    source_revision: 8e5d9988c9b09de13f1f7c9d999ff2bfa533a149
   - filename: Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf
     sha256: 24ff06f1ab74546a91f7c07bd725b3015896bbe9dd82ab0e5838be9ed06a6dcf
     size_bytes: 49995534208
@@ -49,9 +44,61 @@ deployment:
     batch_size: 2048
     ubatch_size: 512
     speculative_tokens: 8
-    draft_model_filename: Ling-3.0-flash-DSpark-bf16.gguf
     target_backend_sampling: false
     draft_backend_sampling: false
     flash_attention: true
     context_checkpoints: 2
     disable_fit: true
+    # The DSpark draft is published as safetensors only, so llama.cpp's converter at
+    # b11236 turns it into GGUF on first use. The converted bytes are not pinned.
+    draft_conversion:
+      converter_commit: f1ea206218210afb913ae2f5d2c51faed35915da
+      outtype: bf16
+      output_filename: Ling-3.0-flash-DSpark-bf16.gguf
+      model_files:
+      - filename: config.json
+        sha256: d7fa25034d782b4e98582df19feeb8cdfd39503ae808e0e178bc776056270201
+        size_bytes: 1272
+        source_repository: inclusionAI/Ling-3.0-flash-dspark
+        source_revision: 8e5d9988c9b09de13f1f7c9d999ff2bfa533a149
+      - filename: model.safetensors
+        sha256: 0885659804b3e4460f4bcd50c292923ea4f60e5a83745f96ff3d0736a5e5ddb5
+        size_bytes: 2727422642
+        source_repository: inclusionAI/Ling-3.0-flash-dspark
+        source_revision: 8e5d9988c9b09de13f1f7c9d999ff2bfa533a149
+      tokenizer_files:
+      - filename: chat_template.jinja
+        sha256: b4ab3a1c8f748e6f874d9aea102333efe7ab82528e8ab81c2eb155851e8705c6
+        size_bytes: 6073
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: config.json
+        sha256: 6c1bd3c25e8b2db7ed954bd08291fa706ab2596a16b2cbab397ca75d44979c3b
+        size_bytes: 2897
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: configuration_bailing_moe_v3.py
+        sha256: f2c048966aec8a2f042cfeb1351f74d51a28589b409c55baae7d24e841c1f6c4
+        size_bytes: 4725
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: modeling_bailing_moe_v3.py
+        sha256: c2509bf7ac580c262e2581d34d6403aa21682d2e10beb9ad85ad8820a7e33a40
+        size_bytes: 73194
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: special_tokens_map.json
+        sha256: 69b63b9f81044ead642d16a5fdc01bcc737dc1183746485c8397ab14d3126614
+        size_bytes: 580
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: tokenizer.json
+        sha256: 40fb9d7d7795b8bd305aeff39ce9963f3f450915b9553f2938e009be9a1fed60
+        size_bytes: 12205732
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0
+      - filename: tokenizer_config.json
+        sha256: 2456b0372956cd3e82f17e33372148b115a94970bfd4878ba5e7e60cd3204f74
+        size_bytes: 49671
+        source_repository: inclusionAI/Ling-3.0-flash
+        source_revision: ef06d91fe382109ae82647da88ff99b0f11745b0

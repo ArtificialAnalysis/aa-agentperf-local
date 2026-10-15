@@ -32,6 +32,12 @@ from agentperf_local.common.identity import sha256_bytes
 from agentperf_local.common.json_types import JsonValue
 from agentperf_local.common.units import BYTES_PER_GIB
 from agentperf_local.deployment.catalog import DeploymentArtifact, ModelCandidate, ModelDeployment
+from agentperf_local.deployment.draft_conversion import (
+    ConvertedDraft,
+    DraftConverter,
+    convert_with_llama_cpp,
+    ensure_converted_draft,
+)
 
 MODEL_DOWNLOAD_CHUNK_BYTES = 4 * 1024 * 1024
 
@@ -112,6 +118,8 @@ class VerifiedDeployment(BaseModel, frozen=True):
     model_path: Path
     artifacts: Annotated[tuple[VerifiedArtifact, ...], Field(min_length=1)]
     draft_model_path: Path | None = None
+    # A draft converted from pinned safetensors at deployment; its bytes are not pinned.
+    converted_draft: ConvertedDraft | None = None
 
     @property
     def size_bytes(self) -> int:
@@ -128,6 +136,9 @@ class VerifiedDeployment(BaseModel, frozen=True):
         entries: list[JsonValue] = [
             [artifact.filename, artifact.sha256] for artifact in sorted(self.artifacts, key=lambda one: one.filename)
         ]
+        # A converted draft varies by machine, so its digest joins the identity of what was served.
+        if self.converted_draft is not None:
+            entries.append([self.converted_draft.path.name, self.converted_draft.sha256])
         return sha256_bytes(orjson.dumps(entries))
 
 
@@ -660,13 +671,16 @@ def ensure_model_artifacts(
     cancellation_requested: CancellationCheck = _never_cancelled,
     download_timeout_seconds: float = MODEL_DOWNLOAD_TOTAL_TIMEOUT_SECONDS,
     progress: ProgressReport | None = None,
+    convert_draft: DraftConverter | None = None,
 ) -> VerifiedDeployment:
     """Verify every pinned file of one recipe and return the path its runtime is given.
 
     A GGUF recipe serves its verified target file; a split target is served by its
     snapshot name so llama.cpp can find the other parts. A weights
     repository is served from the pinned revision's snapshot directory, so every file
-    the runtime opens by name sits beside the tensors under one path.
+    the runtime opens by name sits beside the tensors under one path. A draft the
+    recipe converts is built from its verified sources, by llama.cpp's converter unless
+    `convert_draft` is given.
     """
     deployment = candidate.deployment
     total_bytes = deployment.artifact_size_bytes
@@ -684,16 +698,41 @@ def ensure_model_artifacts(
             )
         )
         completed_bytes += artifact.size_bytes
+    conversion = deployment.llama_cpp.draft_conversion if deployment.llama_cpp is not None else None
+    converted: ConvertedDraft | None = None
+    if conversion is not None:
+        sources: list[tuple[DeploymentArtifact, Path]] = []
+        for source in conversion.source_files:
+            verified_source = _ensure_artifact(
+                cache_root,
+                candidate,
+                source,
+                cancellation_requested=cancellation_requested,
+                download_timeout_seconds=download_timeout_seconds,
+                progress=_recipe_progress(progress, completed_bytes, total_bytes),
+            )
+            sources.append((source, verified_source.path))
+            completed_bytes += source.size_bytes
+        if cancellation_requested():
+            raise InterruptedError("model artifact operation was canceled")
+        converted = ensure_converted_draft(
+            cache_root,
+            conversion,
+            tuple(sources),
+            convert=convert_draft if convert_draft is not None else convert_with_llama_cpp(cache_root),
+        )
     if deployment.artifact_kind in ("gguf-single-file", "gguf-file-set"):
         model_artifact = next(
             artifact for artifact in verified if artifact.filename == deployment.target_model_filename
         )
         draft_filename = deployment.llama_cpp.draft_model_filename if deployment.llama_cpp is not None else None
         draft_artifact = next((artifact for artifact in verified if artifact.filename == draft_filename), None)
+        draft_path = converted.path if converted is not None else draft_artifact.path if draft_artifact else None
         return VerifiedDeployment(
             model_path=_gguf_model_path(cache_root, candidate, model_artifact, tuple(verified)),
             artifacts=tuple(verified),
-            draft_model_path=draft_artifact.path if draft_artifact is not None else None,
+            draft_model_path=draft_path,
+            converted_draft=converted,
         )
     snapshot_root = _hf_snapshot_root(cache_root, candidate.hf_repository, candidate.hf_revision)
     _require_snapshot_directory(snapshot_root, deployment)

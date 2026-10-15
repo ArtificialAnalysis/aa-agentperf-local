@@ -32,6 +32,7 @@ from agentperf_local.deployment.catalog import (
     DeploymentArtifact,
     DeploymentFramework,
     DeploymentMemory,
+    LlamaCppDraftConversion,
     LlamaCppLaunch,
     ModelCandidate,
     ModelDeployment,
@@ -43,6 +44,7 @@ from agentperf_local.deployment.context_policy import (
     MINIMUM_CONTEXT_TOKENS,
     derived_minimum_memory_bytes,
 )
+from agentperf_local.deployment.draft_conversion import ConversionJob
 from agentperf_local.deployment.endpoint_probes import probe_served_context_tokens
 from agentperf_local.deployment.frameworks import (
     CommandFinder,
@@ -434,6 +436,113 @@ def test_split_gguf_recipe_launches_the_first_part_by_its_snapshot_name(tmp_path
     )
 
     assert plan.command[plan.command.index("--model") + 1] == str(snapshot_root / artifacts[0].filename)
+
+
+def _cache_pinned_file(cache_root: Path, artifact: DeploymentArtifact, content: bytes) -> None:
+    """Put one pinned file in the hub cache layout under its source repository and revision."""
+    assert artifact.source_repository is not None and artifact.source_revision is not None
+    repository_root = cache_root / repo_folder_name(repo_id=artifact.source_repository, repo_type="model")
+    blob = repository_root / "blobs" / artifact.sha256
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_bytes(content)
+    snapshot = repository_root / "snapshots" / artifact.source_revision / artifact.filename
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.symlink_to(os.path.relpath(blob, snapshot.parent))
+
+
+def _source(filename: str, content: bytes, repository: str, revision: str) -> DeploymentArtifact:
+    return DeploymentArtifact(
+        filename=filename,
+        sha256=hashlib.sha256(content).hexdigest(),
+        size_bytes=len(content),
+        source_repository=repository,
+        source_revision=revision,
+    )
+
+
+def test_converted_draft_recipe_converts_once_and_serves_the_converted_draft(tmp_path: Path) -> None:
+    """A safetensors draft is converted from its pinned sources, cached, and handed to llama.cpp."""
+    target_bytes = b"target GGUF fixture"
+    target = DeploymentArtifact(
+        filename="target.gguf", sha256=hashlib.sha256(target_bytes).hexdigest(), size_bytes=len(target_bytes)
+    )
+    contents = {
+        ("example/draft", "config.json"): b'{"architectures": ["LingDSparkModel"]}',
+        ("example/draft", "model.safetensors"): b"draft tensors",
+        ("example/target", "config.json"): b'{"architectures": ["BailingMoeV3ForCausalLM"]}',
+        ("example/target", "tokenizer.json"): b"tokenizer",
+    }
+    revisions = {"example/draft": "c" * 40, "example/target": "d" * 40}
+    sources = {key: _source(key[1], content, key[0], revisions[key[0]]) for key, content in contents.items()}
+    conversion = LlamaCppDraftConversion(
+        converter_commit="e" * 40,
+        outtype="bf16",
+        output_filename="draft-bf16.gguf",
+        model_files=(sources["example/draft", "config.json"], sources["example/draft", "model.safetensors"]),
+        tokenizer_files=(sources["example/target", "config.json"], sources["example/target", "tokenizer.json"]),
+    )
+    base = _candidate()
+    candidate = replace_fields(
+        base,
+        speculation_policy="enabled-dspark-external-draft",
+        deployment=replace_fields(
+            base.deployment,
+            artifacts=(target,),
+            llama_cpp=LlamaCppLaunch(
+                batch_size=2048,
+                ubatch_size=512,
+                speculative_tokens=8,
+                target_backend_sampling=False,
+                draft_backend_sampling=False,
+                draft_conversion=conversion,
+            ),
+        ),
+    )
+    _cache_pinned_file(
+        tmp_path, replace_fields(target, source_repository="example/model-gguf", source_revision="a" * 40), target_bytes
+    )
+    for key, artifact in sources.items():
+        _cache_pinned_file(tmp_path, artifact, contents[key])
+    jobs: list[ConversionJob] = []
+    converted_bytes = [b"converted draft"]
+
+    def convert(job: ConversionJob) -> None:
+        jobs.append(job)
+        # Each group sits in its own folder under its repository names, so the two config.json files never mix.
+        assert (job.draft_dir / "config.json").read_bytes() == contents["example/draft", "config.json"]
+        assert (job.draft_dir / "model.safetensors").read_bytes() == b"draft tensors"
+        assert (job.tokenizer_dir / "config.json").read_bytes() == contents["example/target", "config.json"]
+        assert (job.tokenizer_dir / "tokenizer.json").read_bytes() == b"tokenizer"
+        job.output_path.write_bytes(converted_bytes[-1])
+
+    first = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
+    again = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
+    assert first.converted_draft is not None
+    # A cached draft whose bytes no longer match its record is converted again.
+    first.converted_draft.path.write_bytes(b"tampered")
+    converted_bytes.append(b"converted draft again")
+    rebuilt = ensure_model_artifacts(tmp_path, candidate, convert_draft=convert)
+    plan = create_deployment_plan(
+        _hardware("NVIDIA", "CUDA"),
+        candidate,
+        "llama-cpp",
+        rebuilt,
+        catalog_digest=BUNDLED_RECIPES_DIGEST,
+        command_finder=_installed_command,
+        alias_nonce="test",
+    )
+
+    assert [job.outtype for job in jobs] == ["bf16", "bf16"]
+    assert again.converted_draft == first.converted_draft
+    assert rebuilt.converted_draft is not None
+    assert rebuilt.converted_draft.path.read_bytes() == b"converted draft again"
+    assert plan.command[plan.command.index("--model-draft") + 1] == str(rebuilt.converted_draft.path)
+    assert plan.command[plan.command.index("--spec-type") + 1] == "draft-dspark"
+    # The converted bytes are not pinned, so their digest joins the identity of what was served.
+    assert first.manifest_sha256 != rebuilt.manifest_sha256
+    assert plan.artifact_manifest_sha256 == rebuilt.manifest_sha256
+    # The memory floor counts the draft's source tensors, since the converted size is not known up front.
+    assert candidate.deployment.artifact_size_bytes == len(target_bytes) + sum(len(c) for c in contents.values())
 
 
 @pytest.mark.parametrize(

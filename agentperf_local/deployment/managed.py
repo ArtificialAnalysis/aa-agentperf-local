@@ -422,7 +422,7 @@ def _llama_cpp_argv(
     elif candidate.speculation_policy == "disabled-target-only-baseline":
         speculation = ()
     else:
-        if launch.draft_model_filename is not None and draft_model_path is None:
+        if launch.uses_draft_model and draft_model_path is None:
             raise ValueError("llama.cpp external-draft recipe is missing its verified draft model path")
         if launch.speculative_tokens is None:
             raise ValueError("speculative llama.cpp recipe is missing its speculative_tokens")
@@ -438,7 +438,7 @@ def _llama_cpp_argv(
                 str(draft_model_path),
                 *(("--gpu-layers-draft", "all") if launch.backend is not None else ()),
             )
-            if launch.draft_model_filename is not None and draft_model_path is not None
+            if launch.uses_draft_model and draft_model_path is not None
             else ()
         )
         target_sampling = ("--backend-sampling",) if launch.target_backend_sampling else ()
@@ -702,6 +702,12 @@ def _require_unchanged_artifacts(artifacts: VerifiedDeployment, deployment: Mode
             or metadata.st_mtime_ns != artifact.modified_ns
         ):
             raise ValueError(f"verified model artifact {filename} changed before deployment planning")
+    converted = artifacts.converted_draft
+    if converted is not None:
+        if converted.path.is_symlink() or not converted.path.is_file():
+            raise ValueError(f"converted draft {converted.path.name} is no longer a regular file")
+        if converted.path.stat().st_size != converted.size_bytes:
+            raise ValueError(f"converted draft {converted.path.name} changed before deployment planning")
 
 
 def create_deployment_plan(
