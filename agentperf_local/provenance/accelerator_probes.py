@@ -59,6 +59,13 @@ NVIDIA_COHERENT_ADDRESSING_MODES = ("ATS", "HMM")
 NVIDIA_NPU_BRAND = "NPU"
 
 
+# On Windows the RTX Spark's firmware sets aside part of its unified memory as the GPU's
+# dedicated memory, which is all nvidia-smi reports. CUDA also serves allocations from the
+# shared system memory Windows grants the GPU, which is the same physical memory, so both
+# count. On a discrete card shared memory sits across PCIe and does not count.
+NVIDIA_WINDOWS_UNIFIED_NAME_MARKERS = ("RTX Spark",)
+
+
 AMD_SMI_COMMAND = ("amd-smi", "static", "--gpu", "all", "--json")
 
 
@@ -416,10 +423,24 @@ def inspect_nvidia(probe: SystemProbe) -> tuple[tuple[AcceleratorSnapshot, ...],
         for row in rows
         if (accelerator := _parse_nvidia_row(row, memory_is_unified=details.coherent)) is not None
     )
+    if probe.system_name() == "Windows":
+        accelerators = tuple(_with_windows_shared_memory(probe, accelerator) for accelerator in accelerators)
     # A dropped row hides a real device, so warn even when the other rows parsed.
     if not accelerators or len(accelerators) != len(rows):
         return accelerators, "nvidia_smi_unparseable"
     return accelerators, None
+
+
+def _with_windows_shared_memory(probe: SystemProbe, accelerator: AcceleratorSnapshot) -> AcceleratorSnapshot:
+    """Add the shared memory Windows grants a unified-memory NVIDIA part to its reported memory."""
+    if accelerator.memory_bytes is None or not any(
+        marker in accelerator.name for marker in NVIDIA_WINDOWS_UNIFIED_NAME_MARKERS
+    ):
+        return accelerator
+    shared = probe.gpu_shared_memory_bytes(accelerator.name)
+    if shared is None:
+        return accelerator
+    return replace_fields(accelerator, memory_bytes=accelerator.memory_bytes + shared)
 
 
 # amd-smi and rocm-smi disagree on capitalization across releases, so keys are matched in lower case.
