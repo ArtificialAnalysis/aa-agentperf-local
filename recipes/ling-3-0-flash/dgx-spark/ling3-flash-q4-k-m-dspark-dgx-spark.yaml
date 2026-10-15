@@ -51,6 +51,8 @@ deployment:
     disable_fit: true
     # The DSpark draft is published as safetensors only, so llama.cpp's converter at
     # b11236 turns it into GGUF on first use. The converted bytes are not pinned.
+    # Serve it with a llama-server newer than b11236: on an RTX Spark, b11236 accepted
+    # under 1% of drafted tokens and b11583 accepted 40-52%, with the same draft.
     draft_conversion:
       converter_commit: f1ea206218210afb913ae2f5d2c51faed35915da
       outtype: bf16
