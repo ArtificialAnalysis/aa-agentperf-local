@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Literal, Protocol, Self
 
@@ -185,6 +186,89 @@ def _windows_total_memory_bytes() -> int | None:
     return total if isinstance(total, int) and total > 0 else None
 
 
+# IID_IDXGIFactory1, the interface CreateDXGIFactory1 is asked for.
+_DXGI_FACTORY1_IID = uuid.UUID("770aae78-f26f-4dba-a829-253c83d1b387")
+# Slots in the COM tables: IUnknown has 3 methods and IDXGIObject 4 more. IDXGIFactory adds 5
+# before IDXGIFactory1::EnumAdapters1, and IDXGIAdapter adds 3 before IDXGIAdapter1::GetDesc1.
+_COM_RELEASE_SLOT = 2
+_DXGI_ENUM_ADAPTERS1_SLOT = 12
+_DXGI_GET_DESC1_SLOT = 10
+_DXGI_ADAPTER_DESCRIPTION_CHARACTERS = 128
+
+
+class _DxgiAdapterDesc1(ctypes.Structure):
+    """Mirror DXGI_ADAPTER_DESC1, which IDXGIAdapter1::GetDesc1 fills."""
+
+    _fields_ = [
+        ("Description", ctypes.c_wchar * _DXGI_ADAPTER_DESCRIPTION_CHARACTERS),
+        ("VendorId", ctypes.c_uint32),
+        ("DeviceId", ctypes.c_uint32),
+        ("SubSysId", ctypes.c_uint32),
+        ("Revision", ctypes.c_uint32),
+        ("DedicatedVideoMemory", ctypes.c_size_t),
+        ("DedicatedSystemMemory", ctypes.c_size_t),
+        ("SharedSystemMemory", ctypes.c_size_t),
+        ("AdapterLuidLowPart", ctypes.c_uint32),
+        ("AdapterLuidHighPart", ctypes.c_int32),
+        ("Flags", ctypes.c_uint32),
+    ]
+
+
+def _com_slot(instance: int, slot: int) -> int:
+    """Return the address of one method in a COM object's table of methods."""
+    table = ctypes.cast(ctypes.c_void_p(instance), ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+    address = table[slot]
+    return address if isinstance(address, int) else 0
+
+
+def _windows_gpu_shared_memory_bytes(adapter_name: str) -> int | None:
+    """Read the system memory Windows lets the named adapter use, from DXGI.
+
+    Task Manager shows the same figure as shared GPU memory. Any failure is an
+    unknown amount, never zero.
+    """
+    if sys.platform != "win32":
+        return None
+    release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)
+    enum_adapters1 = ctypes.WINFUNCTYPE(
+        ctypes.c_long, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)
+    )
+    get_desc1 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(_DxgiAdapterDesc1))
+    # A GUID is laid out in memory as the UUID's little-endian bytes.
+    iid = (ctypes.c_char * len(_DXGI_FACTORY1_IID.bytes_le)).from_buffer_copy(_DXGI_FACTORY1_IID.bytes_le)
+    factory = ctypes.c_void_p()
+    try:
+        if ctypes.windll.dxgi.CreateDXGIFactory1(ctypes.byref(iid), ctypes.byref(factory)) != 0:
+            return None
+    except OSError:
+        return None
+    if not factory.value:
+        return None
+    try:
+        index = 0
+        while True:
+            adapter = ctypes.c_void_p()
+            # A non-zero result, DXGI_ERROR_NOT_FOUND past the last adapter, ends the list.
+            enum_result = enum_adapters1(_com_slot(factory.value, _DXGI_ENUM_ADAPTERS1_SLOT))(
+                factory.value, index, ctypes.byref(adapter)
+            )
+            if enum_result != 0 or not adapter.value:
+                return None
+            try:
+                description = _DxgiAdapterDesc1()
+                desc_result = get_desc1(_com_slot(adapter.value, _DXGI_GET_DESC1_SLOT))(
+                    adapter.value, ctypes.byref(description)
+                )
+                if desc_result == 0 and description.Description == adapter_name:
+                    shared = description.SharedSystemMemory
+                    return shared if isinstance(shared, int) and shared > 0 else None
+            finally:
+                release(_com_slot(adapter.value, _COM_RELEASE_SLOT))(adapter.value)
+            index += 1
+    finally:
+        release(_com_slot(factory.value, _COM_RELEASE_SLOT))(factory.value)
+
+
 def _linux_cpu_base_frequency_mhz() -> int | None:
     """Read the CPU base frequency from sysfs, or from the model name when sysfs has none."""
     try:
@@ -242,6 +326,10 @@ class SystemProbe(Protocol):
 
     def cpu_base_frequency_mhz(self) -> int | None:
         """Return the CPU base frequency in MHz when the platform reports one."""
+        ...
+
+    def gpu_shared_memory_bytes(self, adapter_name: str) -> int | None:
+        """Return the system memory the OS lets one named GPU use, or None when it reports none."""
         ...
 
     def command_available(self, command: str) -> bool:
@@ -321,6 +409,10 @@ class LocalSystemProbe:
         if platform.system() == "Linux":
             return _linux_cpu_base_frequency_mhz()
         return None
+
+    def gpu_shared_memory_bytes(self, adapter_name: str) -> int | None:
+        """Return the shared GPU memory Windows reports for one adapter; other platforms report none."""
+        return _windows_gpu_shared_memory_bytes(adapter_name)
 
     def command_available(self, command: str) -> bool:
         """Return whether a command can be executed."""

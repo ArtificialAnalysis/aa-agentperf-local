@@ -44,6 +44,8 @@ class FakeSystemProbe(BaseModel, frozen=True):
     # nvidia-smi is also asked for the addressing mode when a row reports no memory.
     query_result: CommandResult | None = None
     rocminfo_result: CommandResult | None = None
+    # The shared GPU memory Windows reports for every adapter, or None when it reports none.
+    gpu_shared_memory: int | None = None
 
     def system_name(self) -> str:
         return self.system
@@ -68,6 +70,10 @@ class FakeSystemProbe(BaseModel, frozen=True):
 
     def cpu_base_frequency_mhz(self) -> int | None:
         return self.base_frequency_mhz
+
+    def gpu_shared_memory_bytes(self, adapter_name: str) -> int | None:
+        del adapter_name
+        return self.gpu_shared_memory
 
     def command_available(self, command: str) -> bool:
         return command == self.command_name or (command == ROCMINFO_COMMAND[0] and self.rocminfo_result is not None)
@@ -686,6 +692,10 @@ RTX_SPARK_DETAILS = (
 )
 
 
+# nvidia-smi reports the RTX Spark's dedicated carve-out as 64000 MiB.
+RTX_SPARK_DEDICATED_BYTES = 64_000 * 1024**2
+
+
 def test_an_nvidia_npu_is_not_an_accelerator() -> None:
     """The RTX Spark's NPU serves no CUDA work, so the GPU is the one accelerator."""
     snapshot = collect_hardware_snapshot(_nvidia_probe(RTX_SPARK_ROWS, RTX_SPARK_DETAILS))
@@ -693,7 +703,36 @@ def test_an_nvidia_npu_is_not_an_accelerator() -> None:
     assert [accelerator.name for accelerator in snapshot.accelerators] == [
         "NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)"
     ]
-    assert snapshot.accelerators[0].memory_bytes == 64_000 * 1024**2
+    assert snapshot.accelerators[0].memory_bytes == RTX_SPARK_DEDICATED_BYTES
+    assert snapshot.warnings == ()
+
+
+# Windows reports 48 GiB of shared GPU memory on the RTX Spark laptop, and grants it to every adapter.
+WINDOWS_SHARED_GPU_MEMORY = 48 * 1024**3
+RTX_5090_ROW = b"NVIDIA GeForce RTX 5090, 32607, 617.07\n"
+
+
+@pytest.mark.parametrize(
+    ("system", "row", "expected_memory_bytes"),
+    [
+        # On Windows the RTX Spark's GPU uses its carve-out and the shared memory, one physical pool.
+        ("Windows", RTX_SPARK_ROWS, RTX_SPARK_DEDICATED_BYTES + WINDOWS_SHARED_GPU_MEMORY),
+        # A discrete card's shared memory is across PCIe, so only its own memory counts.
+        ("Windows", RTX_5090_ROW, 32_607 * 1024**2),
+        # Other systems report no shared GPU memory to add.
+        ("Linux", RTX_SPARK_ROWS, RTX_SPARK_DEDICATED_BYTES),
+    ],
+)
+def test_a_windows_unified_memory_part_counts_its_shared_gpu_memory(
+    system: str, row: bytes, expected_memory_bytes: int
+) -> None:
+    probe = replace_fields(
+        _nvidia_probe(row, RTX_SPARK_DETAILS), system=system, gpu_shared_memory=WINDOWS_SHARED_GPU_MEMORY
+    )
+
+    snapshot = collect_hardware_snapshot(probe)
+
+    assert [accelerator.memory_bytes for accelerator in snapshot.accelerators] == [expected_memory_bytes]
     assert snapshot.warnings == ()
 
 
@@ -727,6 +766,9 @@ class RecordingProbe:
 
     def total_memory_bytes(self) -> int:
         return self._inner.total_memory_bytes()
+
+    def gpu_shared_memory_bytes(self, adapter_name: str) -> int | None:
+        return self._inner.gpu_shared_memory_bytes(adapter_name)
 
     def command_available(self, command: str) -> bool:
         return self._inner.command_available(command)
