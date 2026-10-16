@@ -43,7 +43,7 @@ RECIPES_README = "README.md"
 # source checkout has no copy, so it reads the folder at the repository root.
 _PACKAGED_RECIPES_ROOT = PACKAGE_DATA_ROOT / "recipes"
 BUNDLED_RECIPES_ROOT = _PACKAGED_RECIPES_ROOT if _PACKAGED_RECIPES_ROOT.is_dir() else PACKAGE_ROOT.parent / "recipes"
-BUNDLED_RECIPES_DIGEST = "sha256:331d6f3b941e6a3920a639e8d698cf294a5661e44ed0adf909a37cd7d5ebffd0"
+BUNDLED_RECIPES_DIGEST = "sha256:da897ab5dfbc0e04d8bf64fcf41c9843212b2228ccac2a02f98470e1906a0b86"
 
 type ToolCallParser = Literal["gemma4", "glm45", "gpt-oss", "lfm2", "qwen3_coder", "qwen3_xml"]
 type ReasoningParser = Literal["gemma4", "gpt-oss", "nemotron_v3", "qwen3"]
